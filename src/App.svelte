@@ -37,6 +37,7 @@
   $: developmentProgress = $gameStore.developmentProgress;
   $: isDeveloping = $gameStore.isDeveloping;
   $: tutorialStep = $gameStore.tutorialStep;
+  $: tutorialState = $gameStore.tutorial;
   $: processedPhotos = $gameStore.processedPhotos;
   $: selectedAlbumPhoto = $gameStore.selectedAlbumPhoto;
 
@@ -285,8 +286,8 @@
       </button>
       <button
         class="header-btn help"
-        on:click={() => { gameStore.setTutorialStep(0); gameStore.setPhase('tutorial'); }}
-        title="教程"
+        on:click={() => { gameStore.resetTutorial(); }}
+        title="重新开始教程"
       >
         <span>❓</span>
       </button>
@@ -383,6 +384,7 @@
   {#if phase === 'tutorial'}
     <TutorialGuide
       currentStep={tutorialStep}
+      tutorialState={tutorialState}
       on:next={handleTutorialNext}
       on:prev={handleTutorialPrev}
       on:skip={handleTutorialSkip}

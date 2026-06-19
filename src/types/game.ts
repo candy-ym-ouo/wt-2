@@ -155,17 +155,52 @@ export interface GameState {
   isDeveloping: boolean;
   phase: GamePhase;
   processedPhotos: ProcessedPhoto[];
+  tutorial: TutorialState;
   tutorialStep: number;
   selectedAlbumPhoto: ProcessedPhoto | null;
   presets: ParamPreset[];
   presetHistory: PresetHistory[];
   lastAppliedPresetId: string | null;
+  adjustedParams: (keyof DevParams)[];
 }
+
+export type TutorialUnlockCondition = 
+  | { type: 'auto' }
+  | { type: 'subject_selected' }
+  | { type: 'film_selected' }
+  | { type: 'param_adjusted'; param: keyof DevParams }
+  | { type: 'any_param_adjusted' }
+  | { type: 'develop_started' }
+  | { type: 'custom'; check: () => boolean };
+
+export type TutorialPhase = 'intro' | 'selection' | 'adjustment' | 'development' | 'final';
 
 export interface TutorialStep {
   id: number;
+  phase: TutorialPhase;
   title: string;
   content: string;
   highlightArea?: string;
   actionHint?: string;
+  unlockCondition: TutorialUnlockCondition;
+  requiresCompletion: boolean;
+  allowSkip: boolean;
+}
+
+export interface TutorialStepState {
+  stepId: number;
+  unlocked: boolean;
+  completed: boolean;
+  completedAt?: number;
+  skipped: boolean;
+}
+
+export interface TutorialState {
+  currentStep: number;
+  steps: TutorialStepState[];
+  phase: TutorialPhase;
+  isCompleted: boolean;
+  startedAt: number;
+  completedAt?: number;
+  totalTimeSpent: number;
 }

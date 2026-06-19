@@ -218,44 +218,78 @@ export const DEFAULT_PARAMS: DevParams = {
 export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: 0,
+    phase: 'intro',
     title: '欢迎来到暗房',
     content: '这是一个胶片暗房模拟器。你将扮演一名暗房技师，亲手将底片冲洗成精美的照片。准备好了吗？让我们开始这段奇妙的旅程！',
-    highlightArea: 'none'
+    highlightArea: 'none',
+    unlockCondition: { type: 'auto' },
+    requiresCompletion: false,
+    allowSkip: true
   },
   {
     id: 1,
-    title: '选择拍摄题材',
-    content: '首先，从左侧选择一个你想要冲洗的场景。不同的场景对曝光和显影有不同的理想参数。仔细阅读每个场景的描述吧！',
+    phase: 'selection',
+    title: '阶段一：选择拍摄题材',
+    content: '首先，从左侧选择一个你想要冲洗的场景。不同的场景对曝光和显影有不同的理想参数。仔细阅读每个场景的描述，选择一个你感兴趣的题材！',
     highlightArea: 'subject-list',
-    actionHint: '点击左侧任意题材卡片'
+    actionHint: '点击左侧任意题材卡片完成本步骤',
+    unlockCondition: { type: 'auto' },
+    requiresCompletion: true,
+    allowSkip: false
   },
   {
     id: 2,
-    title: '选择胶片类型',
+    phase: 'selection',
+    title: '阶段一：选择胶片类型',
     content: '每种胶片都有独特的性格：黑白或彩色，低感或高感，细腻颗粒或粗粝质感。根据题材选择合适的胶片，这是好作品的第一步。',
     highlightArea: 'film-list',
-    actionHint: '点击一个胶片'
+    actionHint: '点击一个胶片卡片完成本步骤',
+    unlockCondition: { type: 'subject_selected' },
+    requiresCompletion: true,
+    allowSkip: false
   },
   {
     id: 3,
-    title: '调整曝光参数',
+    phase: 'adjustment',
+    title: '阶段二：调整曝光参数',
     content: '曝光是暗房工作的核心。曝光不足会导致画面昏暗，曝光过度则会丢失高光细节。仔细观察预览窗中的变化，找到最佳曝光点。',
     highlightArea: 'param-panel',
-    actionHint: '拖动曝光滑块'
+    actionHint: '拖动曝光滑块调整参数',
+    unlockCondition: { type: 'film_selected' },
+    requiresCompletion: true,
+    allowSkip: false
   },
   {
     id: 4,
-    title: '控制显影过程',
-    content: '显影时间、温度和搅动方式都会影响最终效果。时间越长对比度越高，温度越高化学反应越剧烈，搅动则影响画面均匀度。',
+    phase: 'adjustment',
+    title: '阶段二：控制显影过程',
+    content: '显影时间、温度和搅动方式都会影响最终效果。时间越长对比度越高，温度越高化学反应越剧烈，搅动则影响画面均匀度。试着调整这些参数，观察预览效果的变化！',
     highlightArea: 'develop-panel',
-    actionHint: '尝试调整各个参数'
+    actionHint: '尝试调整至少一个显影参数',
+    unlockCondition: { type: 'param_adjusted', param: 'exposure' },
+    requiresCompletion: true,
+    allowSkip: false
   },
   {
     id: 5,
-    title: '开始冲洗',
+    phase: 'development',
+    title: '阶段三：开始冲洗',
     content: '一切准备就绪后，点击"开始显影"按钮。你将看到底片在药液中慢慢显现的神奇过程。完成后，系统会为你的作品评分！',
     highlightArea: 'develop-button',
-    actionHint: '准备好了就开始吧！'
+    actionHint: '点击开始显影按钮，完成教程',
+    unlockCondition: { type: 'any_param_adjusted' },
+    requiresCompletion: true,
+    allowSkip: false
+  },
+  {
+    id: 6,
+    phase: 'final',
+    title: '恭喜完成教程！',
+    content: '你已经掌握了暗房的基本操作流程。现在可以自由探索，尝试不同的题材和胶片组合，创造出属于你的精彩作品！记住，暗房艺术在于平衡与耐心，细微的参数差异会带来截然不同的效果。',
+    highlightArea: 'none',
+    unlockCondition: { type: 'develop_started' },
+    requiresCompletion: false,
+    allowSkip: true
   }
 ];
 
