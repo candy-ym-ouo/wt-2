@@ -25,12 +25,16 @@
     close: void;
     delete: string;
     viewDetail: ProcessedPhoto;
+    compare: { subjectId: string; photoIds: string[] };
   }>();
 
   let selectedPhoto: ProcessedPhoto | null = null;
   let showDeleteConfirm = false;
   let photoToDelete: string | null = null;
   let showFilters = true;
+  let compareMode = false;
+  let compareSelection: string[] = [];
+  let compareSubjectId: string | null = null;
 
   const gradesOrder = ['S', 'A', 'B', 'C', 'D'];
   const gradeWeights: Record<string, number> = { S: 5, A: 4, B: 3, C: 2, D: 1 };
@@ -105,6 +109,46 @@
 
   function toggleTag(tag: string) {
     filter = { ...filter, tags: toggleArrayValue(filter.tags, tag) };
+  }
+
+  function toggleCompareMode() {
+    compareMode = !compareMode;
+    if (!compareMode) {
+      compareSelection = [];
+      compareSubjectId = null;
+    }
+  }
+
+  function toggleComparePhoto(photo: ProcessedPhoto) {
+    if (compareSelection.includes(photo.id)) {
+      compareSelection = compareSelection.filter(id => id !== photo.id);
+      if (compareSelection.length === 0) {
+        compareSubjectId = null;
+      }
+    } else {
+      if (compareSubjectId && compareSubjectId !== photo.subjectId) {
+        compareSelection = [photo.id];
+      } else {
+        if (compareSelection.length >= 4) {
+          return;
+        }
+        compareSelection = [...compareSelection, photo.id];
+      }
+      compareSubjectId = photo.subjectId;
+    }
+  }
+
+  function startCompare() {
+    if (compareSubjectId && compareSelection.length >= 2) {
+      dispatch('compare', {
+        subjectId: compareSubjectId,
+        photoIds: compareSelection
+      });
+    }
+  }
+
+  function getSubjectPhotosCount(subjectId: string): number {
+    return photos.filter(p => p.subjectId === subjectId).length;
   }
 
   function setNoteFilter(value: string) {
@@ -260,17 +304,59 @@
         {#if activeFilterCount > 0}
           <span class="filter-badge">{activeFilterCount} 个筛选条件</span>
         {/if}
+        {#if compareMode}
+          <span class="compare-badge">🔍 对比模式</span>
+        {/if}
       </div>
       <div class="header-right">
-        <button class="filter-toggle" on:click={() => showFilters = !showFilters}>
-          <span>{showFilters ? '收起筛选' : '展开筛选'}</span>
-          <span class="toggle-icon">{showFilters ? '▲' : '▼'}</span>
-        </button>
-        <button class="close-btn" on:click={() => dispatch('close')}>
-          <span>✕</span>
-        </button>
+        {#if compareMode}
+          <button
+            class="compare-start-btn"
+            disabled={compareSelection.length < 2}
+            on:click={startCompare}
+          >
+            <span>📊</span>
+            <span>开始对比 ({compareSelection.length}/4)</span>
+          </button>
+          <button class="cancel-compare-btn" on:click={toggleCompareMode}>
+            <span>✕</span>
+            <span>取消</span>
+          </button>
+        {:else}
+          <button
+            class="compare-toggle-btn"
+            on:click={toggleCompareMode}
+            title="对比同题材作品"
+          >
+            <span>🔍</span>
+            <span>对比</span>
+          </button>
+          <button class="filter-toggle" on:click={() => showFilters = !showFilters}>
+            <span>{showFilters ? '收起筛选' : '展开筛选'}</span>
+            <span class="toggle-icon">{showFilters ? '▲' : '▼'}</span>
+          </button>
+          <button class="close-btn" on:click={() => dispatch('close')}>
+            <span>✕</span>
+          </button>
+        {/if}
       </div>
     </div>
+
+    {#if compareMode}
+      <div class="compare-hint">
+        <span class="hint-icon">💡</span>
+        <span class="hint-text">
+          {#if compareSubjectId}
+            已选择「{getSubjectName(compareSubjectId)}」题材的 {compareSelection.length} 张作品
+            {#if compareSelection.length < 2}，请再选择 {2 - compareSelection.length} 张
+            {:else if compareSelection.length < 4}，还可以再选择 {4 - compareSelection.length} 张
+            {/if}
+          {:else}
+            请选择 2-4 张<strong>同题材</strong>的作品进行对比
+          {/if}
+        </span>
+      </div>
+    {/if}
 
     {#if showFilters}
       <div class="filters-section">
@@ -509,8 +595,32 @@
     {:else}
       <div class="photos-grid">
         {#each filteredPhotos as photo (photo.id)}
-          <div class="photo-card" on:click={() => selectedPhoto = photo}>
+          <div
+            class="photo-card"
+            class:compare-mode={compareMode}
+            class:selected={compareSelection.includes(photo.id)}
+            class:disabled={compareMode && compareSubjectId && compareSubjectId !== photo.subjectId}
+            on:click={() => {
+              if (compareMode) {
+                if (!compareSubjectId || compareSubjectId === photo.subjectId || getSubjectPhotosCount(photo.subjectId) < 2) {
+                  toggleComparePhoto(photo);
+                }
+              } else {
+                selectedPhoto = photo;
+              }
+            }}
+          >
             <div class="photo-image-wrap">
+              {#if compareMode}
+                <div class="compare-checkbox">
+                  {#if compareSelection.includes(photo.id)}
+                    <span class="check-icon">✓</span>
+                    <span class="check-number">{compareSelection.indexOf(photo.id) + 1}</span>
+                  {:else}
+                    <span class="check-icon">○</span>
+                  {/if}
+                </div>
+              {/if}
               <img src={photo.imageDataUrl} alt={getSubjectName(photo.subjectId)} class="photo-image" />
               <div
                 class="photo-grade-badge"
@@ -1427,5 +1537,180 @@
     font-size: 10px;
     color: #7a6a55;
     font-style: italic;
+  }
+
+  .compare-badge {
+    padding: 5px 12px;
+    background: linear-gradient(135deg, rgba(100, 150, 200, 0.3), rgba(80, 120, 180, 0.2));
+    border: 1px solid rgba(100, 150, 200, 0.4);
+    border-radius: 12px;
+    font-size: 11px;
+    color: #8ab4d8;
+    letter-spacing: 0.5px;
+    animation: pulseBlue 2s ease-in-out infinite;
+  }
+
+  @keyframes pulseBlue {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(100, 150, 200, 0.3); }
+    50% { box-shadow: 0 0 12px 0 rgba(100, 150, 200, 0.2); }
+  }
+
+  .compare-toggle-btn,
+  .cancel-compare-btn,
+  .compare-start-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+
+  .compare-toggle-btn {
+    background: rgba(100, 150, 200, 0.15);
+    border: 1px solid rgba(100, 150, 200, 0.25);
+    color: #8ab4d8;
+  }
+
+  .compare-toggle-btn:hover {
+    background: rgba(100, 150, 200, 0.25);
+    color: #a8c8e8;
+    transform: translateY(-2px);
+  }
+
+  .cancel-compare-btn {
+    background: rgba(160, 80, 80, 0.15);
+    border: 1px solid rgba(200, 100, 100, 0.25);
+    color: #d89080;
+  }
+
+  .cancel-compare-btn:hover {
+    background: rgba(200, 80, 80, 0.25);
+  }
+
+  .compare-start-btn {
+    background: linear-gradient(135deg, rgba(100, 200, 150, 0.2), rgba(80, 180, 120, 0.15));
+    border: 1px solid rgba(100, 200, 150, 0.35);
+    color: #8ad8a0;
+  }
+
+  .compare-start-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(100, 200, 150, 0.3), rgba(80, 180, 120, 0.25));
+    transform: translateY(-2px);
+  }
+
+  .compare-start-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .compare-hint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, rgba(100, 150, 200, 0.12), rgba(80, 120, 180, 0.08));
+    border: 1px solid rgba(100, 150, 200, 0.25);
+    border-radius: 10px;
+    font-size: 12px;
+    color: #a8c8e8;
+    line-height: 1.6;
+  }
+
+  .hint-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .hint-text strong {
+    color: #d4a574;
+    font-weight: 500;
+  }
+
+  .photo-card.compare-mode {
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .photo-card.compare-mode:hover:not(.disabled) {
+    border-color: rgba(100, 150, 200, 0.5);
+    transform: translateY(-2px);
+  }
+
+  .photo-card.selected {
+    border-color: rgba(100, 200, 150, 0.6) !important;
+    box-shadow: 0 0 0 2px rgba(100, 200, 150, 0.3), 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .photo-card.selected .photo-image {
+    filter: brightness(0.85);
+  }
+
+  .photo-card.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .compare-checkbox {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 10;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid rgba(200, 150, 80, 0.5);
+    border-radius: 50%;
+    transition: all 0.2s ease;
+  }
+
+  .photo-card.selected .compare-checkbox {
+    background: rgba(100, 200, 150, 0.9);
+    border-color: rgba(100, 200, 150, 1);
+  }
+
+  .check-icon {
+    font-size: 14px;
+    color: #c8b898;
+    transition: all 0.2s ease;
+  }
+
+  .photo-card.selected .check-icon {
+    color: #0a150a;
+    font-weight: bold;
+  }
+
+  .check-number {
+    position: absolute;
+    bottom: -6px;
+    right: -6px;
+    width: 18px;
+    height: 18px;
+    background: linear-gradient(135deg, #8ad8a0, #60b870);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    color: #0a150a;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  }
+
+  .photo-actions {
+    opacity: 1 !important;
+  }
+
+  .photo-card.compare-mode .photo-actions {
+    opacity: 0 !important;
+  }
+
+  .photo-card.compare-mode:hover .photo-actions {
+    opacity: 1 !important;
   }
 </style>

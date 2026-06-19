@@ -274,7 +274,9 @@ function createInitialGameState(): GameState {
     filmSelectedAt: null,
     paramAdjustTimestamps: {},
     developStartedAt: null,
-    stageState: createInitialStageState()
+    stageState: createInitialStageState(),
+    compareSelection: [],
+    compareSubjectId: null
   };
 }
 
@@ -712,6 +714,45 @@ function createGameStore() {
         presetHistory: [currentHistory, ...state.presetHistory.filter(h => h !== historyEntry)].slice(0, 20)
       };
     }),
+    toggleComparePhoto: (photoId: string, subjectId: string) => update(state => {
+      let newSelection = [...state.compareSelection];
+      let newSubjectId = state.compareSubjectId;
+
+      if (newSelection.includes(photoId)) {
+        newSelection = newSelection.filter(id => id !== photoId);
+        if (newSelection.length === 0) {
+          newSubjectId = null;
+        }
+      } else {
+        if (newSubjectId && newSubjectId !== subjectId) {
+          newSelection = [photoId];
+        } else {
+          newSelection = [...newSelection, photoId].slice(0, 4);
+        }
+        newSubjectId = subjectId;
+      }
+
+      return {
+        ...state,
+        compareSelection: newSelection,
+        compareSubjectId: newSubjectId
+      };
+    }),
+    clearCompareSelection: () => update(state => ({
+      ...state,
+      compareSelection: [],
+      compareSubjectId: null
+    })),
+    openCompareView: () => update(state => ({
+      ...state,
+      phase: 'compare'
+    })),
+    closeCompareView: () => update(state => ({
+      ...state,
+      phase: 'album',
+      compareSelection: [],
+      compareSubjectId: null
+    })),
     reset: () => {
       const newState = createInitialGameState();
       set(newState);

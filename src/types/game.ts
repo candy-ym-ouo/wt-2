@@ -148,7 +148,39 @@ export interface ScoreDetail {
   stageImpact: StageScoreImpact;
 }
 
-export type GamePhase = 'tutorial' | 'select' | 'expose' | 'develop' | 'fix' | 'wash' | 'result' | 'album';
+export type GamePhase = 'tutorial' | 'select' | 'expose' | 'develop' | 'fix' | 'wash' | 'result' | 'album' | 'compare';
+
+export interface CompareSelection {
+  subjectId: string;
+  photoIds: string[];
+}
+
+export interface ParamDiff {
+  param: keyof DevParams;
+  label: string;
+  values: number[];
+  minValue: number;
+  maxValue: number;
+  bestValue: number;
+  bestPhotoId: string;
+  isSignificant: boolean;
+  diffPercent: number;
+}
+
+export interface ScoreDiff {
+  category: 'exposure' | 'contrast' | 'color' | 'detail' | 'overall';
+  label: string;
+  values: number[];
+  bestValue: number;
+  bestPhotoId: string;
+}
+
+export interface BestRecommendation {
+  photoId: string;
+  score: number;
+  reasons: string[];
+  params: DevParams;
+}
 
 export type DevelopStage = 'presoak' | 'develop' | 'stop' | 'fix' | 'wash' | 'complete';
 
@@ -205,6 +237,8 @@ export interface GameState {
   paramAdjustTimestamps: Partial<Record<keyof DevParams, number>>;
   developStartedAt: number | null;
   stageState: StageState;
+  compareSelection: string[];
+  compareSubjectId: string | null;
 }
 
 export type TutorialUnlockCondition = 

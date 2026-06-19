@@ -17,6 +17,7 @@
   import PhotoAlbum from './components/PhotoAlbum.svelte';
   import TutorialGuide from './components/TutorialGuide.svelte';
   import ScoreDetailPanel from './components/ScoreDetailPanel.svelte';
+  import PhotoCompareView from './components/PhotoCompareView.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -367,6 +368,42 @@
     gameStore.updatePhotoNotes(photo.id, e.detail);
     scoreDetailPhoto = { ...photo, notes: e.detail };
   }
+
+  let comparePhotos: ProcessedPhoto[] = [];
+  let compareSubjectId: string | null = null;
+
+  function handleCompare(e: CustomEvent<{ subjectId: string; photoIds: string[] }>) {
+    const { subjectId, photoIds } = e.detail;
+    const selectedPhotos = photoIds
+      .map(id => processedPhotos.find(p => p.id === id))
+      .filter((p): p is ProcessedPhoto => p !== undefined);
+
+    if (selectedPhotos.length >= 2) {
+      comparePhotos = selectedPhotos;
+      compareSubjectId = subjectId;
+      gameStore.setPhase('compare');
+    }
+  }
+
+  function handleCompareClose() {
+    gameStore.setPhase('album');
+    comparePhotos = [];
+    compareSubjectId = null;
+  }
+
+  function handleApplyCompareParams(photo: ProcessedPhoto) {
+    const subject = PHOTO_SUBJECTS.find(s => s.id === photo.subjectId);
+    if (subject) {
+      gameStore.setSubject(subject.id);
+      selectedSubjectId = subject.id;
+    }
+    gameStore.setFilm(photo.filmId);
+    selectedFilmId = photo.filmId;
+    gameStore.updateParams({ ...photo.params });
+
+    handleCompareClose();
+    handleNewPhoto();
+  }
 </script>
 
 <div class="app-root">
@@ -485,6 +522,17 @@
       statistics={$statistics}
       on:close={handleAlbumClose}
       on:delete={handlePhotoDelete}
+      on:viewDetail={(e) => handleViewScoreDetail(e.detail)}
+      on:compare={handleCompare}
+    />
+  {/if}
+
+  {#if phase === 'compare' && comparePhotos.length >= 2}
+    <PhotoCompareView
+      photos={comparePhotos}
+      subjectId={compareSubjectId}
+      on:close={handleCompareClose}
+      on:applyParams={(e) => handleApplyCompareParams(e.detail)}
       on:viewDetail={(e) => handleViewScoreDetail(e.detail)}
     />
   {/if}
