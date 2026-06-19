@@ -1,4 +1,4 @@
-import type { FilmStock, PhotoSubject, TutorialStep, DevParams, ParamPreset } from '../types/game';
+import type { FilmStock, PhotoSubject, TutorialStep, DevParams, ParamPreset, AchievementDefinition, AchievementLine } from '../types/game';
 
 export const FILM_STOCKS: FilmStock[] = [
   {
@@ -486,3 +486,154 @@ export const DEFAULT_PRESETS: ParamPreset[] = [
     isDefault: true
   }
 ];
+
+export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
+  {
+    id: 'hs_1',
+    line: 'high_score',
+    tier: 1,
+    name: '初露锋芒',
+    description: '首次获得A级作品',
+    icon: '🌟',
+    reward: { badge: '🌟', title: '暗房新星' },
+    condition: { type: 'any_grade', minGrade: 'A' }
+  },
+  {
+    id: 'hs_2',
+    line: 'high_score',
+    tier: 2,
+    name: '题材达人',
+    description: '在3个不同题材获得A级作品',
+    icon: '🎯',
+    reward: { badge: '🎯', title: '题材猎手' },
+    condition: { type: 'grade_on_subjects', minGrade: 'A', subjectCount: 3 }
+  },
+  {
+    id: 'hs_3',
+    line: 'high_score',
+    tier: 3,
+    name: '场景全覆盖',
+    description: '在全部5种场景类型获得A级作品',
+    icon: '👑',
+    reward: { badge: '👑', title: '全能摄影师' },
+    condition: { type: 'grade_on_scene_types', minGrade: 'A', sceneTypeCount: 5 }
+  },
+  {
+    id: 'hs_4',
+    line: 'high_score',
+    tier: 4,
+    name: '追求完美',
+    description: '获得S级大师作品',
+    icon: '💎',
+    reward: { badge: '💎', title: '完美主义者' },
+    condition: { type: 'any_grade', minGrade: 'S' }
+  },
+  {
+    id: 'hs_5',
+    line: 'high_score',
+    tier: 5,
+    name: '全题材制霸',
+    description: '在全部6个题材获得A级作品',
+    icon: '🏆',
+    reward: { badge: '🏆', title: '暗房大师' },
+    condition: { type: 'grade_on_subjects', minGrade: 'A', subjectCount: 6 }
+  },
+
+  {
+    id: 'fm_1',
+    line: 'film_mastery',
+    tier: 1,
+    name: '胶片新手',
+    description: '使用3种不同胶片完成冲洗',
+    icon: '🎞',
+    reward: { badge: '🎞', title: '胶片学徒' },
+    condition: { type: 'film_variety', filmCount: 3 }
+  },
+  {
+    id: 'fm_2',
+    line: 'film_mastery',
+    tier: 2,
+    name: '胶片玩家',
+    description: '使用全部6种胶片各至少1次',
+    icon: '📸',
+    reward: { badge: '📸', title: '胶片玩家' },
+    condition: { type: 'film_min_usage', minUsage: 1 }
+  },
+  {
+    id: 'fm_3',
+    line: 'film_mastery',
+    tier: 3,
+    name: '胶片专家',
+    description: '用同一胶片获得5次A级作品',
+    icon: '🔬',
+    reward: { badge: '🔬', title: '胶片专家' },
+    condition: { type: 'film_grade_count', minGrade: 'A', count: 5 }
+  },
+  {
+    id: 'fm_4',
+    line: 'film_mastery',
+    tier: 4,
+    name: '全胶片精通',
+    description: '使用全部6种胶片各至少3次',
+    icon: '🎨',
+    reward: { badge: '🎨', title: '胶片大师' },
+    condition: { type: 'film_min_usage', minUsage: 3 }
+  },
+  {
+    id: 'fm_5',
+    line: 'film_mastery',
+    tier: 5,
+    name: '胶片传奇',
+    description: '每种胶片都获得过A级作品',
+    icon: '🏅',
+    reward: { badge: '🏅', title: '胶片传奇' },
+    condition: { type: 'film_all_grade', minGrade: 'A' }
+  },
+
+  {
+    id: 'st_1',
+    line: 'streak',
+    tier: 1,
+    name: '初心不忘',
+    description: '连续练习3天',
+    icon: '📅',
+    reward: { badge: '📅', title: '坚持者' },
+    condition: { type: 'streak_days', days: 3 }
+  },
+  {
+    id: 'st_2',
+    line: 'streak',
+    tier: 2,
+    name: '坚持不懈',
+    description: '连续练习7天',
+    icon: '📆',
+    reward: { badge: '📆', title: '执着匠人' },
+    condition: { type: 'streak_days', days: 7 }
+  },
+  {
+    id: 'st_3',
+    line: 'streak',
+    tier: 3,
+    name: '稳扎稳打',
+    description: '连续练习14天',
+    icon: '📊',
+    reward: { badge: '📊', title: '暗房常客' },
+    condition: { type: 'streak_days', days: 14 }
+  },
+  {
+    id: 'st_4',
+    line: 'streak',
+    tier: 4,
+    name: '铁杵磨针',
+    description: '连续练习30天',
+    icon: '🏅',
+    reward: { badge: '🏅', title: '暗房铁人' },
+    condition: { type: 'streak_days', days: 30 }
+  }
+];
+
+export const ACHIEVEMENT_LINE_META: Record<AchievementLine, { label: string; icon: string; color: string }> = {
+  high_score: { label: '高分题材', icon: '🏆', color: '#ffd700' },
+  film_mastery: { label: '胶片熟练度', icon: '🎞', color: '#c9a87c' },
+  streak: { label: '连续练习', icon: '📅', color: '#7ec8a0' }
+};

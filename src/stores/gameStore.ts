@@ -1,6 +1,6 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem } from '../types/game';
-import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS } from '../data/gameData';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine } from '../types/game';
+import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS } from '../data/gameData';
 import { generateId } from '../utils/math';
 import {
   loadWithFallback,
@@ -17,7 +17,10 @@ import {
   importAllData,
   MAX_PHOTOS,
   MAX_PRESETS,
-  MAX_COLLECTIONS
+  MAX_COLLECTIONS,
+  loadSavedAchievements,
+  saveAchievements,
+  createDefaultAchievementState
 } from '../utils/storage';
 
 function createInitialStageState(): StageState {
@@ -291,6 +294,7 @@ function createInitialGameState(): GameState {
   const validPhotoIds = photosResult.photos.map(p => p.id);
   const favoritesResult = loadSavedFavorites(validPhotoIds);
   const collectionsResult = loadSavedCollections(validPhotoIds);
+  const achievementsResult = loadSavedAchievements();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -400,8 +404,186 @@ function createInitialGameState(): GameState {
     quickBrowseIndex: 0,
     quickBrowsePhotoIds: [],
     storageStatus,
-    attemptHistory: []
+    attemptHistory: [],
+    achievements: achievementsResult
   };
+}
+
+const GRADE_ORDER: Record<string, number> = { S: 5, A: 4, B: 3, C: 2, D: 1 };
+
+function meetsMinGrade(grade: string, minGrade: string): boolean {
+  return (GRADE_ORDER[grade] || 0) >= (GRADE_ORDER[minGrade] || 0);
+}
+
+function toDayKey(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function calculateCurrentStreak(practiceDays: string[]): number {
+  if (practiceDays.length === 0) return 0;
+  const sorted = [...practiceDays].sort().reverse();
+  const today = toDayKey(Date.now());
+  const yesterday = toDayKey(Date.now() - 86400000);
+  if (sorted[0] !== today && sorted[0] !== yesterday) return 0;
+  let streak = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1] + 'T00:00:00').getTime();
+    const curr = new Date(sorted[i] + 'T00:00:00').getTime();
+    if (prev - curr === 86400000) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+function checkAchievementCondition(
+  condition: AchievementCondition,
+  photos: ProcessedPhoto[],
+  practiceDays: string[]
+): boolean {
+  switch (condition.type) {
+    case 'any_grade':
+      return photos.some(p => meetsMinGrade(p.details.grade, condition.minGrade));
+    case 'grade_on_subjects': {
+      const subjectSet = new Set<string>();
+      photos.forEach(p => {
+        if (meetsMinGrade(p.details.grade, condition.minGrade)) {
+          subjectSet.add(p.subjectId);
+        }
+      });
+      return subjectSet.size >= condition.subjectCount;
+    }
+    case 'grade_on_scene_types': {
+      const sceneTypeSet = new Set<string>();
+      photos.forEach(p => {
+        if (meetsMinGrade(p.details.grade, condition.minGrade)) {
+          const subject = PHOTO_SUBJECTS.find(s => s.id === p.subjectId);
+          if (subject) sceneTypeSet.add(subject.sceneType);
+        }
+      });
+      return sceneTypeSet.size >= condition.sceneTypeCount;
+    }
+    case 'film_variety': {
+      const filmSet = new Set(photos.map(p => p.filmId));
+      return filmSet.size >= condition.filmCount;
+    }
+    case 'film_min_usage': {
+      const filmCounts: Record<string, number> = {};
+      photos.forEach(p => {
+        filmCounts[p.filmId] = (filmCounts[p.filmId] || 0) + 1;
+      });
+      return FILM_STOCKS.every(f => (filmCounts[f.id] || 0) >= condition.minUsage);
+    }
+    case 'film_grade_count': {
+      const filmGradeCounts: Record<string, number> = {};
+      photos.forEach(p => {
+        if (meetsMinGrade(p.details.grade, condition.minGrade)) {
+          filmGradeCounts[p.filmId] = (filmGradeCounts[p.filmId] || 0) + 1;
+        }
+      });
+      return Object.values(filmGradeCounts).some(c => c >= condition.count);
+    }
+    case 'film_all_grade': {
+      const filmsWithGrade = new Set<string>();
+      photos.forEach(p => {
+        if (meetsMinGrade(p.details.grade, condition.minGrade)) {
+          filmsWithGrade.add(p.filmId);
+        }
+      });
+      return FILM_STOCKS.every(f => filmsWithGrade.has(f.id));
+    }
+    case 'streak_days': {
+      const streak = calculateCurrentStreak(practiceDays);
+      return streak >= condition.days;
+    }
+  }
+}
+
+function computeAchievementProgress(
+  condition: AchievementCondition,
+  photos: ProcessedPhoto[],
+  practiceDays: string[]
+): { current: number; target: number } {
+  switch (condition.type) {
+    case 'any_grade':
+      return { current: photos.some(p => meetsMinGrade(p.details.grade, condition.minGrade)) ? 1 : 0, target: 1 };
+    case 'grade_on_subjects': {
+      const subjectSet = new Set<string>();
+      photos.forEach(p => {
+        if (meetsMinGrade(p.details.grade, condition.minGrade)) subjectSet.add(p.subjectId);
+      });
+      return { current: subjectSet.size, target: condition.subjectCount };
+    }
+    case 'grade_on_scene_types': {
+      const sceneTypeSet = new Set<string>();
+      photos.forEach(p => {
+        if (meetsMinGrade(p.details.grade, condition.minGrade)) {
+          const subject = PHOTO_SUBJECTS.find(s => s.id === p.subjectId);
+          if (subject) sceneTypeSet.add(subject.sceneType);
+        }
+      });
+      return { current: sceneTypeSet.size, target: condition.sceneTypeCount };
+    }
+    case 'film_variety': {
+      const filmSet = new Set(photos.map(p => p.filmId));
+      return { current: filmSet.size, target: condition.filmCount };
+    }
+    case 'film_min_usage': {
+      const filmCounts: Record<string, number> = {};
+      photos.forEach(p => { filmCounts[p.filmId] = (filmCounts[p.filmId] || 0) + 1; });
+      const met = FILM_STOCKS.filter(f => (filmCounts[f.id] || 0) >= condition.minUsage).length;
+      return { current: met, target: FILM_STOCKS.length };
+    }
+    case 'film_grade_count': {
+      const filmGradeCounts: Record<string, number> = {};
+      photos.forEach(p => {
+        if (meetsMinGrade(p.details.grade, condition.minGrade)) {
+          filmGradeCounts[p.filmId] = (filmGradeCounts[p.filmId] || 0) + 1;
+        }
+      });
+      const maxCount = Math.max(0, ...Object.values(filmGradeCounts));
+      return { current: maxCount, target: condition.count };
+    }
+    case 'film_all_grade': {
+      const filmsWithGrade = new Set<string>();
+      photos.forEach(p => {
+        if (meetsMinGrade(p.details.grade, condition.minGrade)) filmsWithGrade.add(p.filmId);
+      });
+      return { current: filmsWithGrade.size, target: FILM_STOCKS.length };
+    }
+    case 'streak_days': {
+      const streak = calculateCurrentStreak(practiceDays);
+      return { current: streak, target: condition.days };
+    }
+  }
+}
+
+function checkAndUnlockAchievements(state: GameState): AchievementState {
+  const photos = state.processedPhotos;
+  const practiceDays = state.achievements.practiceDays;
+  const existingUnlocked = new Set(state.achievements.unlockedIds);
+  const newlyUnlocked: string[] = [];
+
+  for (const def of ACHIEVEMENT_DEFINITIONS) {
+    if (existingUnlocked.has(def.id)) continue;
+    if (checkAchievementCondition(def.condition, photos, practiceDays)) {
+      newlyUnlocked.push(def.id);
+    }
+  }
+
+  if (newlyUnlocked.length === 0) return state.achievements;
+
+  const allUnlocked = [...existingUnlocked, ...newlyUnlocked];
+  const newState: AchievementState = {
+    unlockedIds: allUnlocked,
+    practiceDays,
+    newlyUnlocked
+  };
+  saveAchievements(newState);
+  return newState;
 }
 
 function createGameStore() {
@@ -517,6 +699,24 @@ function createGameStore() {
         ? [...state.attemptHistory, newAttempt]
         : [newAttempt];
       
+      const todayKey = toDayKey(photo.timestamp);
+      const practiceDays = state.achievements.practiceDays.includes(todayKey)
+        ? state.achievements.practiceDays
+        : [...state.achievements.practiceDays, todayKey];
+      
+      const achievementsBeforeCheck: AchievementState = {
+        ...state.achievements,
+        practiceDays,
+        newlyUnlocked: []
+      };
+      
+      const stateForCheck: GameState = {
+        ...state,
+        processedPhotos: newPhotos,
+        achievements: achievementsBeforeCheck
+      };
+      const newAchievements = checkAndUnlockAchievements(stateForCheck);
+      
       let newWarnings = [...state.storageStatus.warnings];
       const now = Date.now();
       
@@ -560,6 +760,7 @@ function createGameStore() {
         phase: 'result',
         processedPhotos: newPhotos,
         attemptHistory: newAttemptHistory,
+        achievements: newAchievements,
         storageStatus: newStorageStatus,
         stageState: {
           ...state.stageState,
@@ -1510,6 +1711,15 @@ function createGameStore() {
       quickBrowseIndex: 0
     })),
 
+    clearNewlyUnlocked: () => update(state => {
+      const newState: AchievementState = {
+        ...state.achievements,
+        newlyUnlocked: []
+      };
+      saveAchievements(newState);
+      return { ...state, achievements: newState };
+    }),
+
     reset: () => {
       const newState = createInitialGameState();
       set(newState);
@@ -1891,3 +2101,5 @@ export const statistics = derived(
     } satisfies ExtendedStatistics;
   }
 );
+
+export { computeAchievementProgress, calculateCurrentStreak };

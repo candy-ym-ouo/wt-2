@@ -4,7 +4,7 @@
   import { generateBaseScene, applyDevelopment, renderToCanvas, createThumbnail } from './utils/renderEngine';
   import type { RenderedImageData } from './utils/renderEngine';
   import { calculateScore } from './utils/scoring';
-  import { PHOTO_SUBJECTS, FILM_STOCKS } from './data/gameData';
+  import { PHOTO_SUBJECTS, FILM_STOCKS, ACHIEVEMENT_DEFINITIONS } from './data/gameData';
   import { generateId, clamp } from './utils/math';
   import type { ProcessedPhoto, GameState, DevParams, CanvasMode, GamePhase, DevelopStage, StageState } from './types/game';
 
@@ -19,6 +19,7 @@
   import ScoreDetailPanel from './components/ScoreDetailPanel.svelte';
   import PhotoCompareView from './components/PhotoCompareView.svelte';
   import StorageStatusBar from './components/StorageStatusBar.svelte';
+  import AchievementPanel from './components/AchievementPanel.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -28,6 +29,9 @@
   let renderCtx: CanvasRenderingContext2D;
   let showScoreDetail = false;
   let scoreDetailPhoto: ProcessedPhoto | null = null;
+  let showAchievements = false;
+  let achievementNotifications: { id: string; name: string; icon: string; title: string; timestamp: number }[] = [];
+  let notificationTimer: number | null = null;
 
   let unsubscribe: () => void;
   let currentState: GameState;
@@ -44,6 +48,28 @@
   $: processedPhotos = $gameStore.processedPhotos;
   $: selectedAlbumPhoto = $gameStore.selectedAlbumPhoto;
   $: attemptHistory = $gameStore.attemptHistory;
+  $: achievements = $gameStore.achievements;
+
+  $: if (achievements.newlyUnlocked.length > 0) {
+    const newItems = achievements.newlyUnlocked.map(id => {
+      const def = ACHIEVEMENT_DEFINITIONS.find(d => d.id === id);
+      return {
+        id,
+        name: def?.name || '',
+        icon: def?.icon || '🎖',
+        title: def?.reward.title || '',
+        timestamp: Date.now()
+      };
+    });
+    achievementNotifications = [...achievementNotifications, ...newItems];
+    gameStore.clearNewlyUnlocked();
+    if (!notificationTimer) {
+      notificationTimer = window.setTimeout(() => {
+        achievementNotifications = [];
+        notificationTimer = null;
+      }, 4000);
+    }
+  }
 
   let canvasMode: CanvasMode;
   $: canvasMode = phase === 'develop' ? 'developing' : (phase === 'result' ? 'final' : 'preview');
@@ -435,6 +461,16 @@
     </div>
     <div class="header-actions">
       <button
+        class="header-btn achievement"
+        on:click={() => showAchievements = true}
+        title="成就任务"
+      >
+        <span>🎖</span>
+        {#if achievements.unlockedIds.length > 0}
+          <span class="badge">{achievements.unlockedIds.length}</span>
+        {/if}
+      </button>
+      <button
         class="header-btn album"
         on:click={() => gameStore.openAlbum()}
         title="我的相册"
@@ -576,6 +612,24 @@
       on:applySuggestions={handleApplySuggestions}
       on:updateNotes={handleUpdateNotes}
     />
+  {/if}
+
+  {#if showAchievements}
+    <AchievementPanel on:close={() => showAchievements = false} />
+  {/if}
+
+  {#if achievementNotifications.length > 0}
+    <div class="achievement-notifications">
+      {#each achievementNotifications as notif (notif.id)}
+        <div class="notif-item" style="animation: notifSlide 0.4s ease;">
+          <span class="notif-icon">{notif.icon}</span>
+          <div class="notif-text">
+            <span class="notif-title">成就解锁！</span>
+            <span class="notif-name">{notif.name} — 「{notif.title}」</span>
+          </div>
+        </div>
+      {/each}
+    </div>
   {/if}
 
   <footer class="app-footer">
@@ -841,5 +895,65 @@
     letter-spacing: 1px;
     background: rgba(0, 0, 0, 0.2);
     border-radius: 8px;
+  }
+
+  .achievement-notifications {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+  }
+
+  .notif-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    background: linear-gradient(135deg, rgba(45, 26, 18, 0.95), rgba(26, 15, 10, 0.98));
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(255, 215, 0, 0.1);
+    backdrop-filter: blur(8px);
+    min-width: 260px;
+  }
+
+  .notif-icon {
+    font-size: 28px;
+    filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.3));
+  }
+
+  .notif-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .notif-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #ffd700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .notif-name {
+    font-size: 13px;
+    color: #e8c890;
+    line-height: 1.3;
+  }
+
+  @keyframes notifSlide {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
   }
 </style>

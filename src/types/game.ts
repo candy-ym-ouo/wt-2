@@ -265,6 +265,7 @@ export interface GameState {
   quickBrowsePhotoIds: string[];
   storageStatus: StorageStatus;
   attemptHistory: AttemptRecord[];
+  achievements: AchievementState;
 }
 
 export type TutorialUnlockCondition = 
@@ -438,6 +439,47 @@ export interface ExtendedStatistics {
   qualityFluctuation: QualityFluctuationItem[];
   recentAvgScore: number;
   overallTrend: 'improving' | 'declining' | 'stable';
+}
+
+export type AchievementLine = 'high_score' | 'film_mastery' | 'streak';
+
+export interface AchievementReward {
+  badge: string;
+  title: string;
+}
+
+export type AchievementCondition =
+  | { type: 'any_grade'; minGrade: string }
+  | { type: 'grade_on_subjects'; minGrade: string; subjectCount: number }
+  | { type: 'grade_on_scene_types'; minGrade: string; sceneTypeCount: number }
+  | { type: 'film_variety'; filmCount: number }
+  | { type: 'film_min_usage'; minUsage: number }
+  | { type: 'film_grade_count'; minGrade: string; count: number }
+  | { type: 'film_all_grade'; minGrade: string }
+  | { type: 'streak_days'; days: number };
+
+export interface AchievementDefinition {
+  id: string;
+  line: AchievementLine;
+  tier: number;
+  name: string;
+  description: string;
+  icon: string;
+  reward: AchievementReward;
+  condition: AchievementCondition;
+}
+
+export interface AchievementProgress {
+  achievementId: string;
+  current: number;
+  target: number;
+  isUnlocked: boolean;
+}
+
+export interface AchievementState {
+  unlockedIds: string[];
+  practiceDays: string[];
+  newlyUnlocked: string[];
 }
 
 export type AlbumViewMode = 'all' | 'favorites' | 'collections';

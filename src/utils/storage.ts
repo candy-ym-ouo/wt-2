@@ -1,4 +1,4 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 
 export const CURRENT_STORAGE_VERSION = 3;
@@ -29,14 +29,15 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
   presets: 'darkroom_presets',
   tutorial: 'darkroom_tutorial',
   favorites: 'darkroom_favorites',
-  collections: 'darkroom_collections'
+  collections: 'darkroom_collections',
+  achievements: 'darkroom_achievements'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -263,6 +264,8 @@ function migrateData<T>(key: StorageKey, data: unknown, fromVersion: number): T 
       return migrateFavorites(data, fromVersion) as T;
     case 'collections':
       return migrateCollections(data, fromVersion) as T;
+    case 'achievements':
+      return data as T;
     default:
       return data as T;
   }
@@ -324,8 +327,18 @@ function validateCollection(collection: unknown): collection is PhotoCollection 
   );
 }
 
+function validateAchievementState(data: unknown): data is AchievementState {
+  if (typeof data !== 'object' || data === null) return false;
+  const a = data as Record<string, unknown>;
+  return (
+    Array.isArray(a.unlockedIds) &&
+    Array.isArray(a.practiceDays) &&
+    Array.isArray(a.newlyUnlocked)
+  );
+}
+
 function validateData<T>(key: StorageKey, data: unknown): T | null {
-  if (!Array.isArray(data) && key !== 'tutorial') {
+  if (!Array.isArray(data) && key !== 'tutorial' && key !== 'achievements') {
     return null;
   }
   
@@ -352,6 +365,9 @@ function validateData<T>(key: StorageKey, data: unknown): T | null {
       const arr = data as unknown[];
       const valid = arr.filter(validateCollection);
       return valid as T;
+    }
+    case 'achievements': {
+      return validateAchievementState(data) ? (data as T) : null;
     }
     default:
       return null;
@@ -563,4 +579,21 @@ export function repairCollections(collections: PhotoCollection[], validPhotoIds:
       coverPhotoId: col.coverPhotoId && validPhotoIds.includes(col.coverPhotoId) ? col.coverPhotoId : undefined,
       tags: col.tags || []
     }));
+}
+
+export function createDefaultAchievementState(): AchievementState {
+  return {
+    unlockedIds: [],
+    practiceDays: [],
+    newlyUnlocked: []
+  };
+}
+
+export function loadSavedAchievements(): AchievementState {
+  const result = loadWithFallback<AchievementState>('achievements', createDefaultAchievementState());
+  return result.data || createDefaultAchievementState();
+}
+
+export function saveAchievements(state: AchievementState): boolean {
+  return saveWithBackup('achievements', state, 1);
 }
