@@ -223,6 +223,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     content: '这是一个胶片暗房模拟器。你将扮演一名暗房技师，亲手将底片冲洗成精美的照片。准备好了吗？让我们开始这段奇妙的旅程！',
     highlightArea: 'none',
     unlockCondition: { type: 'auto' },
+    completionCondition: { type: 'auto' },
     requiresCompletion: false,
     allowSkip: true
   },
@@ -234,6 +235,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     highlightArea: 'subject-list',
     actionHint: '点击左侧任意题材卡片完成本步骤',
     unlockCondition: { type: 'auto' },
+    completionCondition: { type: 'subject_selected' },
     requiresCompletion: true,
     allowSkip: false
   },
@@ -244,7 +246,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     content: '每种胶片都有独特的性格：黑白或彩色，低感或高感，细腻颗粒或粗粝质感。根据题材选择合适的胶片，这是好作品的第一步。',
     highlightArea: 'film-list',
     actionHint: '点击一个胶片卡片完成本步骤',
-    unlockCondition: { type: 'subject_selected' },
+    unlockCondition: { type: 'step_completed', stepId: 1 },
+    completionCondition: { type: 'film_selected' },
     requiresCompletion: true,
     allowSkip: false
   },
@@ -255,7 +258,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     content: '曝光是暗房工作的核心。曝光不足会导致画面昏暗，曝光过度则会丢失高光细节。仔细观察预览窗中的变化，找到最佳曝光点。',
     highlightArea: 'param-panel',
     actionHint: '拖动曝光滑块调整参数',
-    unlockCondition: { type: 'film_selected' },
+    unlockCondition: { type: 'step_completed', stepId: 2 },
+    completionCondition: { type: 'param_adjusted', param: 'exposure' },
     requiresCompletion: true,
     allowSkip: false
   },
@@ -265,8 +269,9 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     title: '阶段二：控制显影过程',
     content: '显影时间、温度和搅动方式都会影响最终效果。时间越长对比度越高，温度越高化学反应越剧烈，搅动则影响画面均匀度。试着调整这些参数，观察预览效果的变化！',
     highlightArea: 'develop-panel',
-    actionHint: '尝试调整至少一个显影参数',
-    unlockCondition: { type: 'param_adjusted', param: 'exposure' },
+    actionHint: '尝试调整至少一个显影参数（显影时间、温度、搅动、对比度、饱和度或稀释度）',
+    unlockCondition: { type: 'step_completed', stepId: 3 },
+    completionCondition: { type: 'other_param_adjusted', excludeParam: 'exposure' },
     requiresCompletion: true,
     allowSkip: false
   },
@@ -277,7 +282,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     content: '一切准备就绪后，点击"开始显影"按钮。你将看到底片在药液中慢慢显现的神奇过程。完成后，系统会为你的作品评分！',
     highlightArea: 'develop-button',
     actionHint: '点击开始显影按钮，完成教程',
-    unlockCondition: { type: 'any_param_adjusted' },
+    unlockCondition: { type: 'step_completed', stepId: 4 },
+    completionCondition: { type: 'develop_started' },
     requiresCompletion: true,
     allowSkip: false
   },
@@ -287,7 +293,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     title: '恭喜完成教程！',
     content: '你已经掌握了暗房的基本操作流程。现在可以自由探索，尝试不同的题材和胶片组合，创造出属于你的精彩作品！记住，暗房艺术在于平衡与耐心，细微的参数差异会带来截然不同的效果。',
     highlightArea: 'none',
-    unlockCondition: { type: 'develop_started' },
+    unlockCondition: { type: 'step_completed', stepId: 5 },
+    completionCondition: { type: 'auto' },
     requiresCompletion: false,
     allowSkip: true
   }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { TUTORIAL_STEPS } from '../data/gameData';
   import type { TutorialStep, TutorialState, TutorialPhase } from '../types/game';
   import { gameStore } from '../stores/gameStore';
@@ -110,9 +110,9 @@
     });
   });
 
-  function onDestroy() {
+  onDestroy(() => {
     if (unsubscribe) unsubscribe();
-  }
+  });
 </script>
 
 <div class="tutorial-overlay">

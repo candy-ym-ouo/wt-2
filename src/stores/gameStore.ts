@@ -7,8 +7,11 @@ function createInitialTutorialState(): TutorialState {
   const stepStates: TutorialStepState[] = TUTORIAL_STEPS.map((step, index) => ({
     stepId: step.id,
     unlocked: index === 0,
+    activated: index === 0,
+    activatedAt: index === 0 ? Date.now() : undefined,
     completed: false,
-    skipped: false
+    skipped: false,
+    actionsPerformed: []
   }));
   
   return {
@@ -19,6 +22,33 @@ function createInitialTutorialState(): TutorialState {
     startedAt: Date.now(),
     totalTimeSpent: 0
   };
+}
+
+function loadSavedTutorialState(): TutorialState {
+  try {
+    const saved = localStorage.getItem('darkroom_tutorial');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        ...parsed,
+        steps: parsed.steps.map((s: TutorialStepState) => ({
+          ...s,
+          actionsPerformed: s.actionsPerformed || []
+        }))
+      };
+    }
+  } catch (e) {
+    console.error('Failed to load tutorial state:', e);
+  }
+  return createInitialTutorialState();
+}
+
+function saveTutorialState(state: TutorialState) {
+  try {
+    localStorage.setItem('darkroom_tutorial', JSON.stringify(state));
+  } catch (e) {
+    console.error('Failed to save tutorial state:', e);
+  }
 }
 
 function checkUnlockCondition(
@@ -36,14 +66,55 @@ function checkUnlockCondition(
       return state.adjustedParams.includes(condition.param);
     case 'any_param_adjusted':
       return state.adjustedParams.length > 0;
+    case 'other_param_adjusted':
+      return state.adjustedParams.some(p => p !== condition.excludeParam);
     case 'develop_started':
-      return state.developmentProgress > 0 || state.processedPhotos.length > 0;
-    case 'custom':
-      try {
-        return condition.check();
-      } catch {
-        return false;
-      }
+      return state.developStartedAt !== null || state.processedPhotos.length > 0;
+    case 'step_completed':
+      const stepState = state.tutorial.steps.find(s => s.stepId === condition.stepId);
+      return stepState?.completed || stepState?.skipped || false;
+    default:
+      return false;
+  }
+}
+
+function checkCompletionCondition(
+  condition: TutorialUnlockCondition,
+  state: GameState,
+  stepId: number
+): boolean {
+  const stepState = state.tutorial.steps.find(s => s.stepId === stepId);
+  const activatedAt = stepState?.activatedAt || 0;
+
+  switch (condition.type) {
+    case 'auto':
+      return true;
+    case 'subject_selected':
+      return state.currentSubject !== null && 
+             (state.subjectSelectedAt || 0) >= activatedAt;
+    case 'film_selected':
+      return state.currentFilm !== null && 
+             (state.filmSelectedAt || 0) >= activatedAt;
+    case 'param_adjusted':
+      const paramTime = state.paramAdjustTimestamps[condition.param];
+      return state.adjustedParams.includes(condition.param) && 
+             (paramTime || 0) >= activatedAt;
+    case 'any_param_adjusted':
+      return state.adjustedParams.some(p => {
+        const t = state.paramAdjustTimestamps[p];
+        return t !== undefined && t >= activatedAt;
+      });
+    case 'other_param_adjusted':
+      return state.adjustedParams.some(p => {
+        if (p === condition.excludeParam) return false;
+        const t = state.paramAdjustTimestamps[p];
+        return t !== undefined && t >= activatedAt;
+      });
+    case 'develop_started':
+      return (state.developStartedAt || 0) >= activatedAt;
+    case 'step_completed':
+      const targetStepState = state.tutorial.steps.find(s => s.stepId === condition.stepId);
+      return targetStepState?.completed || targetStepState?.skipped || false;
     default:
       return false;
   }
@@ -52,31 +123,47 @@ function checkUnlockCondition(
 function checkAndUpdateTutorialProgress(state: GameState): GameState {
   const newSteps = [...state.tutorial.steps];
   let hasChanges = false;
+  const now = Date.now();
+
+  const currentStepIndex = state.tutorial.currentStep;
+  if (!newSteps[currentStepIndex].activated) {
+    newSteps[currentStepIndex] = {
+      ...newSteps[currentStepIndex],
+      activated: true,
+      activatedAt: now
+    };
+    hasChanges = true;
+  }
 
   for (let i = 0; i < TUTORIAL_STEPS.length; i++) {
     const step = TUTORIAL_STEPS[i];
     const stepState = newSteps[i];
 
     if (!stepState.unlocked) {
-      if (checkUnlockCondition(step.unlockCondition, state)) {
+      const prevStep = i > 0 ? newSteps[i - 1] : null;
+      const canUnlock = !prevStep || prevStep.completed || prevStep.skipped;
+      
+      if (canUnlock) {
         newSteps[i] = { ...stepState, unlocked: true };
         hasChanges = true;
       }
     }
 
-    if (stepState.unlocked && !stepState.completed && !stepState.skipped && step.requiresCompletion) {
-      if (checkUnlockCondition(step.unlockCondition, state)) {
+    if (stepState.unlocked && stepState.activated && 
+        !stepState.completed && !stepState.skipped && 
+        step.requiresCompletion) {
+      if (checkCompletionCondition(step.completionCondition, state, step.id)) {
         newSteps[i] = { 
           ...stepState, 
           completed: true, 
-          completedAt: Date.now() 
+          completedAt: now 
         };
         hasChanges = true;
 
         if (i < TUTORIAL_STEPS.length - 1) {
-          const nextStep = TUTORIAL_STEPS[i + 1];
-          if (checkUnlockCondition(nextStep.unlockCondition, state)) {
+          if (!newSteps[i + 1].unlocked) {
             newSteps[i + 1] = { ...newSteps[i + 1], unlocked: true };
+            hasChanges = true;
           }
         }
       }
@@ -87,18 +174,22 @@ function checkAndUpdateTutorialProgress(state: GameState): GameState {
     const allCompleted = newSteps.every(s => s.completed || s.skipped);
     const currentPhase = TUTORIAL_STEPS[state.tutorial.currentStep]?.phase || 'intro';
     
+    const newTutorialState = {
+      ...state.tutorial,
+      steps: newSteps,
+      phase: currentPhase,
+      isCompleted: allCompleted,
+      completedAt: allCompleted ? now : state.tutorial.completedAt,
+      totalTimeSpent: allCompleted 
+        ? now - state.tutorial.startedAt 
+        : state.tutorial.totalTimeSpent
+    };
+
+    saveTutorialState(newTutorialState);
+
     return {
       ...state,
-      tutorial: {
-        ...state.tutorial,
-        steps: newSteps,
-        phase: currentPhase,
-        isCompleted: allCompleted,
-        completedAt: allCompleted ? Date.now() : state.tutorial.completedAt,
-        totalTimeSpent: allCompleted 
-          ? Date.now() - state.tutorial.startedAt 
-          : state.tutorial.totalTimeSpent
-      }
+      tutorial: newTutorialState
     };
   }
 
@@ -115,64 +206,89 @@ function canGoToStep(state: GameState, targetStep: number): { canGo: boolean; re
     return { canGo: false, reason: '该步骤尚未解锁，请先完成前置操作' };
   }
 
-  const currentStep = TUTORIAL_STEPS[state.tutorial.currentStep];
-  if (currentStep?.requiresCompletion && !state.tutorial.steps[state.tutorial.currentStep]?.completed) {
-    if (targetStep > state.tutorial.currentStep) {
-      return { canGo: false, reason: '请先完成当前步骤的操作要求' };
-    }
+  const currentStepIndex = state.tutorial.currentStep;
+  const currentStepData = TUTORIAL_STEPS[currentStepIndex];
+  const currentStepState = state.tutorial.steps[currentStepIndex];
+  
+  if (currentStepData?.requiresCompletion && 
+      !currentStepState?.completed && 
+      !currentStepState?.skipped &&
+      targetStep > currentStepIndex) {
+    return { canGo: false, reason: '请先完成当前步骤的操作要求再继续' };
   }
 
   return { canGo: true };
 }
 
-function createGameStore() {
-  const initialState: GameState = {
+function createInitialGameState(): GameState {
+  const savedTutorial = loadSavedTutorialState();
+  const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
+  const currentStep = savedTutorial.isCompleted ? TUTORIAL_STEPS.length - 1 : savedTutorial.currentStep;
+
+  return {
     currentSubject: null,
     currentFilm: FILM_STOCKS[0],
     currentParams: { ...DEFAULT_PARAMS },
     developmentProgress: 0,
     isDeveloping: false,
-    phase: 'tutorial',
+    phase: phase,
     processedPhotos: loadSavedPhotos(),
-    tutorial: createInitialTutorialState(),
-    tutorialStep: 0,
+    tutorial: savedTutorial,
+    tutorialStep: currentStep,
     selectedAlbumPhoto: null,
     presets: loadSavedPresets(),
     presetHistory: [],
     lastAppliedPresetId: null,
-    adjustedParams: []
+    adjustedParams: [],
+    subjectSelectedAt: null,
+    filmSelectedAt: null,
+    paramAdjustTimestamps: {},
+    developStartedAt: null
   };
+}
 
+function createGameStore() {
+  const initialState: GameState = createInitialGameState();
   const { subscribe, set, update } = writable(initialState);
 
   return {
     subscribe,
     setSubject: (subjectId: string) => update(state => {
+      const now = Date.now();
       const newState = {
         ...state,
-        currentSubject: PHOTO_SUBJECTS.find(s => s.id === subjectId) || null
+        currentSubject: PHOTO_SUBJECTS.find(s => s.id === subjectId) || null,
+        subjectSelectedAt: now
       };
       return checkAndUpdateTutorialProgress(newState);
     }),
     setFilm: (filmId: string) => update(state => {
+      const now = Date.now();
       const newState = {
         ...state,
-        currentFilm: FILM_STOCKS.find(f => f.id === filmId) || FILM_STOCKS[0]
+        currentFilm: FILM_STOCKS.find(f => f.id === filmId) || FILM_STOCKS[0],
+        filmSelectedAt: now
       };
       return checkAndUpdateTutorialProgress(newState);
     }),
     updateParams: (params: Partial<DevParams>) => update(state => {
+      const now = Date.now();
       const newAdjustedParams = [...state.adjustedParams];
+      const newTimestamps = { ...state.paramAdjustTimestamps };
+      
       Object.keys(params).forEach(key => {
         const paramKey = key as keyof DevParams;
         if (!newAdjustedParams.includes(paramKey)) {
           newAdjustedParams.push(paramKey);
         }
+        newTimestamps[paramKey] = now;
       });
+      
       const newState = {
         ...state,
         currentParams: { ...state.currentParams, ...params },
-        adjustedParams: newAdjustedParams
+        adjustedParams: newAdjustedParams,
+        paramAdjustTimestamps: newTimestamps
       };
       return checkAndUpdateTutorialProgress(newState);
     }),
@@ -185,11 +301,13 @@ function createGameStore() {
       phase
     })),
     startDevelopment: () => update(state => {
+      const now = Date.now();
       const newState: GameState = {
         ...state,
         isDeveloping: true,
         developmentProgress: 0,
-        phase: 'develop'
+        phase: 'develop',
+        developStartedAt: now
       };
       return checkAndUpdateTutorialProgress(newState);
     }),
@@ -213,14 +331,30 @@ function createGameStore() {
       if (!check.canGo) {
         return state;
       }
+      
+      const now = Date.now();
+      const newSteps = [...state.tutorial.steps];
+      if (!newSteps[step].activated) {
+        newSteps[step] = {
+          ...newSteps[step],
+          activated: true,
+          activatedAt: now
+        };
+      }
+      
+      const newTutorialState = {
+        ...state.tutorial,
+        currentStep: step,
+        steps: newSteps,
+        phase: TUTORIAL_STEPS[step]?.phase || 'intro'
+      };
+      
+      saveTutorialState(newTutorialState);
+      
       const newState = {
         ...state,
         tutorialStep: step,
-        tutorial: {
-          ...state.tutorial,
-          currentStep: step,
-          phase: TUTORIAL_STEPS[step]?.phase || 'intro'
-        }
+        tutorial: newTutorialState
       };
       return checkAndUpdateTutorialProgress(newState);
     }),
@@ -234,62 +368,83 @@ function createGameStore() {
       
       if (nextStep >= TUTORIAL_STEPS.length) {
         const newSteps = state.tutorial.steps.map((s, i) => 
-          !s.completed && !s.skipped ? { ...s, skipped: true } : s
+          !s.completed && !s.skipped ? { ...s, skipped: true, completed: true } : s
         );
-        return { 
-          ...state, 
-          phase: 'select', 
-          tutorialStep: TUTORIAL_STEPS.length - 1,
-          tutorial: {
-            ...state.tutorial,
-            currentStep: TUTORIAL_STEPS.length - 1,
-            steps: newSteps,
-            isCompleted: true,
-            completedAt: Date.now(),
-            totalTimeSpent: Date.now() - state.tutorial.startedAt
-          }
-        };
-      }
-      
-      const newState = {
-        ...state,
-        tutorialStep: nextStep,
-        tutorial: {
-          ...state.tutorial,
-          currentStep: nextStep,
-          phase: TUTORIAL_STEPS[nextStep]?.phase || 'intro'
-        }
-      };
-      return checkAndUpdateTutorialProgress(newState);
-    }),
-    prevTutorialStep: () => update(state => {
-      const prevStep = Math.max(0, state.tutorial.currentStep - 1);
-      return {
-        ...state,
-        tutorialStep: prevStep,
-        tutorial: {
-          ...state.tutorial,
-          currentStep: prevStep,
-          phase: TUTORIAL_STEPS[prevStep]?.phase || 'intro'
-        }
-      };
-    }),
-    skipTutorial: () => update(state => {
-      const newSteps = state.tutorial.steps.map((s, i) => 
-        !s.completed ? { ...s, skipped: true } : s
-      );
-      return {
-        ...state,
-        phase: 'select',
-        tutorialStep: TUTORIAL_STEPS.length - 1,
-        tutorial: {
+        const newTutorialState = {
           ...state.tutorial,
           currentStep: TUTORIAL_STEPS.length - 1,
           steps: newSteps,
           isCompleted: true,
           completedAt: Date.now(),
           totalTimeSpent: Date.now() - state.tutorial.startedAt
-        }
+        };
+        saveTutorialState(newTutorialState);
+        return { 
+          ...state, 
+          phase: 'select', 
+          tutorialStep: TUTORIAL_STEPS.length - 1,
+          tutorial: newTutorialState
+        };
+      }
+      
+      const now = Date.now();
+      const newSteps = [...state.tutorial.steps];
+      if (!newSteps[nextStep].activated) {
+        newSteps[nextStep] = {
+          ...newSteps[nextStep],
+          activated: true,
+          activatedAt: now
+        };
+      }
+      
+      const newTutorialState = {
+        ...state.tutorial,
+        currentStep: nextStep,
+        steps: newSteps,
+        phase: TUTORIAL_STEPS[nextStep]?.phase || 'intro'
+      };
+      
+      saveTutorialState(newTutorialState);
+      
+      const newState = {
+        ...state,
+        tutorialStep: nextStep,
+        tutorial: newTutorialState
+      };
+      return checkAndUpdateTutorialProgress(newState);
+    }),
+    prevTutorialStep: () => update(state => {
+      const prevStep = Math.max(0, state.tutorial.currentStep - 1);
+      const newTutorialState = {
+        ...state.tutorial,
+        currentStep: prevStep,
+        phase: TUTORIAL_STEPS[prevStep]?.phase || 'intro'
+      };
+      saveTutorialState(newTutorialState);
+      return {
+        ...state,
+        tutorialStep: prevStep,
+        tutorial: newTutorialState
+      };
+    }),
+    skipTutorial: () => update(state => {
+      const newSteps = state.tutorial.steps.map((s, i) => 
+        !s.completed ? { ...s, skipped: true, completed: true } : s
+      );
+      const newTutorialState = {
+        ...state.tutorial,
+        currentStep: TUTORIAL_STEPS.length - 1,
+        steps: newSteps,
+        isCompleted: true,
+        completedAt: Date.now(),
+        totalTimeSpent: Date.now() - state.tutorial.startedAt
+      };
+      saveTutorialState(newTutorialState);
+      return {
+        ...state,
+        phase: 'select',
+        tutorialStep: TUTORIAL_STEPS.length - 1,
+        tutorial: newTutorialState
       };
     }),
     skipCurrentTutorialStep: () => update(state => {
@@ -304,15 +459,27 @@ function createGameStore() {
         
         const nextStep = state.tutorial.currentStep + 1;
         if (nextStep < TUTORIAL_STEPS.length) {
+          const now = Date.now();
+          if (!newSteps[nextStep].activated) {
+            newSteps[nextStep] = {
+              ...newSteps[nextStep],
+              activated: true,
+              activatedAt: now
+            };
+          }
+          
+          const newTutorialState = {
+            ...state.tutorial,
+            currentStep: nextStep,
+            steps: newSteps,
+            phase: TUTORIAL_STEPS[nextStep]?.phase || 'intro'
+          };
+          saveTutorialState(newTutorialState);
+          
           const newState = {
             ...state,
             tutorialStep: nextStep,
-            tutorial: {
-              ...state.tutorial,
-              currentStep: nextStep,
-              steps: newSteps,
-              phase: TUTORIAL_STEPS[nextStep]?.phase || 'intro'
-            }
+            tutorial: newTutorialState
           };
           return checkAndUpdateTutorialProgress(newState);
         }
@@ -330,13 +497,21 @@ function createGameStore() {
         unsubscribe();
         return result;
     },
-    resetTutorial: () => update(state => ({
-      ...state,
-      phase: 'tutorial',
-      tutorialStep: 0,
-      adjustedParams: [],
-      tutorial: createInitialTutorialState()
-    })),
+    resetTutorial: () => update(state => {
+      const newTutorialState = createInitialTutorialState();
+      saveTutorialState(newTutorialState);
+      return {
+        ...state,
+        phase: 'tutorial',
+        tutorialStep: 0,
+        adjustedParams: [],
+        subjectSelectedAt: null,
+        filmSelectedAt: null,
+        paramAdjustTimestamps: {},
+        developStartedAt: null,
+        tutorial: newTutorialState
+      };
+    }),
     openAlbum: () => update(state => ({
       ...state,
       phase: 'album',
@@ -465,7 +640,10 @@ function createGameStore() {
         presetHistory: [currentHistory, ...state.presetHistory.filter(h => h !== historyEntry)].slice(0, 20)
       };
     }),
-    reset: () => set(initialState)
+    reset: () => {
+      const newState = createInitialGameState();
+      set(newState);
+    }
   };
 }
 

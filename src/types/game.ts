@@ -162,6 +162,10 @@ export interface GameState {
   presetHistory: PresetHistory[];
   lastAppliedPresetId: string | null;
   adjustedParams: (keyof DevParams)[];
+  subjectSelectedAt: number | null;
+  filmSelectedAt: number | null;
+  paramAdjustTimestamps: Partial<Record<keyof DevParams, number>>;
+  developStartedAt: number | null;
 }
 
 export type TutorialUnlockCondition = 
@@ -170,8 +174,9 @@ export type TutorialUnlockCondition =
   | { type: 'film_selected' }
   | { type: 'param_adjusted'; param: keyof DevParams }
   | { type: 'any_param_adjusted' }
+  | { type: 'other_param_adjusted'; excludeParam: keyof DevParams }
   | { type: 'develop_started' }
-  | { type: 'custom'; check: () => boolean };
+  | { type: 'step_completed'; stepId: number };
 
 export type TutorialPhase = 'intro' | 'selection' | 'adjustment' | 'development' | 'final';
 
@@ -183,6 +188,7 @@ export interface TutorialStep {
   highlightArea?: string;
   actionHint?: string;
   unlockCondition: TutorialUnlockCondition;
+  completionCondition: TutorialUnlockCondition;
   requiresCompletion: boolean;
   allowSkip: boolean;
 }
@@ -190,9 +196,12 @@ export interface TutorialStep {
 export interface TutorialStepState {
   stepId: number;
   unlocked: boolean;
+  activated: boolean;
+  activatedAt?: number;
   completed: boolean;
   completedAt?: number;
   skipped: boolean;
+  actionsPerformed: string[];
 }
 
 export interface TutorialState {
