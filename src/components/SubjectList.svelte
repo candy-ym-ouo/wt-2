@@ -1,0 +1,259 @@
+<script lang="ts">
+  import type { PhotoSubject } from '../types/game';
+  import { PHOTO_SUBJECTS } from '../data/gameData';
+
+  export let selectedId: string | null = null;
+
+  const sceneIcons: Record<string, string> = {
+    portrait: '👤',
+    landscape: '🏔',
+    street: '🏙',
+    still_life: '🫖',
+    night: '🌃'
+  };
+
+  const sceneNames: Record<string, string> = {
+    portrait: '人像',
+    landscape: '风光',
+    street: '街头',
+    still_life: '静物',
+    night: '夜景'
+  };
+
+  function selectSubject(id: string) {
+    selectedId = id;
+    const event = new CustomEvent('select', { detail: id });
+    document.dispatchEvent(event);
+  }
+</script>
+
+<div class="subject-list" id="subject-list">
+  <div class="list-header">
+    <h3 class="title">拍摄题材</h3>
+    <span class="count">{PHOTO_SUBJECTS.length} 组</span>
+  </div>
+
+  <div class="subjects-grid">
+    {#each PHOTO_SUBJECTS as subject (subject.id)}
+      <button
+        class="subject-card"
+        class:selected={selectedId === subject.id}
+        on:click={() => selectSubject(subject.id)}
+      >
+        <div class="card-thumb" style="background: {getThumbGradient(subject)};">
+          <span class="thumb-icon">{sceneIcons[subject.sceneType]}</span>
+          <span class="scene-tag">{sceneNames[subject.sceneType]}</span>
+        </div>
+        <div class="card-info">
+          <h4 class="card-name">{subject.name}</h4>
+          <p class="card-desc">{subject.description}</p>
+          <div class="card-meta">
+            <div class="meta-item">
+              <span class="meta-label">曝光</span>
+              <div class="meta-bar">
+                <div class="meta-fill" style="width: {subject.idealExposure * 100}%; background: #d4a574;" />
+              </div>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">反差</span>
+              <div class="meta-bar">
+                <div class="meta-fill" style="width: {subject.idealContrast * 100}%; background: #8bb0c8;" />
+              </div>
+            </div>
+          </div>
+        </div>
+        {#if selectedId === subject.id}
+          <div class="selected-indicator">✓</div>
+        {/if}
+      </button>
+    {/each}
+  </div>
+</div>
+
+<style>
+  .subject-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(139, 90, 43, 0.2);
+  }
+
+  .title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #d4a574;
+    margin: 0;
+    letter-spacing: 2px;
+  }
+
+  .count {
+    font-size: 12px;
+    color: #7a6a55;
+    background: rgba(139, 90, 43, 0.1);
+    padding: 3px 10px;
+    border-radius: 10px;
+  }
+
+  .subjects-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .subject-card {
+    position: relative;
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(139, 90, 43, 0.15);
+    border-radius: 10px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    overflow: hidden;
+  }
+
+  .subject-card:hover {
+    background: rgba(30, 20, 12, 0.5);
+    border-color: rgba(139, 90, 43, 0.4);
+    transform: translateX(2px);
+  }
+
+  .subject-card.selected {
+    background: linear-gradient(135deg, rgba(139, 90, 43, 0.2) 0%, rgba(90, 55, 25, 0.3) 100%);
+    border-color: rgba(200, 150, 80, 0.5);
+    box-shadow: 0 0 0 1px rgba(200, 150, 80, 0.2), 0 4px 16px rgba(0, 0, 0, 0.3);
+  }
+
+  .card-thumb {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .thumb-icon {
+    font-size: 28px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  }
+
+  .scene-tag {
+    position: absolute;
+    bottom: 4px;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(0, 0, 0, 0.4);
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 1px;
+  }
+
+  .card-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .card-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e0cfa8;
+    margin: 0;
+    letter-spacing: 0.5px;
+  }
+
+  .subject-card.selected .card-name {
+    color: #f0d8a8;
+  }
+
+  .card-desc {
+    font-size: 11px;
+    color: #8a7a60;
+    margin: 0;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .card-meta {
+    display: flex;
+    gap: 12px;
+    margin-top: auto;
+  }
+
+  .meta-item {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .meta-label {
+    font-size: 10px;
+    color: #6a5a45;
+    width: 24px;
+    letter-spacing: 0.5px;
+  }
+
+  .meta-bar {
+    flex: 1;
+    height: 4px;
+    background: rgba(60, 50, 40, 0.6);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .meta-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  .selected-indicator {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #d4a574, #a07848);
+    color: #1a0f0a;
+    font-size: 12px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(200, 150, 80, 0.4);
+  }
+</style>
+
+<script lang="ts" context="module">
+  function getThumbGradient(subject: PhotoSubject): string {
+    const gradients: Record<string, string[]> = {
+      portrait: ['linear-gradient(135deg, #c9a87c 0%, #8b6914 50%, #4a3520 100%)'],
+      landscape: ['linear-gradient(135deg, #5a8aa8 0%, #3a6850 50%, #1a3a2a 100%)'],
+      street: ['linear-gradient(135deg, #6a5a4a 0%, #4a3528 50%, #2a1a15 100%)'],
+      still_life: ['linear-gradient(135deg, #d4b080 0%, #a07850 50%, #604020 100%)'],
+      night: ['linear-gradient(135deg, #1a1a4a 0%, #2a1a4a 50%, #0a0a1a 100%)']
+    };
+    return gradients[subject.sceneType]?.[0] || gradients.street[0];
+  }
+</script>
