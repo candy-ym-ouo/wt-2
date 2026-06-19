@@ -239,6 +239,11 @@ export interface GameState {
   stageState: StageState;
   compareSelection: string[];
   compareSubjectId: string | null;
+  favorites: FavoriteInfo[];
+  collections: PhotoCollection[];
+  collectionFilter: CollectionFilter;
+  quickBrowseIndex: number;
+  quickBrowsePhotoIds: string[];
   storageStatus: StorageStatus;
 }
 
@@ -302,6 +307,8 @@ export interface StorageStatus {
   photosLoaded: number;
   presetsLoaded: number;
   tutorialLoaded: boolean;
+  favoritesLoaded: number;
+  collectionsLoaded: number;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -311,5 +318,54 @@ export interface StorageStatus {
   corruptedItems: {
     photos: number;
     presets: number;
+    favorites: number;
+    collections: number;
   };
+}
+
+export interface FavoriteInfo {
+  photoId: string;
+  favoritedAt: number;
+  groupId?: string;
+}
+
+export interface CollectionGroup {
+  id: string;
+  name: string;
+  description?: string;
+  photoIds: string[];
+  coverPhotoId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PhotoCollection {
+  id: string;
+  name: string;
+  description?: string;
+  coverPhotoId?: string;
+  photoIds: string[];
+  groups: CollectionGroup[];
+  createdAt: number;
+  updatedAt: number;
+  tags?: string[];
+}
+
+export interface CollectionStats {
+  total: number;
+  avgScore: number;
+  bestScore: number;
+  worstScore: number;
+  gradeCounts: Record<string, number>;
+  subjectCounts: Record<string, number>;
+  filmCounts: Record<string, number>;
+  scoreDistribution: number[];
+}
+
+export type AlbumViewMode = 'all' | 'favorites' | 'collections';
+
+export interface CollectionFilter {
+  viewMode: AlbumViewMode;
+  activeCollectionId: string | null;
+  activeGroupId: string | null;
 }

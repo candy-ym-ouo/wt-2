@@ -1,9 +1,10 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 
-export const CURRENT_STORAGE_VERSION = 2;
+export const CURRENT_STORAGE_VERSION = 3;
 export const MAX_PHOTOS = 100;
 export const MAX_PRESETS = 50;
+export const MAX_COLLECTIONS = 20;
 export const STORAGE_QUOTA_WARNING = 0.8;
 export const BACKUP_COUNT = 3;
 
@@ -28,12 +29,14 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
   presets: 'darkroom_presets',
-  tutorial: 'darkroom_tutorial'
+  tutorial: 'darkroom_tutorial',
+  favorites: 'darkroom_favorites',
+  collections: 'darkroom_collections'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -224,6 +227,30 @@ function migrateTutorial(data: unknown, fromVersion: number): TutorialState {
   return tutorial;
 }
 
+function migrateFavorites(data: unknown, fromVersion: number): FavoriteInfo[] {
+  let favorites = data as FavoriteInfo[];
+  if (fromVersion < 3) {
+    favorites = favorites.map(fav => ({
+      ...fav,
+      groupId: fav.groupId || undefined
+    }));
+  }
+  return favorites;
+}
+
+function migrateCollections(data: unknown, fromVersion: number): PhotoCollection[] {
+  let collections = data as PhotoCollection[];
+  if (fromVersion < 3) {
+    collections = collections.map(col => ({
+      ...col,
+      groups: col.groups || [],
+      tags: col.tags || [],
+      coverPhotoId: col.coverPhotoId || undefined
+    }));
+  }
+  return collections;
+}
+
 function migrateData<T>(key: StorageKey, data: unknown, fromVersion: number): T {
   switch (key) {
     case 'photos':
@@ -232,6 +259,10 @@ function migrateData<T>(key: StorageKey, data: unknown, fromVersion: number): T 
       return migratePresets(data, fromVersion) as T;
     case 'tutorial':
       return migrateTutorial(data, fromVersion) as T;
+    case 'favorites':
+      return migrateFavorites(data, fromVersion) as T;
+    case 'collections':
+      return migrateCollections(data, fromVersion) as T;
     default:
       return data as T;
   }
@@ -272,6 +303,27 @@ function validateTutorial(tutorial: unknown): tutorial is TutorialState {
   );
 }
 
+function validateFavorite(favorite: unknown): favorite is FavoriteInfo {
+  if (typeof favorite !== 'object' || favorite === null) return false;
+  const f = favorite as Record<string, unknown>;
+  return (
+    typeof f.photoId === 'string' &&
+    typeof f.favoritedAt === 'number'
+  );
+}
+
+function validateCollection(collection: unknown): collection is PhotoCollection {
+  if (typeof collection !== 'object' || collection === null) return false;
+  const c = collection as Record<string, unknown>;
+  return (
+    typeof c.id === 'string' &&
+    typeof c.name === 'string' &&
+    Array.isArray(c.photoIds) &&
+    typeof c.createdAt === 'number' &&
+    typeof c.updatedAt === 'number'
+  );
+}
+
 function validateData<T>(key: StorageKey, data: unknown): T | null {
   if (!Array.isArray(data) && key !== 'tutorial') {
     return null;
@@ -290,6 +342,16 @@ function validateData<T>(key: StorageKey, data: unknown): T | null {
     }
     case 'tutorial': {
       return validateTutorial(data) ? (data as T) : null;
+    }
+    case 'favorites': {
+      const arr = data as unknown[];
+      const valid = arr.filter(validateFavorite);
+      return valid as T;
+    }
+    case 'collections': {
+      const arr = data as unknown[];
+      const valid = arr.filter(validateCollection);
+      return valid as T;
     }
     default:
       return null;
@@ -393,6 +455,15 @@ export function enforceLimits<T>(key: StorageKey, data: T): T {
       }
       return data;
     }
+    case 'collections': {
+      const collections = data as PhotoCollection[];
+      if (collections.length > MAX_COLLECTIONS) {
+        return collections
+          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .slice(0, MAX_COLLECTIONS) as T;
+      }
+      return data;
+    }
     default:
       return data;
   }
@@ -462,5 +533,34 @@ export function repairPresets(presets: ParamPreset[]): ParamPreset[] {
       ...preset,
       version: preset.version || 1,
       description: preset.description || ''
+    }));
+}
+
+export function repairFavorites(favorites: FavoriteInfo[], validPhotoIds: string[]): FavoriteInfo[] {
+  return favorites
+    .filter(fav => {
+      if (!validateFavorite(fav)) return false;
+      if (!validPhotoIds.includes(fav.photoId)) return false;
+      return true;
+    })
+    .map(fav => ({
+      ...fav,
+      groupId: fav.groupId || undefined
+    }));
+}
+
+export function repairCollections(collections: PhotoCollection[], validPhotoIds: string[]): PhotoCollection[] {
+  return collections
+    .filter(col => validateCollection(col))
+    .map(col => ({
+      ...col,
+      photoIds: col.photoIds.filter(id => validPhotoIds.includes(id)),
+      groups: (col.groups || []).map(group => ({
+        ...group,
+        photoIds: (group.photoIds || []).filter(id => validPhotoIds.includes(id)),
+        coverPhotoId: group.coverPhotoId && validPhotoIds.includes(group.coverPhotoId) ? group.coverPhotoId : undefined
+      })),
+      coverPhotoId: col.coverPhotoId && validPhotoIds.includes(col.coverPhotoId) ? col.coverPhotoId : undefined,
+      tags: col.tags || []
     }));
 }

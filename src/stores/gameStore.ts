@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS } from '../data/gameData';
 import { generateId } from '../utils/math';
 import {
@@ -10,11 +10,14 @@ import {
   getStorageInfo,
   repairPhotos,
   repairPresets,
+  repairFavorites,
+  repairCollections,
   clearStorage,
   exportAllData,
   importAllData,
   MAX_PHOTOS,
-  MAX_PRESETS
+  MAX_PRESETS,
+  MAX_COLLECTIONS
 } from '../utils/storage';
 
 function createInitialStageState(): StageState {
@@ -75,6 +78,8 @@ function createInitialStorageStatus(): StorageStatus {
     photosLoaded: 0,
     presetsLoaded: 0,
     tutorialLoaded: false,
+    favoritesLoaded: 0,
+    collectionsLoaded: 0,
     lastSaveSuccess: true,
     storageUsed: info.used,
     storageQuota: info.quota,
@@ -82,7 +87,9 @@ function createInitialStorageStatus(): StorageStatus {
     recoveryPerformed: false,
     corruptedItems: {
       photos: 0,
-      presets: 0
+      presets: 0,
+      favorites: 0,
+      collections: 0
     }
   };
 }
@@ -281,6 +288,10 @@ function createInitialGameState(): GameState {
   const photosResult = loadSavedPhotos();
   const presetsResult = loadSavedPresets();
   
+  const validPhotoIds = photosResult.photos.map(p => p.id);
+  const favoritesResult = loadSavedFavorites(validPhotoIds);
+  const collectionsResult = loadSavedCollections(validPhotoIds);
+  
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
   const currentStep = savedTutorial.isCompleted ? TUTORIAL_STEPS.length - 1 : savedTutorial.currentStep;
@@ -288,19 +299,31 @@ function createInitialGameState(): GameState {
   const storageStatus = createInitialStorageStatus();
   storageStatus.photosLoaded = photosResult.status.photosLoaded || 0;
   storageStatus.presetsLoaded = presetsResult.status.presetsLoaded || 0;
+  storageStatus.favoritesLoaded = favoritesResult.status.favoritesLoaded || 0;
+  storageStatus.collectionsLoaded = collectionsResult.status.collectionsLoaded || 0;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
-    tutorialResult.status.migrationPerformed);
+    tutorialResult.status.migrationPerformed ||
+    favoritesResult.status.migrationPerformed ||
+    collectionsResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
-    tutorialResult.status.recoveryPerformed);
+    tutorialResult.status.recoveryPerformed ||
+    favoritesResult.status.recoveryPerformed ||
+    collectionsResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
   }
   if (presetsResult.status.corruptedItems?.presets) {
     storageStatus.corruptedItems.presets = presetsResult.status.corruptedItems.presets;
+  }
+  if (favoritesResult.status.corruptedItems?.favorites) {
+    storageStatus.corruptedItems.favorites = favoritesResult.status.corruptedItems.favorites;
+  }
+  if (collectionsResult.status.corruptedItems?.collections) {
+    storageStatus.corruptedItems.collections = collectionsResult.status.corruptedItems.collections;
   }
   
   const warnings: StorageWarning[] = [];
@@ -322,12 +345,16 @@ function createInitialGameState(): GameState {
     });
   }
   
-  if (storageStatus.corruptedItems.photos > 0 || storageStatus.corruptedItems.presets > 0) {
+  const corruptedCount = storageStatus.corruptedItems.photos + 
+    storageStatus.corruptedItems.presets + 
+    storageStatus.corruptedItems.favorites + 
+    storageStatus.corruptedItems.collections;
+  if (corruptedCount > 0) {
     warnings.push({
       type: 'corrupted',
-      message: `发现 ${storageStatus.corruptedItems.photos + storageStatus.corruptedItems.presets} 个损坏数据项，已自动清理`,
+      message: `发现 ${corruptedCount} 个损坏数据项，已自动清理`,
       timestamp: now,
-      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个`
+      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个`
     });
   }
   
@@ -363,6 +390,15 @@ function createInitialGameState(): GameState {
     stageState: createInitialStageState(),
     compareSelection: [],
     compareSubjectId: null,
+    favorites: favoritesResult.favorites,
+    collections: collectionsResult.collections,
+    collectionFilter: {
+      viewMode: 'all',
+      activeCollectionId: null,
+      activeGroupId: null
+    },
+    quickBrowseIndex: 0,
+    quickBrowsePhotoIds: [],
     storageStatus
   };
 }
@@ -988,8 +1024,463 @@ function createGameStore() {
     },
     getStorageLimits: () => ({
       maxPhotos: MAX_PHOTOS,
-      maxPresets: MAX_PRESETS
+      maxPresets: MAX_PRESETS,
+      maxCollections: MAX_COLLECTIONS
     }),
+
+    toggleFavorite: (photoId: string) => update(state => {
+      const existingIndex = state.favorites.findIndex(f => f.photoId === photoId);
+      let newFavorites: FavoriteInfo[];
+      
+      if (existingIndex >= 0) {
+        newFavorites = state.favorites.filter(f => f.photoId !== photoId);
+      } else {
+        newFavorites = [...state.favorites, {
+          photoId,
+          favoritedAt: Date.now()
+        }];
+      }
+      
+      const saveSuccess = saveFavorites(newFavorites);
+      const info = getStorageInfo();
+      
+      return {
+        ...state,
+        favorites: newFavorites,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '保存收藏失败',
+          favoritesLoaded: newFavorites.length,
+          storageUsed: info.used,
+          storageQuota: info.quota
+        }
+      };
+    }),
+
+    isFavorite: (photoId: string): boolean => {
+      let result = false;
+      const unsubscribe = subscribe(state => {
+        result = state.favorites.some(f => f.photoId === photoId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    setFavoriteGroup: (photoId: string, groupId: string | undefined) => update(state => {
+      const newFavorites = state.favorites.map(f => 
+        f.photoId === photoId ? { ...f, groupId } : f
+      );
+      const saveSuccess = saveFavorites(newFavorites);
+      
+      return {
+        ...state,
+        favorites: newFavorites,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '更新收藏分组失败'
+        }
+      };
+    }),
+
+    createCollection: (name: string, description?: string): string | null => {
+      let newCollectionId: string | null = null;
+      let unsubscribe: () => void;
+      
+      const updateFn = (state: GameState): GameState => {
+        if (state.collections.length >= MAX_COLLECTIONS) {
+          return state;
+        }
+        
+        const now = Date.now();
+        const newCollection: PhotoCollection = {
+          id: generateId(),
+          name,
+          description,
+          photoIds: [],
+          groups: [],
+          createdAt: now,
+          updatedAt: now,
+          tags: []
+        };
+        
+        newCollectionId = newCollection.id;
+        const newCollections = [...state.collections, newCollection];
+        const saveSuccess = saveCollections(newCollections);
+        const info = getStorageInfo();
+        
+        return {
+          ...state,
+          collections: newCollections,
+          storageStatus: {
+            ...state.storageStatus,
+            lastSaveSuccess: saveSuccess,
+            lastSaveError: saveSuccess ? undefined : '创建精选集失败',
+            collectionsLoaded: newCollections.length,
+            storageUsed: info.used,
+            storageQuota: info.quota
+          }
+        };
+      };
+      
+      update(updateFn);
+      return newCollectionId;
+    },
+
+    deleteCollection: (collectionId: string) => update(state => {
+      const newCollections = state.collections.filter(c => c.id !== collectionId);
+      const saveSuccess = saveCollections(newCollections);
+      
+      return {
+        ...state,
+        collections: newCollections,
+        collectionFilter: {
+          ...state.collectionFilter,
+          activeCollectionId: state.collectionFilter.activeCollectionId === collectionId 
+            ? null 
+            : state.collectionFilter.activeCollectionId
+        },
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '删除精选集失败',
+          collectionsLoaded: newCollections.length
+        }
+      };
+    }),
+
+    updateCollection: (collectionId: string, updates: Partial<Pick<PhotoCollection, 'name' | 'description' | 'tags'>>) => update(state => {
+      const now = Date.now();
+      const newCollections = state.collections.map(c => 
+        c.id === collectionId 
+          ? { ...c, ...updates, updatedAt: now }
+          : c
+      );
+      const saveSuccess = saveCollections(newCollections);
+      
+      return {
+        ...state,
+        collections: newCollections,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '更新精选集失败'
+        }
+      };
+    }),
+
+    addPhotoToCollection: (collectionId: string, photoId: string) => update(state => {
+      const now = Date.now();
+      const newCollections = state.collections.map(c => {
+        if (c.id !== collectionId) return c;
+        if (c.photoIds.includes(photoId)) return c;
+        return {
+          ...c,
+          photoIds: [...c.photoIds, photoId],
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveCollections(newCollections);
+      
+      return {
+        ...state,
+        collections: newCollections,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '添加照片到精选集失败'
+        }
+      };
+    }),
+
+    removePhotoFromCollection: (collectionId: string, photoId: string) => update(state => {
+      const now = Date.now();
+      const newCollections = state.collections.map(c => {
+        if (c.id !== collectionId) return c;
+        const newPhotoIds = c.photoIds.filter(id => id !== photoId);
+        const newGroups = c.groups.map(g => ({
+          ...g,
+          photoIds: g.photoIds.filter(id => id !== photoId),
+          coverPhotoId: g.coverPhotoId === photoId ? undefined : g.coverPhotoId
+        }));
+        return {
+          ...c,
+          photoIds: newPhotoIds,
+          groups: newGroups,
+          coverPhotoId: c.coverPhotoId === photoId ? undefined : c.coverPhotoId,
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveCollections(newCollections);
+      
+      return {
+        ...state,
+        collections: newCollections,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '从精选集移除照片失败'
+        }
+      };
+    }),
+
+    setCollectionCover: (collectionId: string, coverPhotoId: string | undefined) => update(state => {
+      const now = Date.now();
+      const newCollections = state.collections.map(c => 
+        c.id === collectionId 
+          ? { ...c, coverPhotoId, updatedAt: now }
+          : c
+      );
+      const saveSuccess = saveCollections(newCollections);
+      
+      return {
+        ...state,
+        collections: newCollections,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '设置精选集封面失败'
+        }
+      };
+    }),
+
+    createGroup: (collectionId: string, name: string, description?: string): string | null => {
+      let newGroupId: string | null = null;
+      
+      const updateFn = (state: GameState): GameState => {
+        const now = Date.now();
+        const newCollections = state.collections.map(c => {
+          if (c.id !== collectionId) return c;
+          const newGroup: CollectionGroup = {
+            id: generateId(),
+            name,
+            description,
+            photoIds: [],
+            createdAt: now,
+            updatedAt: now
+          };
+          newGroupId = newGroup.id;
+          return {
+            ...c,
+            groups: [...c.groups, newGroup],
+            updatedAt: now
+          };
+        });
+        const saveSuccess = saveCollections(newCollections);
+        
+        return {
+          ...state,
+          collections: newCollections,
+          storageStatus: {
+            ...state.storageStatus,
+            lastSaveSuccess: saveSuccess,
+            lastSaveError: saveSuccess ? undefined : '创建分组失败'
+          }
+        };
+      };
+      
+      update(updateFn);
+      return newGroupId;
+    },
+
+    deleteGroup: (collectionId: string, groupId: string) => update(state => {
+      const now = Date.now();
+      const newCollections = state.collections.map(c => {
+        if (c.id !== collectionId) return c;
+        return {
+          ...c,
+          groups: c.groups.filter(g => g.id !== groupId),
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveCollections(newCollections);
+      
+      return {
+        ...state,
+        collections: newCollections,
+        collectionFilter: {
+          ...state.collectionFilter,
+          activeGroupId: state.collectionFilter.activeGroupId === groupId 
+            ? null 
+            : state.collectionFilter.activeGroupId
+        },
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '删除分组失败'
+        }
+      };
+    }),
+
+    updateGroup: (collectionId: string, groupId: string, updates: Partial<Pick<CollectionGroup, 'name' | 'description'>>) => update(state => {
+      const now = Date.now();
+      const newCollections = state.collections.map(c => {
+        if (c.id !== collectionId) return c;
+        return {
+          ...c,
+          groups: c.groups.map(g => 
+            g.id === groupId ? { ...g, ...updates, updatedAt: now } : g
+          ),
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveCollections(newCollections);
+      
+      return {
+        ...state,
+        collections: newCollections,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '更新分组失败'
+        }
+      };
+    }),
+
+    addPhotoToGroup: (collectionId: string, groupId: string, photoId: string) => update(state => {
+      const now = Date.now();
+      const newCollections = state.collections.map(c => {
+        if (c.id !== collectionId) return c;
+        return {
+          ...c,
+          groups: c.groups.map(g => {
+            if (g.id !== groupId) return g;
+            if (g.photoIds.includes(photoId)) return g;
+            return {
+              ...g,
+              photoIds: [...g.photoIds, photoId],
+              updatedAt: now
+            };
+          }),
+          photoIds: c.photoIds.includes(photoId) 
+            ? c.photoIds 
+            : [...c.photoIds, photoId],
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveCollections(newCollections);
+      
+      return {
+        ...state,
+        collections: newCollections,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '添加照片到分组失败'
+        }
+      };
+    }),
+
+    removePhotoFromGroup: (collectionId: string, groupId: string, photoId: string) => update(state => {
+      const now = Date.now();
+      const newCollections = state.collections.map(c => {
+        if (c.id !== collectionId) return c;
+        return {
+          ...c,
+          groups: c.groups.map(g => {
+            if (g.id !== groupId) return g;
+            return {
+              ...g,
+              photoIds: g.photoIds.filter(id => id !== photoId),
+              coverPhotoId: g.coverPhotoId === photoId ? undefined : g.coverPhotoId,
+              updatedAt: now
+            };
+          }),
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveCollections(newCollections);
+      
+      return {
+        ...state,
+        collections: newCollections,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '从分组移除照片失败'
+        }
+      };
+    }),
+
+    setGroupCover: (collectionId: string, groupId: string, coverPhotoId: string | undefined) => update(state => {
+      const now = Date.now();
+      const newCollections = state.collections.map(c => {
+        if (c.id !== collectionId) return c;
+        return {
+          ...c,
+          groups: c.groups.map(g => 
+            g.id === groupId ? { ...g, coverPhotoId, updatedAt: now } : g
+          ),
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveCollections(newCollections);
+      
+      return {
+        ...state,
+        collections: newCollections,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '设置分组封面失败'
+        }
+      };
+    }),
+
+    setAlbumViewMode: (mode: AlbumViewMode) => update(state => ({
+      ...state,
+      collectionFilter: {
+        ...state.collectionFilter,
+        viewMode: mode,
+        activeCollectionId: null,
+        activeGroupId: null
+      }
+    })),
+
+    setActiveCollection: (collectionId: string | null) => update(state => ({
+      ...state,
+      collectionFilter: {
+        ...state.collectionFilter,
+        activeCollectionId: collectionId,
+        activeGroupId: null
+      }
+    })),
+
+    setActiveGroup: (groupId: string | null) => update(state => ({
+      ...state,
+      collectionFilter: {
+        ...state.collectionFilter,
+        activeGroupId: groupId
+      }
+    })),
+
+    startQuickBrowse: (photoIds: string[], startIndex: number = 0) => update(state => ({
+      ...state,
+      quickBrowsePhotoIds: photoIds,
+      quickBrowseIndex: startIndex
+    })),
+
+    nextQuickBrowse: () => update(state => {
+      if (state.quickBrowsePhotoIds.length === 0) return state;
+      const nextIndex = (state.quickBrowseIndex + 1) % state.quickBrowsePhotoIds.length;
+      return { ...state, quickBrowseIndex: nextIndex };
+    }),
+
+    prevQuickBrowse: () => update(state => {
+      if (state.quickBrowsePhotoIds.length === 0) return state;
+      const prevIndex = state.quickBrowseIndex === 0 
+        ? state.quickBrowsePhotoIds.length - 1 
+        : state.quickBrowseIndex - 1;
+      return { ...state, quickBrowseIndex: prevIndex };
+    }),
+
+    exitQuickBrowse: () => update(state => ({
+      ...state,
+      quickBrowsePhotoIds: [],
+      quickBrowseIndex: 0
+    })),
+
     reset: () => {
       const newState = createInitialGameState();
       set(newState);
@@ -1012,7 +1503,7 @@ function loadSavedPhotos(): { photos: ProcessedPhoto[]; status: Partial<StorageS
     status.recoveryPerformed = true;
   }
   if (photos.length !== repaired.length) {
-    status.corruptedItems = { photos: photos.length - repaired.length, presets: 0 };
+    status.corruptedItems = { photos: photos.length - repaired.length, presets: 0, favorites: 0, collections: 0 };
   }
   
   const limited = enforceLimits('photos', repaired);
@@ -1040,7 +1531,7 @@ function loadSavedPresets(): { presets: ParamPreset[]; status: Partial<StorageSt
     status.recoveryPerformed = true;
   }
   if (userPresets.length !== repaired.length) {
-    status.corruptedItems = { photos: 0, presets: userPresets.length - repaired.length };
+    status.corruptedItems = { photos: 0, presets: userPresets.length - repaired.length, favorites: 0, collections: 0 };
   }
   
   const allPresets = [...DEFAULT_PRESETS, ...repaired];
@@ -1053,6 +1544,110 @@ function savePresets(presets: ParamPreset[]): boolean {
   const userPresets = presets.filter(p => !p.isDefault);
   const limited = enforceLimits('presets', userPresets);
   return saveWithBackup('presets', limited, limited.length);
+}
+
+function loadSavedFavorites(validPhotoIds: string[]): { favorites: FavoriteInfo[]; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<FavoriteInfo[]>('favorites', []);
+  const favorites = result.data || [];
+  const repaired = repairFavorites(favorites, validPhotoIds);
+  const status: Partial<StorageStatus> = {
+    favoritesLoaded: repaired.length
+  };
+  
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+  if (favorites.length !== repaired.length) {
+    status.corruptedItems = { photos: 0, presets: 0, favorites: favorites.length - repaired.length, collections: 0 };
+  }
+  
+  return { favorites: repaired, status };
+}
+
+function saveFavorites(favorites: FavoriteInfo[]): boolean {
+  return saveWithBackup('favorites', favorites, favorites.length);
+}
+
+function loadSavedCollections(validPhotoIds: string[]): { collections: PhotoCollection[]; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<PhotoCollection[]>('collections', []);
+  const collections = result.data || [];
+  const repaired = repairCollections(collections, validPhotoIds);
+  const status: Partial<StorageStatus> = {
+    collectionsLoaded: repaired.length
+  };
+  
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+  if (collections.length !== repaired.length) {
+    status.corruptedItems = { photos: 0, presets: 0, favorites: 0, collections: collections.length - repaired.length };
+  }
+  
+  const limited = enforceLimits('collections', repaired);
+  
+  return { collections: limited, status };
+}
+
+function saveCollections(collections: PhotoCollection[]): boolean {
+  const limited = enforceLimits('collections', collections);
+  return saveWithBackup('collections', limited, limited.length);
+}
+
+export function calculateCollectionStats(photos: ProcessedPhoto[]): CollectionStats {
+  if (photos.length === 0) {
+    return {
+      total: 0,
+      avgScore: 0,
+      bestScore: 0,
+      worstScore: 0,
+      gradeCounts: { S: 0, A: 0, B: 0, C: 0, D: 0 },
+      subjectCounts: {},
+      filmCounts: {},
+      scoreDistribution: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    };
+  }
+  
+  const total = photos.length;
+  const scores = photos.map(p => p.score);
+  const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / total);
+  const bestScore = Math.max(...scores);
+  const worstScore = Math.min(...scores);
+  
+  const gradeCounts: Record<string, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+  photos.forEach(p => { gradeCounts[p.details.grade]++; });
+  
+  const subjectCounts: Record<string, number> = {};
+  photos.forEach(p => {
+    subjectCounts[p.subjectId] = (subjectCounts[p.subjectId] || 0) + 1;
+  });
+  
+  const filmCounts: Record<string, number> = {};
+  photos.forEach(p => {
+    filmCounts[p.filmId] = (filmCounts[p.filmId] || 0) + 1;
+  });
+  
+  const scoreDistribution = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  photos.forEach(p => {
+    const bucket = Math.min(9, Math.floor(p.score / 10));
+    scoreDistribution[bucket]++;
+  });
+  
+  return {
+    total,
+    avgScore,
+    bestScore,
+    worstScore,
+    gradeCounts,
+    subjectCounts,
+    filmCounts,
+    scoreDistribution
+  };
 }
 
 export const gameStore = createGameStore();

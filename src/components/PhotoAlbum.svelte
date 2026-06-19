@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { ProcessedPhoto, AlbumFilter, SortOption } from '../types/game';
+  import type { ProcessedPhoto, AlbumFilter, SortOption, PhotoCollection, CollectionGroup, AlbumViewMode, CollectionStats } from '../types/game';
+  import { gameStore, calculateCollectionStats } from '../stores/gameStore';
   import {
     PHOTO_SUBJECTS,
     FILM_STOCKS,
@@ -19,7 +20,6 @@
     bestScore: number;
     gradeCounts: Record<string, number>;
   };
-  void statistics;
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -36,6 +36,18 @@
   let compareSelection: string[] = [];
   let compareSubjectId: string | null = null;
 
+  let showCreateCollection = false;
+  let showCreateGroup = false;
+  let newCollectionName = '';
+  let newCollectionDesc = '';
+  let newGroupName = '';
+  let newGroupDesc = '';
+  let showCollectionPicker = false;
+  let collectionPickerPhotoId: string | null = null;
+  let showCoverPicker = false;
+  let coverPickerType: 'collection' | 'group' = 'collection';
+  let coverPickerTargetId: string | null = null;
+
   const gradesOrder = ['S', 'A', 'B', 'C', 'D'];
   const gradeWeights: Record<string, number> = { S: 5, A: 4, B: 3, C: 2, D: 1 };
 
@@ -51,6 +63,49 @@
     noteFilter: 'all',
     noteKeyword: ''
   };
+
+  $: viewMode = $gameStore.collectionFilter.viewMode;
+  $: activeCollectionId = $gameStore.collectionFilter.activeCollectionId;
+  $: activeGroupId = $gameStore.collectionFilter.activeGroupId;
+  $: favorites = $gameStore.favorites;
+  $: collections = $gameStore.collections;
+  $: quickBrowseIndex = $gameStore.quickBrowseIndex;
+  $: quickBrowsePhotoIds = $gameStore.quickBrowsePhotoIds;
+  $: showQuickBrowse = quickBrowsePhotoIds.length > 0;
+
+  $: activeCollection = collections.find(c => c.id === activeCollectionId);
+  $: activeGroup = activeCollection?.groups.find(g => g.id === activeGroupId);
+
+  $: favoritePhotoIds = new Set(favorites.map(f => f.photoId));
+
+  $: isFavorite = (photoId: string) => favoritePhotoIds.has(photoId);
+
+  $: viewModePhotos = (() => {
+    if (viewMode === 'favorites') {
+      const favIds = new Set(favorites.map(f => f.photoId));
+      return photos.filter(p => favIds.has(p.id));
+    } else if (viewMode === 'collections') {
+      if (activeCollectionId) {
+        const col = collections.find(c => c.id === activeCollectionId);
+        if (col) {
+          let photoIds = col.photoIds;
+          if (activeGroupId) {
+            const group = col.groups.find(g => g.id === activeGroupId);
+            if (group) {
+              photoIds = group.photoIds;
+            }
+          }
+          const idSet = new Set(photoIds);
+          return photos.filter(p => idSet.has(p.id));
+        }
+      }
+      return [];
+    }
+    return photos;
+  })();
+
+  let currentStats: CollectionStats;
+  $: currentStats = calculateCollectionStats(viewModePhotos);
 
   function formatDate(ts: number): string {
     return new Date(ts).toLocaleDateString('zh-CN', {
@@ -71,6 +126,23 @@
 
   function getSubject(id: string) {
     return PHOTO_SUBJECTS.find(s => s.id === id);
+  }
+
+  function getPhotoById(id: string): ProcessedPhoto | undefined {
+    return photos.find(p => p.id === id);
+  }
+
+  function getCoverImageUrl(colOrGroup: PhotoCollection | CollectionGroup): string {
+    if (colOrGroup.coverPhotoId) {
+      const photo = getPhotoById(colOrGroup.coverPhotoId);
+      if (photo) return photo.imageDataUrl;
+    }
+    const firstPhotoId = colOrGroup.photoIds[0];
+    if (firstPhotoId) {
+      const photo = getPhotoById(firstPhotoId);
+      if (photo) return photo.imageDataUrl;
+    }
+    return '';
   }
 
   function confirmDelete(id: string) {
@@ -148,7 +220,7 @@
   }
 
   function getSubjectPhotosCount(subjectId: string): number {
-    return photos.filter(p => p.subjectId === subjectId).length;
+    return viewModePhotos.filter(p => p.subjectId === subjectId).length;
   }
 
   function setNoteFilter(value: string) {
@@ -194,8 +266,141 @@
     return subject?.tags || [];
   }
 
+  function handleToggleFavorite(photoId: string, e: Event) {
+    e.stopPropagation();
+    gameStore.toggleFavorite(photoId);
+  }
+
+  function toggleSelectedFavorite(e: Event) {
+    if (selectedPhoto) handleToggleFavorite(selectedPhoto.id, e);
+  }
+
+  function openSelectedCollectionPicker(e: Event) {
+    if (selectedPhoto) openCollectionPicker(selectedPhoto.id, e);
+  }
+
+  function startQuickBrowseFromSelected() {
+    const photo = selectedPhoto;
+    if (!photo) return;
+    const idx = filteredPhotos.findIndex(p => p.id === photo.id);
+    startQuickBrowse(filteredPhotos.map(p => p.id), idx >= 0 ? idx : 0);
+    selectedPhoto = null;
+  }
+
+  function setViewMode(mode: AlbumViewMode) {
+    gameStore.setAlbumViewMode(mode);
+  }
+
+  function selectCollection(collectionId: string | null) {
+    gameStore.setActiveCollection(collectionId);
+  }
+
+  function selectGroup(groupId: string | null) {
+    gameStore.setActiveGroup(groupId);
+  }
+
+  function handleCreateCollection() {
+    if (!newCollectionName.trim()) return;
+    gameStore.createCollection(newCollectionName.trim(), newCollectionDesc.trim() || undefined);
+    newCollectionName = '';
+    newCollectionDesc = '';
+    showCreateCollection = false;
+  }
+
+  function handleCreateGroup() {
+    if (!newGroupName.trim() || !activeCollectionId) return;
+    gameStore.createGroup(activeCollectionId, newGroupName.trim(), newGroupDesc.trim() || undefined);
+    newGroupName = '';
+    newGroupDesc = '';
+    showCreateGroup = false;
+  }
+
+  function handleDeleteCollection(id: string, e: Event) {
+    e.stopPropagation();
+    if (confirm('确定要删除这个精选集吗？其中的照片不会被删除。')) {
+      gameStore.deleteCollection(id);
+    }
+  }
+
+  function handleDeleteGroup(id: string, e: Event) {
+    e.stopPropagation();
+    if (confirm('确定要删除这个分组吗？其中的照片不会被删除。')) {
+      gameStore.deleteGroup(activeCollectionId!, id);
+    }
+  }
+
+  function openCollectionPicker(photoId: string, e: Event) {
+    e.stopPropagation();
+    collectionPickerPhotoId = photoId;
+    showCollectionPicker = true;
+  }
+
+  function addPhotoToCollection(collectionId: string) {
+    if (!collectionPickerPhotoId) return;
+    const collection = collections.find(c => c.id === collectionId);
+    if (collection && collection.photoIds.includes(collectionPickerPhotoId)) {
+      gameStore.removePhotoFromCollection(collectionId, collectionPickerPhotoId);
+    } else {
+      gameStore.addPhotoToCollection(collectionId, collectionPickerPhotoId);
+    }
+    showCollectionPicker = false;
+    collectionPickerPhotoId = null;
+  }
+
+  function isPhotoInCollection(photoId: string, collectionId: string): boolean {
+    const collection = collections.find(c => c.id === collectionId);
+    return collection?.photoIds.includes(photoId) || false;
+  }
+
+  function openCoverPicker(type: 'collection' | 'group', targetId: string) {
+    coverPickerType = type;
+    coverPickerTargetId = targetId;
+    showCoverPicker = true;
+  }
+
+  function handleSetCover(photoId: string) {
+    if (!coverPickerTargetId) return;
+    if (coverPickerType === 'collection') {
+      gameStore.setCollectionCover(coverPickerTargetId, photoId);
+    } else if (coverPickerType === 'group' && activeCollectionId) {
+      gameStore.setGroupCover(activeCollectionId, coverPickerTargetId, photoId);
+    }
+    showCoverPicker = false;
+    coverPickerTargetId = null;
+  }
+
+  function handleClearCover(e: Event) {
+    e.stopPropagation();
+    if (!coverPickerTargetId) return;
+    if (coverPickerType === 'collection') {
+      gameStore.setCollectionCover(coverPickerTargetId, undefined);
+    } else if (coverPickerType === 'group' && activeCollectionId) {
+      gameStore.setGroupCover(activeCollectionId, coverPickerTargetId, undefined);
+    }
+    showCoverPicker = false;
+    coverPickerTargetId = null;
+  }
+
+  function startQuickBrowse(photoIds: string[], startIndex: number = 0) {
+    gameStore.startQuickBrowse(photoIds, startIndex);
+  }
+
+  function handleQuickBrowseNext() {
+    gameStore.nextQuickBrowse();
+  }
+
+  function handleQuickBrowsePrev() {
+    gameStore.prevQuickBrowse();
+  }
+
+  function handleQuickBrowseClose() {
+    gameStore.exitQuickBrowse();
+  }
+
+  $: quickBrowsePhoto = quickBrowsePhotoIds.length > 0 ? getPhotoById(quickBrowsePhotoIds[quickBrowseIndex]) : null;
+
   $: filteredPhotos = (() => {
-    let result = [...photos];
+    let result = [...viewModePhotos];
 
     if (filter.subjectIds.length > 0) {
       result = result.filter(p => filter.subjectIds.includes(p.subjectId));
@@ -294,7 +499,21 @@
     (filter.maxScore < 100 ? 1 : 0) +
     (filter.noteFilter !== 'all' ? 1 : 0) +
     (filter.noteKeyword.trim() !== '' ? 1 : 0);
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (showQuickBrowse) {
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        handleQuickBrowseNext();
+      } else if (e.key === 'ArrowLeft') {
+        handleQuickBrowsePrev();
+      } else if (e.key === 'Escape') {
+        handleQuickBrowseClose();
+      }
+    }
+  }
 </script>
+
+<svelte:window on:keydown={handleKeydown} />
 
 <div class="album-overlay">
   <div class="album-container">
@@ -342,6 +561,179 @@
       </div>
     </div>
 
+    <div class="view-mode-tabs">
+      <button
+        class="view-tab"
+        class:active={viewMode === 'all'}
+        on:click={() => setViewMode('all')}
+      >
+        <span>🖼</span>
+        <span>全部作品</span>
+        <span class="tab-count">{photos.length}</span>
+      </button>
+      <button
+        class="view-tab"
+        class:active={viewMode === 'favorites'}
+        on:click={() => setViewMode('favorites')}
+      >
+        <span>⭐</span>
+        <span>我的收藏</span>
+        <span class="tab-count">{favorites.length}</span>
+      </button>
+      <button
+        class="view-tab"
+        class:active={viewMode === 'collections'}
+        on:click={() => setViewMode('collections')}
+      >
+        <span>📁</span>
+        <span>精选集</span>
+        <span class="tab-count">{collections.length}</span>
+      </button>
+    </div>
+
+    {#if viewMode === 'collections'}
+      <div class="collections-nav">
+        {#if !activeCollectionId}
+          <div class="collections-list">
+            {#each collections as col (col.id)}
+              <div
+                class="collection-card"
+                on:click={() => selectCollection(col.id)}
+              >
+                <div class="collection-cover">
+                  {#if getCoverImageUrl(col)}
+                    <img src={getCoverImageUrl(col)} alt={col.name} />
+                  {:else}
+                    <div class="collection-cover-empty">
+                      <span>🖼</span>
+                    </div>
+                  {/if}
+                  {#if col.coverPhotoId}
+                    <button
+                      class="cover-remove-btn"
+                      on:click|stopPropagation={(e) => {
+                        e.preventDefault();
+                        gameStore.setCollectionCover(col.id, undefined);
+                      }}
+                      title="移除封面"
+                    >
+                      ✕
+                    </button>
+                  {/if}
+                </div>
+                <div class="collection-info">
+                  <div class="collection-name">{col.name}</div>
+                  <div class="collection-meta">
+                    <span>{col.photoIds.length} 张作品</span>
+                    {#if col.groups.length > 0}
+                      <span>· {col.groups.length} 个分组</span>
+                    {/if}
+                  </div>
+                </div>
+                <div class="collection-actions">
+                  <button
+                    class="mini-btn"
+                    on:click|stopPropagation={() => openCoverPicker('collection', col.id)}
+                    title="设置封面"
+                  >
+                    🖼
+                  </button>
+                  <button
+                    class="mini-btn delete"
+                    on:click|stopPropagation={(e) => handleDeleteCollection(col.id, e)}
+                    title="删除精选集"
+                  >
+                    🗑
+                  </button>
+                </div>
+              </div>
+            {/each}
+            <button
+              class="collection-card create-new"
+              on:click={() => showCreateCollection = true}
+            >
+              <div class="collection-cover-empty large">
+                <span class="plus-icon">+</span>
+              </div>
+              <div class="collection-info">
+                <div class="collection-name">新建精选集</div>
+                <div class="collection-meta">
+                  <span>组织你的作品</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        {:else if activeCollection}
+          <div class="collection-detail-nav">
+            <button class="back-btn" on:click={() => selectCollection(null)}>
+              <span>←</span>
+              <span>返回精选集列表</span>
+            </button>
+            <div class="collection-detail-title">
+              <h3>{activeCollection.name}</h3>
+              {#if activeCollection.description}
+                <span class="collection-desc">{activeCollection.description}</span>
+              {/if}
+            </div>
+            <div class="collection-detail-actions">
+              <button
+                class="action-btn"
+                on:click={() => openCoverPicker('collection', activeCollection.id)}
+              >
+                <span>🖼</span>
+                <span>设置封面</span>
+              </button>
+              <button
+                class="action-btn"
+                on:click={() => showCreateGroup = true}
+              >
+                <span>📁</span>
+                <span>新建分组</span>
+              </button>
+            </div>
+          </div>
+          {#if activeCollection.groups.length > 0}
+            <div class="groups-list">
+              <button
+                class="group-chip"
+                class:active={!activeGroupId}
+                on:click={() => selectGroup(null)}
+              >
+                <span>📚</span>
+                <span>全部</span>
+                <span class="group-count">{activeCollection.photoIds.length}</span>
+              </button>
+              {#each activeCollection.groups as group (group.id)}
+                <button
+                  class="group-chip"
+                  class:active={activeGroupId === group.id}
+                  on:click={() => selectGroup(group.id)}
+                >
+                  <span>📁</span>
+                  <span>{group.name}</span>
+                  <span class="group-count">{group.photoIds.length}</span>
+                  <button
+                    class="group-action-btn"
+                    on:click|stopPropagation={() => openCoverPicker('group', group.id)}
+                    title="设置分组封面"
+                  >
+                    🖼
+                  </button>
+                  <button
+                    class="group-action-btn delete"
+                    on:click|stopPropagation={(e) => handleDeleteGroup(group.id, e)}
+                    title="删除分组"
+                  >
+                    ✕
+                  </button>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        {/if}
+      </div>
+    {/if}
+
     {#if compareMode}
       <div class="compare-hint">
         <span class="hint-icon">💡</span>
@@ -358,200 +750,202 @@
       </div>
     {/if}
 
-    {#if showFilters}
-      <div class="filters-section">
-        <div class="filter-row">
-          <div class="filter-block">
-            <div class="filter-label">题材类型</div>
-            <div class="chip-group">
-              {#each Object.entries(SCENE_TYPE_LABELS) as [type, label] (type)}
+    {#if showFilters && viewMode !== 'collections' || (viewMode === 'collections' && activeCollectionId)}
+      {#if showFilters}
+        <div class="filters-section">
+          <div class="filter-row">
+            <div class="filter-block">
+              <div class="filter-label">题材类型</div>
+              <div class="chip-group">
+                {#each Object.entries(SCENE_TYPE_LABELS) as [type, label] (type)}
+                  <button
+                    class="chip"
+                    class:active={filter.sceneTypes.includes(type)}
+                    on:click={() => toggleSceneType(type)}
+                  >
+                    {label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <div class="filter-block">
+              <div class="filter-label">具体题材</div>
+              <div class="chip-group">
+                {#each PHOTO_SUBJECTS as subject (subject.id)}
+                  <button
+                    class="chip"
+                    class:active={filter.subjectIds.includes(subject.id)}
+                    on:click={() => toggleSubject(subject.id)}
+                    title={subject.description}
+                  >
+                    {subject.name}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <div class="filter-block">
+              <div class="filter-label">胶片类型</div>
+              <div class="chip-group">
+                {#each FILM_STOCKS as film (film.id)}
+                  <button
+                    class="chip"
+                    class:active={filter.filmIds.includes(film.id)}
+                    on:click={() => toggleFilm(film.id)}
+                    title={film.description}
+                  >
+                    <span class="film-dot" style="background: {film.thumbnailColor};"></span>
+                    {film.name}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-row multi-row">
+            <div class="filter-block">
+              <div class="filter-label">等级</div>
+              <div class="chip-group">
+                {#each gradesOrder as g (g)}
+                  <button
+                    class="chip grade-chip"
+                    class:active={filter.grades.includes(g)}
+                    style="--grade-color: {GRADE_COLORS[g]};"
+                    on:click={() => toggleGrade(g)}
+                  >
+                    {g}
+                  </button>
+                {/each}
+              </div>
+            </div>
+
+            <div class="filter-block">
+              <div class="filter-label">分数范围</div>
+              <div class="score-range">
+                <input
+                  type="number"
+                  class="range-input"
+                  bind:value={filter.minScore}
+                  min="0"
+                  max="100"
+                  placeholder="最低"
+                />
+                <span class="range-sep">~</span>
+                <input
+                  type="number"
+                  class="range-input"
+                  bind:value={filter.maxScore}
+                  min="0"
+                  max="100"
+                  placeholder="最高"
+                />
+              </div>
+            </div>
+
+            <div class="filter-block">
+              <div class="filter-label">排序</div>
+              <div class="chip-group">
+                {#each SORT_OPTIONS as opt (opt.value)}
+                  <button
+                    class="chip"
+                    class:active={filter.sortBy === opt.value}
+                    on:click={() => setSortBy(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <div class="filter-block">
+              <div class="filter-label">标签</div>
+              <div class="chip-group">
+                {#each ALL_TAGS as tag (tag)}
+                  <button
+                    class="chip tag-chip"
+                    class:active={filter.tags.includes(tag)}
+                    on:click={() => toggleTag(tag)}
+                  >
+                    # {tag}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-row multi-row">
+            <div class="filter-block">
+              <div class="filter-label">冲洗笔记</div>
+              <div class="chip-group">
                 <button
                   class="chip"
-                  class:active={filter.sceneTypes.includes(type)}
-                  on:click={() => toggleSceneType(type)}
+                  class:active={filter.noteFilter === 'all'}
+                  on:click={() => setNoteFilter('all')}
                 >
-                  {label}
+                  全部
                 </button>
-              {/each}
-            </div>
-          </div>
-        </div>
-
-        <div class="filter-row">
-          <div class="filter-block">
-            <div class="filter-label">具体题材</div>
-            <div class="chip-group">
-              {#each PHOTO_SUBJECTS as subject (subject.id)}
                 <button
                   class="chip"
-                  class:active={filter.subjectIds.includes(subject.id)}
-                  on:click={() => toggleSubject(subject.id)}
-                  title={subject.description}
+                  class:active={filter.noteFilter === 'has_note'}
+                  on:click={() => setNoteFilter('has_note')}
                 >
-                  {subject.name}
+                  📝 有笔记
                 </button>
-              {/each}
-            </div>
-          </div>
-        </div>
-
-        <div class="filter-row">
-          <div class="filter-block">
-            <div class="filter-label">胶片类型</div>
-            <div class="chip-group">
-              {#each FILM_STOCKS as film (film.id)}
                 <button
                   class="chip"
-                  class:active={filter.filmIds.includes(film.id)}
-                  on:click={() => toggleFilm(film.id)}
-                  title={film.description}
+                  class:active={filter.noteFilter === 'no_note'}
+                  on:click={() => setNoteFilter('no_note')}
                 >
-                  <span class="film-dot" style="background: {film.thumbnailColor};"></span>
-                  {film.name}
+                  无笔记
                 </button>
-              {/each}
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div class="filter-row multi-row">
-          <div class="filter-block">
-            <div class="filter-label">等级</div>
-            <div class="chip-group">
-              {#each gradesOrder as g (g)}
-                <button
-                  class="chip grade-chip"
-                  class:active={filter.grades.includes(g)}
-                  style="--grade-color: {GRADE_COLORS[g]};"
-                  on:click={() => toggleGrade(g)}
-                >
-                  {g}
-                </button>
-              {/each}
-            </div>
-          </div>
-
-          <div class="filter-block">
-            <div class="filter-label">分数范围</div>
-            <div class="score-range">
-              <input
-                type="number"
-                class="range-input"
-                bind:value={filter.minScore}
-                min="0"
-                max="100"
-                placeholder="最低"
-              />
-              <span class="range-sep">~</span>
-              <input
-                type="number"
-                class="range-input"
-                bind:value={filter.maxScore}
-                min="0"
-                max="100"
-                placeholder="最高"
-              />
+            <div class="filter-block" style="grid-column: span 2;">
+              <div class="filter-label">关键词搜索</div>
+              <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input
+                  type="text"
+                  class="search-input"
+                  bind:value={filter.noteKeyword}
+                  placeholder="搜索笔记、题材、胶片或标签..."
+                />
+                {#if filter.noteKeyword}
+                  <button
+                    class="search-clear"
+                    on:click={() => filter.noteKeyword = ''}
+                    title="清除搜索"
+                  >
+                    ✕
+                  </button>
+                {/if}
+              </div>
             </div>
           </div>
 
-          <div class="filter-block">
-            <div class="filter-label">排序</div>
-            <div class="chip-group">
-              {#each SORT_OPTIONS as opt (opt.value)}
-                <button
-                  class="chip"
-                  class:active={filter.sortBy === opt.value}
-                  on:click={() => setSortBy(opt.value)}
-                >
-                  {opt.label}
-                </button>
-              {/each}
-            </div>
-          </div>
-        </div>
-
-        <div class="filter-row">
-          <div class="filter-block">
-            <div class="filter-label">标签</div>
-            <div class="chip-group">
-              {#each ALL_TAGS as tag (tag)}
-                <button
-                  class="chip tag-chip"
-                  class:active={filter.tags.includes(tag)}
-                  on:click={() => toggleTag(tag)}
-                >
-                  # {tag}
-                </button>
-              {/each}
-            </div>
-          </div>
-        </div>
-
-        <div class="filter-row multi-row">
-          <div class="filter-block">
-            <div class="filter-label">冲洗笔记</div>
-            <div class="chip-group">
-              <button
-                class="chip"
-                class:active={filter.noteFilter === 'all'}
-                on:click={() => setNoteFilter('all')}
-              >
-                全部
+          {#if hasActiveFilters()}
+            <div class="filter-actions">
+              <button class="reset-filters-btn" on:click={resetFilters}>
+                <span>✕</span> 清除所有筛选
               </button>
-              <button
-                class="chip"
-                class:active={filter.noteFilter === 'has_note'}
-                on:click={() => setNoteFilter('has_note')}
-              >
-                📝 有笔记
-              </button>
-              <button
-                class="chip"
-                class:active={filter.noteFilter === 'no_note'}
-                on:click={() => setNoteFilter('no_note')}
-              >
-                无笔记
-              </button>
             </div>
-          </div>
-
-          <div class="filter-block" style="grid-column: span 2;">
-            <div class="filter-label">关键词搜索</div>
-            <div class="search-box">
-              <span class="search-icon">🔍</span>
-              <input
-                type="text"
-                class="search-input"
-                bind:value={filter.noteKeyword}
-                placeholder="搜索笔记、题材、胶片或标签..."
-              />
-              {#if filter.noteKeyword}
-                <button
-                  class="search-clear"
-                  on:click={() => filter.noteKeyword = ''}
-                  title="清除搜索"
-                >
-                  ✕
-                </button>
-              {/if}
-            </div>
-          </div>
+          {/if}
         </div>
-
-        {#if hasActiveFilters()}
-          <div class="filter-actions">
-            <button class="reset-filters-btn" on:click={resetFilters}>
-              <span>✕</span> 清除所有筛选
-            </button>
-          </div>
-        {/if}
-      </div>
+      {/if}
     {/if}
 
     <div class="stats-row">
       <div class="stat-card">
         <div class="stat-value">{filteredStats.total}</div>
-        <div class="stat-label">{hasActiveFilters() ? '筛选结果' : '总作品'}</div>
+        <div class="stat-label">{hasActiveFilters() ? '筛选结果' : (viewMode === 'favorites' ? '收藏总数' : viewMode === 'collections' ? (activeGroup ? '分组作品数' : (activeCollection ? '精选集作品' : '精选集总数')) : '总作品')}</div>
       </div>
       <div class="stat-card highlight">
         <div class="stat-value">{filteredStats.avgScore}</div>
@@ -574,98 +968,143 @@
       </div>
     </div>
 
-    {#if photos.length === 0}
-      <div class="empty-album">
-        <div class="empty-icon">📷</div>
-        <h3 class="empty-title">相册空空如也</h3>
-        <p class="empty-desc">完成你的第一次暗房冲洗，作品就会出现在这里</p>
-        <button class="go-create-btn" on:click={() => dispatch('close')}>
-          开始创作
-        </button>
-      </div>
-    {:else if filteredPhotos.length === 0}
-      <div class="empty-album">
-        <div class="empty-icon">🔍</div>
-        <h3 class="empty-title">没有匹配的作品</h3>
-        <p class="empty-desc">试试调整筛选条件，或者清除筛选查看全部作品</p>
-        <button class="go-create-btn" on:click={resetFilters}>
-          清除筛选
-        </button>
-      </div>
-    {:else}
-      <div class="photos-grid">
-        {#each filteredPhotos as photo (photo.id)}
-          <div
-            class="photo-card"
-            class:compare-mode={compareMode}
-            class:selected={compareSelection.includes(photo.id)}
-            class:disabled={compareMode && compareSubjectId && compareSubjectId !== photo.subjectId}
-            on:click={() => {
-              if (compareMode) {
-                if (!compareSubjectId || compareSubjectId === photo.subjectId || getSubjectPhotosCount(photo.subjectId) < 2) {
-                  toggleComparePhoto(photo);
+    {#if viewMode !== 'collections' || activeCollectionId}
+      {#if viewModePhotos.length === 0 && viewMode === 'favorites'}
+        <div class="empty-album">
+          <div class="empty-icon">⭐</div>
+          <h3 class="empty-title">还没有收藏的作品</h3>
+          <p class="empty-desc">浏览作品时点击 ⭐ 按钮收藏喜欢的作品</p>
+          <button class="go-create-btn" on:click={() => setViewMode('all')}>
+            浏览全部作品
+          </button>
+        </div>
+      {:else if viewMode === 'collections' && !activeCollectionId}
+      {:else if viewModePhotos.length === 0 && viewMode === 'collections' && activeCollection}
+        <div class="empty-album">
+          <div class="empty-icon">📁</div>
+          <h3 class="empty-title">精选集是空的</h3>
+          <p class="empty-desc">从全部作品中添加照片到这个精选集吧</p>
+          <button class="go-create-btn" on:click={() => setViewMode('all')}>
+            浏览全部作品
+          </button>
+        </div>
+      {:else if photos.length === 0}
+        <div class="empty-album">
+          <div class="empty-icon">📷</div>
+          <h3 class="empty-title">相册空空如也</h3>
+          <p class="empty-desc">完成你的第一次暗房冲洗，作品就会出现在这里</p>
+          <button class="go-create-btn" on:click={() => dispatch('close')}>
+            开始创作
+          </button>
+        </div>
+      {:else if filteredPhotos.length === 0}
+        <div class="empty-album">
+          <div class="empty-icon">🔍</div>
+          <h3 class="empty-title">没有匹配的作品</h3>
+          <p class="empty-desc">试试调整筛选条件，或者清除筛选查看全部作品</p>
+          <button class="go-create-btn" on:click={resetFilters}>
+            清除筛选
+          </button>
+        </div>
+      {:else}
+        <div class="photos-grid">
+          {#each filteredPhotos as photo, idx (photo.id)}
+            <div
+              class="photo-card"
+              class:compare-mode={compareMode}
+              class:selected={compareSelection.includes(photo.id)}
+              class:disabled={compareMode && compareSubjectId && compareSubjectId !== photo.subjectId}
+              on:click={() => {
+                if (compareMode) {
+                  if (!compareSubjectId || compareSubjectId === photo.subjectId || getSubjectPhotosCount(photo.subjectId) < 2) {
+                    toggleComparePhoto(photo);
+                  }
+                } else {
+                  selectedPhoto = photo;
                 }
-              } else {
-                selectedPhoto = photo;
-              }
-            }}
-          >
-            <div class="photo-image-wrap">
-              {#if compareMode}
-                <div class="compare-checkbox">
-                  {#if compareSelection.includes(photo.id)}
-                    <span class="check-icon">✓</span>
-                    <span class="check-number">{compareSelection.indexOf(photo.id) + 1}</span>
-                  {:else}
-                    <span class="check-icon">○</span>
-                  {/if}
+              }}
+            >
+              <div class="photo-image-wrap">
+                {#if compareMode}
+                  <div class="compare-checkbox">
+                    {#if compareSelection.includes(photo.id)}
+                      <span class="check-icon">✓</span>
+                      <span class="check-number">{compareSelection.indexOf(photo.id) + 1}</span>
+                    {:else}
+                      <span class="check-icon">○</span>
+                    {/if}
+                  </div>
+                {/if}
+                <img src={photo.imageDataUrl} alt={getSubjectName(photo.subjectId)} class="photo-image" />
+                <div
+                  class="photo-grade-badge"
+                  style="background: {GRADE_COLORS[photo.details.grade]}; color: #1a0f0a;"
+                >
+                  {photo.details.grade}
                 </div>
-              {/if}
-              <img src={photo.imageDataUrl} alt={getSubjectName(photo.subjectId)} class="photo-image" />
-              <div
-                class="photo-grade-badge"
-                style="background: {GRADE_COLORS[photo.details.grade]}; color: #1a0f0a;"
-              >
-                {photo.details.grade}
-              </div>
-              <div class="photo-score-tag">
-                {photo.score}
-              </div>
-              {#if photo.notes && photo.notes.trim().length > 0}
-                <div class="photo-note-badge" title="有冲洗笔记">
-                  📝
+                <div class="photo-score-tag">
+                  {photo.score}
                 </div>
-              {/if}
-            </div>
-            <div class="photo-info">
-              <div class="photo-name">{getSubjectName(photo.subjectId)}</div>
-              <div class="photo-meta">
-                <span class="meta-film">{getFilmName(photo.filmId)}</span>
-                <span class="meta-date">{formatDate(photo.timestamp)}</span>
+                {#if photo.notes && photo.notes.trim().length > 0}
+                  <div class="photo-note-badge" title="有冲洗笔记">
+                    📝
+                  </div>
+                {/if}
               </div>
-              {#if getPhotoTags(photo).length > 0}
-                <div class="photo-tags">
-                  {#each getPhotoTags(photo).slice(0, 3) as tag (tag)}
-                    <span class="photo-tag">#{tag}</span>
-                  {/each}
-                  {#if getPhotoTags(photo).length > 3}
-                    <span class="photo-tag more">+{getPhotoTags(photo).length - 3}</span>
-                  {/if}
+              <div class="photo-info">
+                <div class="photo-name">{getSubjectName(photo.subjectId)}</div>
+                <div class="photo-meta">
+                  <span class="meta-film">{getFilmName(photo.filmId)}</span>
+                  <span class="meta-date">{formatDate(photo.timestamp)}</span>
                 </div>
-              {/if}
+                {#if getPhotoTags(photo).length > 0}
+                  <div class="photo-tags">
+                    {#each getPhotoTags(photo).slice(0, 3) as tag (tag)}
+                      <span class="photo-tag">#{tag}</span>
+                    {/each}
+                    {#if getPhotoTags(photo).length > 3}
+                      <span class="photo-tag more">+{getPhotoTags(photo).length - 3}</span>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+              <div class="photo-actions">
+                <button
+                  class="mini-btn favorite"
+                  class:favorited={isFavorite(photo.id)}
+                  on:click|stopPropagation={(e) => handleToggleFavorite(photo.id, e)}
+                  title={isFavorite(photo.id) ? '取消收藏' : '收藏'}
+                >
+                  {isFavorite(photo.id) ? '⭐' : '☆'}
+                </button>
+                <button
+                  class="mini-btn folder"
+                  on:click|stopPropagation={(e) => openCollectionPicker(photo.id, e)}
+                  title="添加到精选集"
+                >
+                  📁
+                </button>
+                {#if filteredPhotos.length > 1}
+                  <button
+                    class="mini-btn browse"
+                    on:click|stopPropagation={() => startQuickBrowse(filteredPhotos.map(p => p.id), idx)}
+                    title="快速浏览"
+                  >
+                    👁
+                  </button>
+                {/if}
+                <button
+                  class="mini-btn delete"
+                  on:click|stopPropagation={() => confirmDelete(photo.id)}
+                  title="删除"
+                >
+                  🗑
+                </button>
+              </div>
             </div>
-            <div class="photo-actions">
-              <button
-                class="mini-btn delete"
-                on:click|stopPropagation={() => confirmDelete(photo.id)}
-                title="删除"
-              >
-                🗑
-              </button>
-            </div>
-          </div>
-        {/each}
-      </div>
+          {/each}
+        </div>
+      {/if}
     {/if}
   </div>
 
@@ -711,6 +1150,29 @@
               </div>
             </div>
           {/if}
+          <div class="detail-quick-actions">
+            <button
+              class="detail-action-btn favorite"
+              class:favorited={isFavorite(selectedPhoto?.id || '')}
+              on:click={toggleSelectedFavorite}
+            >
+              {isFavorite(selectedPhoto?.id || '') ? '⭐ 已收藏' : '☆ 收藏'}
+            </button>
+            <button
+              class="detail-action-btn"
+              on:click={openSelectedCollectionPicker}
+            >
+              📁 精选集
+            </button>
+            {#if filteredPhotos.length > 1}
+              <button
+                class="detail-action-btn"
+                on:click={startQuickBrowseFromSelected}
+              >
+                👁 快速浏览
+              </button>
+            {/if}
+          </div>
         </div>
         <div class="detail-panel-wrap">
           <ScorePanel
@@ -732,6 +1194,194 @@
         <div class="confirm-actions">
           <button class="btn cancel" on:click={() => showDeleteConfirm = false}>取消</button>
           <button class="btn danger" on:click={doDelete}>确认删除</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showCreateCollection}
+    <div class="confirm-modal" on:click={() => showCreateCollection = false}>
+      <div class="confirm-box" on:click|stopPropagation>
+        <h3 class="confirm-title">新建精选集</h3>
+        <div class="form-field">
+          <label class="field-label">名称</label>
+          <input
+            type="text"
+            class="field-input"
+            bind:value={newCollectionName}
+            placeholder="精选集名称"
+            maxlength="20"
+          />
+        </div>
+        <div class="form-field">
+          <label class="field-label">描述（可选）</label>
+          <textarea
+            class="field-input textarea"
+            bind:value={newCollectionDesc}
+            placeholder="简单描述这个精选集..."
+            maxlength="100"
+            rows="3"
+          />
+        </div>
+        <div class="confirm-actions">
+          <button class="btn cancel" on:click={() => showCreateCollection = false}>取消</button>
+          <button class="btn primary" on:click={handleCreateCollection} disabled={!newCollectionName.trim()}>创建</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showCreateGroup}
+    <div class="confirm-modal" on:click={() => showCreateGroup = false}>
+      <div class="confirm-box" on:click|stopPropagation>
+        <h3 class="confirm-title">新建分组</h3>
+        <div class="form-field">
+          <label class="field-label">分组名称</label>
+          <input
+            type="text"
+            class="field-input"
+            bind:value={newGroupName}
+            placeholder="分组名称"
+            maxlength="20"
+          />
+        </div>
+        <div class="form-field">
+          <label class="field-label">描述（可选）</label>
+          <textarea
+            class="field-input textarea"
+            bind:value={newGroupDesc}
+            placeholder="简单描述这个分组..."
+            maxlength="100"
+            rows="3"
+          />
+        </div>
+        <div class="confirm-actions">
+          <button class="btn cancel" on:click={() => showCreateGroup = false}>取消</button>
+          <button class="btn primary" on:click={handleCreateGroup} disabled={!newGroupName.trim()}>创建</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showCollectionPicker && collectionPickerPhotoId}
+    <div class="confirm-modal" on:click={() => showCollectionPicker = false}>
+      <div class="confirm-box wide" on:click|stopPropagation>
+        <h3 class="confirm-title">添加到精选集</h3>
+        {#if collections.length === 0}
+          <p class="confirm-desc">还没有创建精选集，请先创建一个</p>
+        {:else}
+          <div class="picker-list">
+            {#each collections as col (col.id)}
+              <button
+                class="picker-item"
+                class:selected={isPhotoInCollection(collectionPickerPhotoId, col.id)}
+                on:click={() => addPhotoToCollection(col.id)}
+              >
+                <div class="picker-cover">
+                  {#if getCoverImageUrl(col)}
+                    <img src={getCoverImageUrl(col)} alt="" />
+                  {:else}
+                    <span class="picker-cover-empty">📁</span>
+                  {/if}
+                </div>
+                <div class="picker-info">
+                  <div class="picker-name">{col.name}</div>
+                  <div class="picker-count">{col.photoIds.length} 张</div>
+                </div>
+                <div class="picker-check">
+                  {isPhotoInCollection(collectionPickerPhotoId, col.id) ? '✓' : '+'}
+                </div>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        <div class="confirm-actions">
+          <button class="btn cancel" on:click={() => showCollectionPicker = false}>关闭</button>
+          <button
+            class="btn primary"
+            on:click={() => {
+              showCollectionPicker = false;
+              showCreateCollection = true;
+            }}
+          >
+            + 新建精选集
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showCoverPicker && coverPickerTargetId}
+    <div class="confirm-modal" on:click={() => showCoverPicker = false}>
+      <div class="confirm-box wide" on:click|stopPropagation>
+        <h3 class="confirm-title">选择封面照片</h3>
+        {#if viewModePhotos.length === 0}
+          <p class="confirm-desc">没有可选的照片</p>
+        {:else}
+          <div class="cover-picker-grid">
+            {#each viewModePhotos as photo (photo.id)}
+              <button
+                class="cover-picker-item"
+                on:click={() => handleSetCover(photo.id)}
+              >
+                <img src={photo.imageDataUrl} alt="" />
+                <div class="cover-picker-score">{photo.score}</div>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        <div class="confirm-actions">
+          <button class="btn cancel" on:click={(e) => handleClearCover(e)}>清除封面</button>
+          <button class="btn" on:click={() => showCoverPicker = false}>取消</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showQuickBrowse && quickBrowsePhoto}
+    <div class="quick-browse-modal" on:click={handleQuickBrowseClose}>
+      <div class="quick-browse-inner" on:click|stopPropagation>
+        <button class="qb-close" on:click={handleQuickBrowseClose}>✕</button>
+        <button class="qb-nav prev" on:click={handleQuickBrowsePrev}>‹</button>
+        <button class="qb-nav next" on:click={handleQuickBrowseNext}>›</button>
+        <div class="qb-image-wrap">
+          <img src={quickBrowsePhoto.imageDataUrl} alt="" class="qb-image" />
+        </div>
+        <div class="qb-info">
+          <div class="qb-info-main">
+            <div class="qb-title">{getSubjectName(quickBrowsePhoto.subjectId)}</div>
+            <div class="qb-meta">
+              <span class="qb-film">{getFilmName(quickBrowsePhoto.filmId)}</span>
+              <span class="qb-date">{formatDate(quickBrowsePhoto.timestamp)}</span>
+            </div>
+          </div>
+          <div class="qb-score-info">
+            <div
+              class="qb-grade"
+              style="background: {GRADE_COLORS[quickBrowsePhoto.details.grade]};"
+            >
+              {quickBrowsePhoto.details.grade}
+            </div>
+            <div class="qb-score">{quickBrowsePhoto.score} 分</div>
+          </div>
+        </div>
+        <div class="qb-counter">
+          {quickBrowseIndex + 1} / {quickBrowsePhotoIds.length}
+        </div>
+        <div class="qb-actions">
+          <button
+            class="qb-action"
+            class:favorited={isFavorite(quickBrowsePhoto.id)}
+            on:click={() => gameStore.toggleFavorite(quickBrowsePhoto.id)}
+          >
+            {isFavorite(quickBrowsePhoto.id) ? '⭐' : '☆'}
+          </button>
+          <button
+            class="qb-action"
+            on:click={() => dispatch('viewDetail', quickBrowsePhoto)}
+          >
+            📊 查看详情
+          </button>
         </div>
       </div>
     </div>
@@ -778,7 +1428,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
   }
 
   .header-left {
@@ -808,6 +1458,322 @@
     font-size: 11px;
     color: #d4a574;
     letter-spacing: 0.5px;
+  }
+
+  .view-mode-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(139, 90, 43, 0.15);
+  }
+
+  .view-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(60, 40, 25, 0.3);
+    border: 1px solid rgba(139, 90, 43, 0.2);
+    border-radius: 10px;
+    color: #a89878;
+    font-size: 13px;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .view-tab:hover {
+    background: rgba(100, 70, 40, 0.4);
+    color: #d4c090;
+  }
+
+  .view-tab.active {
+    background: linear-gradient(135deg, rgba(139, 90, 43, 0.6), rgba(100, 60, 30, 0.5));
+    border-color: rgba(230, 180, 100, 0.5);
+    color: #f0d8a8;
+    box-shadow: 0 2px 12px rgba(200, 150, 80, 0.15);
+  }
+
+  .tab-count {
+    padding: 2px 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    font-size: 11px;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .view-tab.active .tab-count {
+    background: rgba(255, 200, 100, 0.2);
+  }
+
+  .collections-nav {
+    margin-bottom: 20px;
+  }
+
+  .collections-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+  }
+
+  .collection-card {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(139, 90, 43, 0.2);
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .collection-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(200, 150, 80, 0.4);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .collection-card.create-new {
+    border-style: dashed;
+    border-color: rgba(139, 90, 43, 0.4);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    min-height: 240px;
+  }
+
+  .collection-card.create-new:hover {
+    border-color: rgba(200, 150, 80, 0.6);
+    background: rgba(139, 90, 43, 0.1);
+  }
+
+  .collection-cover {
+    position: relative;
+    aspect-ratio: 3 / 4;
+    overflow: hidden;
+    background: #0a0503;
+  }
+
+  .collection-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .collection-cover-empty {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    opacity: 0.4;
+  }
+
+  .collection-cover-empty.large {
+    font-size: 64px;
+    flex-direction: column;
+  }
+
+  .plus-icon {
+    font-size: 72px;
+    color: rgba(200, 150, 80, 0.5);
+  }
+
+  .cover-remove-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.7);
+    border: none;
+    color: #d89080;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .collection-card:hover .cover-remove-btn {
+    opacity: 1;
+  }
+
+  .collection-info {
+    padding: 12px 14px;
+    flex: 1;
+  }
+
+  .collection-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #e0d0b0;
+    margin-bottom: 4px;
+  }
+
+  .collection-meta {
+    font-size: 11px;
+    color: #8a7a5a;
+  }
+
+  .collection-actions {
+    padding: 8px 12px;
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    border-top: 1px solid rgba(139, 90, 43, 0.15);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .collection-card:hover .collection-actions {
+    opacity: 1;
+  }
+
+  .collection-detail-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(139, 90, 43, 0.15);
+    flex-wrap: wrap;
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(139, 90, 43, 0.15);
+    border: 1px solid rgba(139, 90, 43, 0.25);
+    border-radius: 8px;
+    color: #b8a878;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+
+  .back-btn:hover {
+    background: rgba(139, 90, 43, 0.3);
+    color: #e0c890;
+  }
+
+  .collection-detail-title {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .collection-detail-title h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #f0d8a8;
+  }
+
+  .collection-desc {
+    font-size: 12px;
+    color: #8a7a5a;
+  }
+
+  .collection-detail-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(100, 150, 200, 0.12);
+    border: 1px solid rgba(100, 150, 200, 0.25);
+    border-radius: 8px;
+    color: #8ab4d8;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+
+  .action-btn:hover {
+    background: rgba(100, 150, 200, 0.25);
+    transform: translateY(-1px);
+  }
+
+  .groups-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(139, 90, 43, 0.1);
+  }
+
+  .group-chip {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(60, 40, 25, 0.4);
+    border: 1px solid rgba(139, 90, 43, 0.2);
+    border-radius: 20px;
+    color: #a89878;
+    font-size: 12px;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .group-chip:hover {
+    background: rgba(100, 70, 40, 0.5);
+  }
+
+  .group-chip.active {
+    background: linear-gradient(135deg, rgba(100, 150, 200, 0.3), rgba(80, 120, 180, 0.2));
+    border-color: rgba(100, 150, 200, 0.5);
+    color: #a8c8e8;
+  }
+
+  .group-count {
+    padding: 2px 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    font-size: 10px;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .group-action-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.3);
+    border: none;
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all 0.2s;
+    margin-left: 2px;
+  }
+
+  .group-chip:hover .group-action-btn {
+    opacity: 1;
+  }
+
+  .group-action-btn:hover {
+    background: rgba(100, 150, 200, 0.3);
+    color: #e0f0e8;
+  }
+
+  .group-action-btn.delete:hover {
+    background: rgba(200, 100, 100, 0.3);
+    color: #f0c0b8;
   }
 
   .filter-toggle {
@@ -1252,6 +2218,8 @@
     position: absolute;
     bottom: 8px;
     right: 8px;
+    display: flex;
+    gap: 4px;
     opacity: 0;
     transition: opacity 0.2s;
   }
@@ -1265,12 +2233,74 @@
     height: 28px;
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.7);
-    border: 1px solid rgba(200, 100, 100, 0.3);
+    border: 1px solid rgba(139, 90, 43, 0.3);
     font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .mini-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .mini-btn.favorite {
+    border-color: rgba(200, 150, 80, 0.3);
+  }
+
+  .mini-btn.favorite:hover {
+    background: rgba(200, 150, 80, 0.2);
+  }
+
+  .mini-btn.favorite.favorited {
+    background: rgba(255, 200, 80, 0.2);
+    border-color: rgba(255, 200, 80, 0.5);
+  }
+
+  .mini-btn.folder {
+    border-color: rgba(100, 150, 200, 0.3);
+  }
+
+  .mini-btn.folder:hover {
+    background: rgba(100, 150, 200, 0.2);
+  }
+
+  .mini-btn.browse {
+    border-color: rgba(100, 200, 150, 0.3);
+  }
+
+  .mini-btn.browse:hover {
+    background: rgba(100, 200, 150, 0.2);
+  }
+
+  .mini-btn.delete {
+    border: 1px solid rgba(200, 100, 100, 0.3);
   }
 
   .mini-btn.delete:hover {
     background: rgba(200, 80, 80, 0.3);
+  }
+
+  .photo-note-badge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: rgba(200, 150, 80, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    animation: notePulse 2s ease-in-out infinite;
+  }
+
+  @keyframes notePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
   }
 
   .photo-detail-modal {
@@ -1346,6 +2376,85 @@
     overflow-y: auto;
   }
 
+  .detail-notes-preview {
+    padding: 14px 16px;
+    background: rgba(139, 90, 43, 0.1);
+    border-top: 1px solid rgba(139, 90, 43, 0.2);
+    border-left: 3px solid rgba(200, 150, 80, 0.5);
+  }
+
+  .notes-preview-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .notes-icon {
+    font-size: 14px;
+  }
+
+  .notes-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: #d4a574;
+    letter-spacing: 1px;
+  }
+
+  .notes-preview-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .notes-preview-line {
+    margin: 0;
+    font-size: 12px;
+    color: #b8a888;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .notes-more {
+    margin: 4px 0 0;
+    font-size: 10px;
+    color: #7a6a55;
+    font-style: italic;
+  }
+
+  .detail-quick-actions {
+    padding: 12px 16px;
+    display: flex;
+    gap: 8px;
+    border-top: 1px solid rgba(139, 90, 43, 0.2);
+    flex-wrap: wrap;
+  }
+
+  .detail-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(60, 40, 25, 0.4);
+    border: 1px solid rgba(139, 90, 43, 0.3);
+    border-radius: 8px;
+    color: #a89878;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+
+  .detail-action-btn:hover {
+    background: rgba(100, 70, 40, 0.5);
+    color: #e0c890;
+  }
+
+  .detail-action-btn.favorite.favorited {
+    background: rgba(255, 200, 80, 0.15);
+    border-color: rgba(255, 200, 80, 0.4);
+    color: #ffd060;
+  }
+
   .confirm-modal {
     position: fixed;
     inset: 0;
@@ -1363,14 +2472,20 @@
     border-radius: 12px;
     padding: 24px 28px;
     text-align: center;
-    max-width: 320px;
+    max-width: 360px;
+    width: 100%;
     animation: slideUp 0.3s ease;
+  }
+
+  .confirm-box.wide {
+    max-width: 500px;
+    text-align: left;
   }
 
   .confirm-title {
     font-size: 18px;
     color: #e0c0a0;
-    margin: 0 0 8px;
+    margin: 0 0 16px;
   }
 
   .confirm-desc {
@@ -1412,6 +2527,189 @@
 
   .btn.danger:hover {
     background: rgba(200, 80, 80, 0.35);
+  }
+
+  .btn.primary {
+    background: linear-gradient(135deg, #8b5a2b, #6b4520);
+    color: #f5e6d3;
+    border: 1px solid rgba(200, 160, 100, 0.3);
+  }
+
+  .btn.primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #a06830, #805528);
+  }
+
+  .btn.primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .form-field {
+    margin-bottom: 16px;
+    text-align: left;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 12px;
+    color: #a89878;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .field-input {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(139, 90, 43, 0.3);
+    border-radius: 8px;
+    color: #e0d0b0;
+    font-size: 14px;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+
+  .field-input:focus {
+    outline: none;
+    border-color: rgba(200, 150, 80, 0.5);
+  }
+
+  .field-input.textarea {
+    resize: vertical;
+    min-height: 80px;
+  }
+
+  .picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+  }
+
+  .picker-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: rgba(60, 40, 25, 0.3);
+    border: 1px solid rgba(139, 90, 43, 0.2);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .picker-item:hover {
+    background: rgba(100, 70, 40, 0.4);
+    border-color: rgba(200, 150, 80, 0.4);
+  }
+
+  .picker-item.selected {
+    background: rgba(100, 200, 150, 0.15);
+    border-color: rgba(100, 200, 150, 0.4);
+  }
+
+  .picker-cover {
+    width: 48px;
+    height: 64px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #0a0503;
+    flex-shrink: 0;
+  }
+
+  .picker-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .picker-cover-empty {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    opacity: 0.4;
+  }
+
+  .picker-info {
+    flex: 1;
+    text-align: left;
+  }
+
+  .picker-name {
+    font-size: 14px;
+    color: #e0d0b0;
+    font-weight: 500;
+  }
+
+  .picker-count {
+    font-size: 11px;
+    color: #8a7a5a;
+    margin-top: 2px;
+  }
+
+  .picker-check {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #8ad8a0;
+    font-weight: bold;
+  }
+
+  .picker-item.selected .picker-check {
+    background: rgba(100, 200, 150, 0.3);
+  }
+
+  .cover-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+  }
+
+  .cover-picker-item {
+    position: relative;
+    aspect-ratio: 3 / 4;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #0a0503;
+  }
+
+  .cover-picker-item:hover {
+    border-color: rgba(200, 150, 80, 0.6);
+    transform: scale(1.02);
+  }
+
+  .cover-picker-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .cover-picker-score {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    padding: 2px 6px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 8px;
+    font-size: 10px;
+    color: #f0d8a8;
+    font-family: 'SF Mono', Monaco, monospace;
   }
 
   .search-box {
@@ -1469,74 +2767,6 @@
 
   .search-clear:hover {
     background: rgba(200, 80, 80, 0.3);
-  }
-
-  .photo-note-badge {
-    position: absolute;
-    bottom: 8px;
-    left: 8px;
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    background: rgba(200, 150, 80, 0.9);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-    animation: notePulse 2s ease-in-out infinite;
-  }
-
-  @keyframes notePulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-  }
-
-  .detail-notes-preview {
-    padding: 14px 16px;
-    background: rgba(139, 90, 43, 0.1);
-    border-top: 1px solid rgba(139, 90, 43, 0.2);
-    border-left: 3px solid rgba(200, 150, 80, 0.5);
-  }
-
-  .notes-preview-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 10px;
-  }
-
-  .notes-icon {
-    font-size: 14px;
-  }
-
-  .notes-title {
-    font-size: 12px;
-    font-weight: 500;
-    color: #d4a574;
-    letter-spacing: 1px;
-  }
-
-  .notes-preview-content {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .notes-preview-line {
-    margin: 0;
-    font-size: 12px;
-    color: #b8a888;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .notes-more {
-    margin: 4px 0 0;
-    font-size: 10px;
-    color: #7a6a55;
-    font-style: italic;
   }
 
   .compare-badge {
@@ -1702,15 +2932,204 @@
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   }
 
-  .photo-actions {
-    opacity: 1 !important;
+  .quick-browse-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.25s ease;
   }
 
-  .photo-card.compare-mode .photo-actions {
-    opacity: 0 !important;
+  .quick-browse-inner {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
   }
 
-  .photo-card.compare-mode:hover .photo-actions {
-    opacity: 1 !important;
+  .qb-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(200, 150, 80, 0.3);
+    color: #e0c890;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    z-index: 10;
+  }
+
+  .qb-close:hover {
+    background: rgba(160, 80, 80, 0.4);
+    color: #e08080;
+  }
+
+  .qb-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(139, 90, 43, 0.4);
+    color: #e0c890;
+    font-size: 28px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    z-index: 10;
+    line-height: 1;
+  }
+
+  .qb-nav:hover {
+    background: rgba(139, 90, 43, 0.5);
+    border-color: rgba(200, 150, 80, 0.6);
+    transform: translateY(-50%) scale(1.05);
+  }
+
+  .qb-nav.prev { left: 10px; }
+  .qb-nav.next { right: 10px; }
+
+  .qb-image-wrap {
+    background: #0a0503;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(139, 90, 43, 0.3);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7);
+    max-width: 100%;
+    max-height: 70vh;
+    animation: frameReveal 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  @keyframes frameReveal {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .qb-image {
+    display: block;
+    max-width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+  }
+
+  .qb-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    width: 100%;
+    max-width: 600px;
+    margin-top: 20px;
+    padding: 14px 20px;
+    background: rgba(26, 15, 10, 0.9);
+    border: 1px solid rgba(139, 90, 43, 0.3);
+    border-radius: 12px;
+    flex-wrap: wrap;
+  }
+
+  .qb-info-main {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .qb-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: #f0d8a8;
+    margin-bottom: 4px;
+  }
+
+  .qb-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: #8a7a5a;
+  }
+
+  .qb-score-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .qb-grade {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: bold;
+    color: #1a0f0a;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .qb-score {
+    font-size: 20px;
+    font-weight: bold;
+    color: #f0d8a8;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .qb-counter {
+    margin-top: 12px;
+    padding: 6px 16px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 12px;
+    font-size: 13px;
+    color: #a89878;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .qb-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .qb-action {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    background: rgba(60, 40, 25, 0.5);
+    border: 1px solid rgba(139, 90, 43, 0.35);
+    border-radius: 10px;
+    color: #c8b898;
+    font-size: 13px;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .qb-action:hover {
+    background: rgba(100, 70, 40, 0.6);
+    transform: translateY(-1px);
+  }
+
+  .qb-action.favorited {
+    background: rgba(255, 200, 80, 0.2);
+    border-color: rgba(255, 200, 80, 0.5);
+    color: #ffd060;
   }
 </style>
