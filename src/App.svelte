@@ -262,6 +262,13 @@
     handleCloseScoreDetail();
     handleNewPhoto();
   }
+
+  function handleUpdateNotes(e: CustomEvent<string>) {
+    const photo = scoreDetailPhoto;
+    if (!photo) return;
+    gameStore.updatePhotoNotes(photo.id, e.detail);
+    scoreDetailPhoto = { ...photo, notes: e.detail };
+  }
 </script>
 
 <div class="app-root">
@@ -397,6 +404,7 @@
       photo={scoreDetailPhoto}
       on:close={handleCloseScoreDetail}
       on:applySuggestions={handleApplySuggestions}
+      on:updateNotes={handleUpdateNotes}
     />
   {/if}
 

@@ -43,7 +43,9 @@
     minScore: 0,
     maxScore: 100,
     tags: [],
-    sortBy: 'date_desc'
+    sortBy: 'date_desc',
+    noteFilter: 'all',
+    noteKeyword: ''
   };
 
   function formatDate(ts: number): string {
@@ -105,6 +107,10 @@
     filter = { ...filter, tags: toggleArrayValue(filter.tags, tag) };
   }
 
+  function setNoteFilter(value: string) {
+    filter = { ...filter, noteFilter: value as any };
+  }
+
   function setSortBy(sort: string) {
     filter = { ...filter, sortBy: sort as SortOption };
   }
@@ -118,7 +124,9 @@
       minScore: 0,
       maxScore: 100,
       tags: [],
-      sortBy: 'date_desc'
+      sortBy: 'date_desc',
+      noteFilter: 'all',
+      noteKeyword: ''
     };
   }
 
@@ -130,7 +138,9 @@
       filter.grades.length > 0 ||
       filter.tags.length > 0 ||
       filter.minScore > 0 ||
-      filter.maxScore < 100
+      filter.maxScore < 100 ||
+      filter.noteFilter !== 'all' ||
+      filter.noteKeyword.trim() !== ''
     );
   }
 
@@ -177,6 +187,26 @@
       });
     }
 
+    if (filter.noteFilter === 'has_note') {
+      result = result.filter(p => p.notes && p.notes.trim().length > 0);
+    } else if (filter.noteFilter === 'no_note') {
+      result = result.filter(p => !p.notes || p.notes.trim().length === 0);
+    }
+
+    if (filter.noteKeyword.trim() !== '') {
+      const keyword = filter.noteKeyword.trim().toLowerCase();
+      result = result.filter(p => {
+        const notes = p.notes ? p.notes.toLowerCase() : '';
+        const subjectName = getSubjectName(p.subjectId).toLowerCase();
+        const filmName = getFilmName(p.filmId).toLowerCase();
+        const tags = getPhotoTags(p).join(' ').toLowerCase();
+        return notes.includes(keyword) ||
+               subjectName.includes(keyword) ||
+               filmName.includes(keyword) ||
+               tags.includes(keyword);
+      });
+    }
+
     switch (filter.sortBy) {
       case 'date_desc':
         result.sort((a, b) => b.timestamp - a.timestamp);
@@ -217,7 +247,9 @@
     filter.grades.length +
     filter.tags.length +
     (filter.minScore > 0 ? 1 : 0) +
-    (filter.maxScore < 100 ? 1 : 0);
+    (filter.maxScore < 100 ? 1 : 0) +
+    (filter.noteFilter !== 'all' ? 1 : 0) +
+    (filter.noteKeyword.trim() !== '' ? 1 : 0);
 </script>
 
 <div class="album-overlay">
@@ -369,6 +401,57 @@
           </div>
         </div>
 
+        <div class="filter-row multi-row">
+          <div class="filter-block">
+            <div class="filter-label">冲洗笔记</div>
+            <div class="chip-group">
+              <button
+                class="chip"
+                class:active={filter.noteFilter === 'all'}
+                on:click={() => setNoteFilter('all')}
+              >
+                全部
+              </button>
+              <button
+                class="chip"
+                class:active={filter.noteFilter === 'has_note'}
+                on:click={() => setNoteFilter('has_note')}
+              >
+                📝 有笔记
+              </button>
+              <button
+                class="chip"
+                class:active={filter.noteFilter === 'no_note'}
+                on:click={() => setNoteFilter('no_note')}
+              >
+                无笔记
+              </button>
+            </div>
+          </div>
+
+          <div class="filter-block" style="grid-column: span 2;">
+            <div class="filter-label">关键词搜索</div>
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input
+                type="text"
+                class="search-input"
+                bind:value={filter.noteKeyword}
+                placeholder="搜索笔记、题材、胶片或标签..."
+              />
+              {#if filter.noteKeyword}
+                <button
+                  class="search-clear"
+                  on:click={() => filter.noteKeyword = ''}
+                  title="清除搜索"
+                >
+                  ✕
+                </button>
+              {/if}
+            </div>
+          </div>
+        </div>
+
         {#if hasActiveFilters()}
           <div class="filter-actions">
             <button class="reset-filters-btn" on:click={resetFilters}>
@@ -438,6 +521,11 @@
               <div class="photo-score-tag">
                 {photo.score}
               </div>
+              {#if photo.notes && photo.notes.trim().length > 0}
+                <div class="photo-note-badge" title="有冲洗笔记">
+                  📝
+                </div>
+              {/if}
             </div>
             <div class="photo-info">
               <div class="photo-name">{getSubjectName(photo.subjectId)}</div>
@@ -493,6 +581,24 @@
                   #{tag}
                 </button>
               {/each}
+            </div>
+          {/if}
+          {#if selectedPhoto.notes && selectedPhoto.notes.trim().length > 0}
+            <div class="detail-notes-preview">
+              <div class="notes-preview-header">
+                <span class="notes-icon">📝</span>
+                <span class="notes-title">冲洗笔记</span>
+              </div>
+              <div class="notes-preview-content">
+                {#each selectedPhoto.notes.split('\n').slice(0, 3) as line, i (i)}
+                  {#if line.trim()}
+                    <p class="notes-preview-line">{line}</p>
+                  {/if}
+                {/each}
+                {#if selectedPhoto.notes.split('\n').length > 3}
+                  <p class="notes-more">...还有更多内容，点击扣分明细查看完整笔记</p>
+                {/if}
+              </div>
             </div>
           {/if}
         </div>
@@ -1196,5 +1302,130 @@
 
   .btn.danger:hover {
     background: rgba(200, 80, 80, 0.35);
+  }
+
+  .search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(139, 90, 43, 0.25);
+    border-radius: 8px;
+    transition: all 0.2s;
+  }
+
+  .search-box:focus-within {
+    border-color: rgba(200, 150, 80, 0.5);
+    box-shadow: 0 0 0 3px rgba(200, 150, 80, 0.1);
+  }
+
+  .search-icon {
+    font-size: 14px;
+    opacity: 0.6;
+    flex-shrink: 0;
+  }
+
+  .search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e0d0b0;
+    font-size: 13px;
+    font-family: inherit;
+    min-width: 0;
+  }
+
+  .search-input::placeholder {
+    color: #5a4a35;
+  }
+
+  .search-clear {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(160, 80, 80, 0.2);
+    border: 1px solid rgba(200, 100, 100, 0.25);
+    color: #d89080;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .search-clear:hover {
+    background: rgba(200, 80, 80, 0.3);
+  }
+
+  .photo-note-badge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: rgba(200, 150, 80, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    animation: notePulse 2s ease-in-out infinite;
+  }
+
+  @keyframes notePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+
+  .detail-notes-preview {
+    padding: 14px 16px;
+    background: rgba(139, 90, 43, 0.1);
+    border-top: 1px solid rgba(139, 90, 43, 0.2);
+    border-left: 3px solid rgba(200, 150, 80, 0.5);
+  }
+
+  .notes-preview-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .notes-icon {
+    font-size: 14px;
+  }
+
+  .notes-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: #d4a574;
+    letter-spacing: 1px;
+  }
+
+  .notes-preview-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .notes-preview-line {
+    margin: 0;
+    font-size: 12px;
+    color: #b8a888;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .notes-more {
+    margin: 4px 0 0;
+    font-size: 10px;
+    color: #7a6a55;
+    font-style: italic;
   }
 </style>

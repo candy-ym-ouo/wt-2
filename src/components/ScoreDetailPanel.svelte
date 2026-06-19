@@ -8,13 +8,14 @@
   const dispatch = createEventDispatcher<{
     close: void;
     applySuggestions: void;
+    updateNotes: string;
   }>();
 
   const details = photo.details;
   const subject = PHOTO_SUBJECTS.find(s => s.id === photo.subjectId) as PhotoSubject;
   const film = FILM_STOCKS.find(f => f.id === photo.filmId) as FilmStock;
 
-  let activeTab: 'keyAreas' | 'deviations' | 'deductions' | 'suggestions' = 'deductions';
+  let activeTab: 'keyAreas' | 'deviations' | 'deductions' | 'suggestions' | 'notes' = 'deductions';
 
   const hitStatusConfig = {
     excellent: { label: '优秀', color: '#68c888', bgColor: 'rgba(104, 200, 136, 0.15)', icon: '✓' },
@@ -41,8 +42,38 @@
     { key: 'deductions', label: '扣分明细', icon: '📋' },
     { key: 'keyAreas', label: '关键区域', icon: '🎯' },
     { key: 'deviations', label: '参数偏差', icon: '📊' },
-    { key: 'suggestions', label: '优化建议', icon: '💡' }
+    { key: 'suggestions', label: '优化建议', icon: '💡' },
+    { key: 'notes', label: '冲洗笔记', icon: '📝' }
   ];
+
+  let noteText = photo.notes || '';
+  let isEditingNote = !photo.notes;
+
+  const quickTags = [
+    { label: '灵感', prefix: '💡 灵感：' },
+    { label: '问题', prefix: '⚠️ 问题复盘：' },
+    { label: '改进', prefix: '🔧 下次改进：' },
+    { label: '心得', prefix: '✨ 心得：' },
+    { label: '参数', prefix: '⚙ 参数尝试：' },
+    { label: '值得', prefix: '👍 值得保留：' }
+  ];
+
+  function insertQuickTag(prefix: string) {
+    const separator = noteText.length > 0 && !noteText.endsWith('\n') ? '\n' : '';
+    noteText = noteText + separator + prefix;
+    isEditingNote = true;
+  }
+
+  function saveNotes() {
+    dispatch('updateNotes', noteText);
+  }
+
+  function toggleEditNote() {
+    if (isEditingNote) {
+      saveNotes();
+    }
+    isEditingNote = !isEditingNote;
+  }
 
   $: totalDeductions = details.deductions.reduce((sum, d) => sum + d.pointsLost, 0);
   $: hitCount = details.keyAreaResults.filter(a => a.isHit).length;
@@ -440,6 +471,80 @@
                 </div>
               </div>
             </div>
+          </div>
+        {/if}
+
+        {#if activeTab === 'notes'}
+          <div class="notes-section">
+            <div class="notes-header">
+              <div class="header-info">
+                <span class="header-icon">📝</span>
+                <span class="header-title">冲洗笔记</span>
+                {#if noteText && !isEditingNote}
+                  <span class="note-status saved">已保存</span>
+                {:else if isEditingNote}
+                  <span class="note-status editing">编辑中</span>
+                {/if}
+              </div>
+              <button class="edit-btn" on:click={toggleEditNote}>
+                <span>{isEditingNote ? '💾' : '✏️'}</span>
+                <span>{isEditingNote ? '保存笔记' : '编辑笔记'}</span>
+              </button>
+            </div>
+
+            <div class="quick-tags-row">
+              <span class="quick-label">快速插入：</span>
+              <div class="quick-tag-group">
+                {#each quickTags as qt (qt.label)}
+                  <button
+                    class="quick-tag-btn"
+                    on:click={() => insertQuickTag(qt.prefix)}
+                    title="插入 {qt.label}"
+                  >
+                    {qt.label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+
+            {#if isEditingNote}
+              <textarea
+                class="notes-textarea"
+                bind:value={noteText}
+                placeholder="在这里记录你的冲洗灵感、遇到的问题、参数调整的心得体会...
+提示：使用上方快速标签可以快速分类笔记内容"
+              />
+              <div class="notes-actions">
+                <div class="char-count">{noteText.length} 字</div>
+                <div class="actions-right">
+                  <button
+                    class="action-btn cancel"
+                    on:click={() => { noteText = photo.notes || ''; isEditingNote = false; }}
+                  >
+                    取消
+                  </button>
+                  <button class="action-btn save" on:click={saveNotes}>
+                    💾 保存笔记
+                  </button>
+                </div>
+              </div>
+            {:else if noteText}
+              <div class="notes-display">
+                {#each noteText.split('\n') as line, i (i)}
+                  {#if line.trim()}
+                    <p class="note-line">
+                      {line}
+                    </p>
+                  {/if}
+                {/each}
+              </div>
+            {:else}
+              <div class="empty-notes">
+                <div class="empty-icon">📝</div>
+                <div class="empty-text">还没有冲洗笔记</div>
+                <div class="empty-hint">点击"编辑笔记"开始记录灵感与心得</div>
+              </div>
+            {/if}
           </div>
         {/if}
       </div>
@@ -1475,5 +1580,240 @@
     .tab-btn {
       flex: 1 0 45%;
     }
+  }
+
+  .notes-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .notes-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 10px;
+    border: 1px solid rgba(200, 160, 100, 0.2);
+  }
+
+  .notes-header .header-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .notes-header .header-icon {
+    font-size: 20px;
+  }
+
+  .notes-header .header-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #d4a574;
+    letter-spacing: 1px;
+  }
+
+  .note-status {
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    letter-spacing: 1px;
+  }
+
+  .note-status.saved {
+    background: rgba(104, 200, 136, 0.15);
+    color: #68c888;
+    border: 1px solid rgba(104, 200, 136, 0.3);
+  }
+
+  .note-status.editing {
+    background: rgba(232, 168, 72, 0.15);
+    color: #e8a848;
+    border: 1px solid rgba(232, 168, 72, 0.3);
+  }
+
+  .edit-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(139, 90, 43, 0.2);
+    border: 1px solid rgba(139, 90, 43, 0.35);
+    border-radius: 8px;
+    color: #d4a574;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .edit-btn:hover {
+    background: rgba(180, 120, 60, 0.3);
+    border-color: rgba(220, 170, 100, 0.5);
+    transform: translateY(-1px);
+  }
+
+  .quick-tags-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid rgba(139, 90, 43, 0.15);
+  }
+
+  .quick-label {
+    font-size: 11px;
+    color: #7a6a55;
+    letter-spacing: 1px;
+    padding-top: 4px;
+    flex-shrink: 0;
+  }
+
+  .quick-tag-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .quick-tag-btn {
+    padding: 4px 10px;
+    background: rgba(139, 90, 43, 0.15);
+    border: 1px solid rgba(139, 90, 43, 0.3);
+    border-radius: 10px;
+    font-size: 11px;
+    color: #b89878;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .quick-tag-btn:hover {
+    background: rgba(200, 150, 80, 0.3);
+    border-color: rgba(220, 170, 100, 0.5);
+    color: #f0d8a8;
+    transform: translateY(-1px);
+  }
+
+  .notes-textarea {
+    width: 100%;
+    min-height: 200px;
+    padding: 14px 16px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(139, 90, 43, 0.3);
+    border-radius: 10px;
+    color: #e0d0b0;
+    font-size: 13px;
+    line-height: 1.7;
+    font-family: inherit;
+    resize: vertical;
+    transition: all 0.2s;
+  }
+
+  .notes-textarea:focus {
+    outline: none;
+    border-color: rgba(200, 150, 80, 0.5);
+    background: rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 0 3px rgba(200, 150, 80, 0.1);
+  }
+
+  .notes-textarea::placeholder {
+    color: #5a4a35;
+    line-height: 1.7;
+  }
+
+  .notes-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .char-count {
+    font-size: 11px;
+    color: #6a5a45;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .actions-right {
+    display: flex;
+    gap: 8px;
+  }
+
+  .notes-actions .action-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .notes-actions .action-btn.cancel {
+    background: rgba(100, 100, 100, 0.15);
+    color: #a89878;
+    border: 1px solid rgba(100, 100, 100, 0.3);
+  }
+
+  .notes-actions .action-btn.cancel:hover {
+    background: rgba(120, 120, 120, 0.25);
+  }
+
+  .notes-actions .action-btn.save {
+    background: linear-gradient(135deg, rgba(104, 200, 136, 0.35), rgba(80, 160, 120, 0.3));
+    color: #8ad8a0;
+    border: 1px solid rgba(104, 200, 136, 0.45);
+  }
+
+  .notes-actions .action-btn.save:hover {
+    background: linear-gradient(135deg, rgba(104, 200, 136, 0.5), rgba(80, 160, 120, 0.4));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(104, 200, 136, 0.2);
+  }
+
+  .notes-display {
+    padding: 16px 18px;
+    background: rgba(139, 90, 43, 0.08);
+    border: 1px solid rgba(139, 90, 43, 0.2);
+    border-radius: 10px;
+    border-left: 3px solid rgba(200, 150, 80, 0.5);
+  }
+
+  .note-line {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: #c8b898;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .note-line:last-child {
+    margin-bottom: 0;
+  }
+
+  .empty-notes {
+    text-align: center;
+    padding: 50px 20px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    border: 1px dashed rgba(139, 90, 43, 0.3);
+  }
+
+  .empty-notes .empty-icon {
+    font-size: 44px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+  }
+
+  .empty-notes .empty-text {
+    font-size: 14px;
+    color: #a89878;
+    margin-bottom: 6px;
+  }
+
+  .empty-notes .empty-hint {
+    font-size: 12px;
+    color: #6a5a45;
   }
 </style>

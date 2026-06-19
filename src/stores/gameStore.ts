@@ -537,6 +537,19 @@ function createGameStore() {
         selectedAlbumPhoto: state.selectedAlbumPhoto?.id === photoId ? null : state.selectedAlbumPhoto
       };
     }),
+    updatePhotoNotes: (photoId: string, notes: string) => update(state => {
+      const newPhotos = state.processedPhotos.map(p =>
+        p.id === photoId ? { ...p, notes } : p
+      );
+      savePhotos(newPhotos);
+      return {
+        ...state,
+        processedPhotos: newPhotos,
+        selectedAlbumPhoto: state.selectedAlbumPhoto?.id === photoId
+          ? { ...state.selectedAlbumPhoto, notes }
+          : state.selectedAlbumPhoto
+      };
+    }),
     savePreset: (name: string, description: string, params: DevParams, subjectId?: string, filmId?: string) => update(state => {
       const existingIndex = state.presets.findIndex(p => p.name === name && !p.isDefault);
       const now = Date.now();

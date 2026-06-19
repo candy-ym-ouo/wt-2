@@ -79,6 +79,8 @@ export interface ProcessedPhoto {
 
 export type SortOption = 'date_desc' | 'date_asc' | 'score_desc' | 'score_asc' | 'grade_desc';
 
+export type NoteFilter = 'all' | 'has_note' | 'no_note';
+
 export interface AlbumFilter {
   subjectIds: string[];
   filmIds: string[];
@@ -88,6 +90,8 @@ export interface AlbumFilter {
   maxScore: number;
   tags: string[];
   sortBy: SortOption;
+  noteFilter: NoteFilter;
+  noteKeyword: string;
 }
 
 export interface KeyAreaResult {
