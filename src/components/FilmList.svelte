@@ -1,15 +1,48 @@
 <script lang="ts">
   import type { FilmStock } from '../types/game';
-  import { FILM_STOCKS } from '../data/gameData';
+  import { FILM_STOCKS, PHOTO_SUBJECTS } from '../data/gameData';
+  import { gameStore } from '../stores/gameStore';
+  import { getFilmRecommendations } from '../utils/recommendation';
+  import type { Recommendation } from '../utils/recommendation';
 
   export let selectedId: string = FILM_STOCKS[0].id;
 
+  let showRecReasons: string | null = null;
+
   $: selectedFilm = FILM_STOCKS.find(f => f.id === selectedId);
+  $: recMap = buildFilmRecMap($gameStore.processedPhotos, $gameStore.currentSubject?.id ?? null);
+
+  function buildFilmRecMap(photos: any[], subjectId: string | null): Map<string, Recommendation> {
+    const recs = getFilmRecommendations(photos, PHOTO_SUBJECTS, FILM_STOCKS, subjectId);
+    const map = new Map<string, Recommendation>();
+    for (const r of recs) {
+      map.set(r.id, r);
+    }
+    return map;
+  }
+
+  function getRecLabel(score: number): string {
+    if (score >= 0.85) return '强烈推荐';
+    if (score >= 0.6) return '推荐';
+    if (score >= 0.35) return '值得尝试';
+    return '';
+  }
+
+  function getRecClass(score: number): string {
+    if (score >= 0.85) return 'rec-strong';
+    if (score >= 0.6) return 'rec-good';
+    if (score >= 0.35) return 'rec-mild';
+    return '';
+  }
 
   function selectFilm(id: string) {
     selectedId = id;
     const event = new CustomEvent('selectFilm', { detail: id });
     document.dispatchEvent(event);
+  }
+
+  function toggleRecReasons(id: string) {
+    showRecReasons = showRecReasons === id ? null : id;
   }
 </script>
 
@@ -20,38 +53,53 @@
 
   <div class="films-row">
     {#each FILM_STOCKS as film (film.id)}
-      <button
-        class="film-card"
-        class:selected={selectedId === film.id}
-        on:click={() => selectFilm(film.id)}
-        title="{film.name} - {film.description}"
-      >
-        <div class="film-strip">
-          <div class="film-color" style="background: {film.thumbnailColor};" />
-          <div class="film-holes">
-            {#each Array(4) as _, i (i)}
-              <div class="hole" />
+      {@const rec = recMap.get(film.id)}
+      <div class="film-card-wrapper">
+        <button
+          class="film-card"
+          class:selected={selectedId === film.id}
+          on:click={() => selectFilm(film.id)}
+          title="{film.name} - {film.description}"
+        >
+          <div class="film-strip">
+            <div class="film-color" style="background: {film.thumbnailColor};" />
+            <div class="film-holes">
+              {#each Array(4) as _, i (i)}
+                <div class="hole" />
+              {/each}
+            </div>
+            <div class="film-holes bottom">
+              {#each Array(4) as _, i (i)}
+                <div class="hole" />
+              {/each}
+            </div>
+          </div>
+          <div class="film-info">
+            <div class="film-name">{film.name}</div>
+            <div class="film-tags">
+              <span class="tag iso">ISO {film.iso}</span>
+              <span class="tag type" class:bw={film.color === 'bw'}>
+                {film.color === 'bw' ? '黑白' : '彩色'}
+              </span>
+            </div>
+            {#if rec && getRecLabel(rec.score)}
+              <span class="rec-badge {getRecClass(rec.score)}" on:click|stopPropagation={() => toggleRecReasons(film.id)}>
+                {getRecLabel(rec.score)}
+              </span>
+            {/if}
+          </div>
+          {#if selectedId === film.id}
+            <div class="film-glow" />
+          {/if}
+        </button>
+        {#if rec && showRecReasons === film.id && rec.reasons.length > 0}
+          <div class="rec-reasons">
+            {#each rec.reasons as reason}
+              <div class="rec-reason-item">• {reason}</div>
             {/each}
           </div>
-          <div class="film-holes bottom">
-            {#each Array(4) as _, i (i)}
-              <div class="hole" />
-            {/each}
-          </div>
-        </div>
-        <div class="film-info">
-          <div class="film-name">{film.name}</div>
-          <div class="film-tags">
-            <span class="tag iso">ISO {film.iso}</span>
-            <span class="tag type" class:bw={film.color === 'bw'}>
-              {film.color === 'bw' ? '黑白' : '彩色'}
-            </span>
-          </div>
-        </div>
-        {#if selectedId === film.id}
-          <div class="film-glow" />
         {/if}
-      </button>
+      </div>
     {/each}
   </div>
 
@@ -104,6 +152,11 @@
     gap: 8px;
   }
 
+  .film-card-wrapper {
+    display: flex;
+    flex-direction: column;
+  }
+
   .film-card {
     position: relative;
     display: flex;
@@ -117,6 +170,7 @@
     cursor: pointer;
     transition: all 0.2s ease;
     overflow: hidden;
+    width: 100%;
   }
 
   .film-card:hover {
@@ -274,4 +328,60 @@
   .stat-fill.contrast { background: linear-gradient(90deg, #8b5a2b, #c8a878); }
   .stat-fill.grain { background: linear-gradient(90deg, #5a5a5a, #9a9a9a); }
   .stat-fill.sat { background: linear-gradient(90deg, #8b2a5a, #e05090); }
+
+  .rec-badge {
+    font-size: 8px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    line-height: 1.5;
+    margin-top: 2px;
+  }
+
+  .rec-badge.rec-strong {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.25), rgba(200, 150, 80, 0.2));
+    color: #ffd700;
+    border: 1px solid rgba(255, 215, 0, 0.3);
+  }
+
+  .rec-badge.rec-good {
+    background: rgba(100, 180, 100, 0.15);
+    color: #8bc88b;
+    border: 1px solid rgba(100, 180, 100, 0.25);
+  }
+
+  .rec-badge.rec-mild {
+    background: rgba(120, 160, 200, 0.12);
+    color: #8aaccc;
+    border: 1px solid rgba(120, 160, 200, 0.2);
+  }
+
+  .rec-badge:hover {
+    transform: scale(1.05);
+  }
+
+  .rec-reasons {
+    margin-top: 2px;
+    padding: 6px 10px 6px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(139, 90, 43, 0.15);
+    border-radius: 0 0 8px 8px;
+    animation: slideDown 0.2s ease;
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; max-height: 0; }
+    to { opacity: 1; max-height: 100px; }
+  }
+
+  .rec-reason-item {
+    font-size: 10px;
+    color: #a89878;
+    line-height: 1.5;
+    padding: 1px 0;
+  }
 </style>
