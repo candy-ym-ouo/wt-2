@@ -1,6 +1,6 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams } from '../types/game';
-import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS } from '../data/gameData';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase } from '../types/game';
+import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS } from '../data/gameData';
 
 function createGameStore() {
   const initialState: GameState = {
@@ -35,7 +35,7 @@ function createGameStore() {
       ...state,
       currentParams: { ...DEFAULT_PARAMS }
     })),
-    setPhase: (phase: GameState['phase']) => update(state => ({
+    setPhase: (phase: GamePhase) => update(state => ({
       ...state,
       phase
     })),
@@ -62,7 +62,18 @@ function createGameStore() {
     }),
     setTutorialStep: (step: number) => update(state => ({
       ...state,
-      tutorialStep: step
+      tutorialStep: Math.max(0, Math.min(step, TUTORIAL_STEPS.length - 1))
+    })),
+    nextTutorialStep: () => update(state => {
+      const nextStep = state.tutorialStep + 1;
+      if (nextStep >= TUTORIAL_STEPS.length) {
+        return { ...state, phase: 'select', tutorialStep: TUTORIAL_STEPS.length - 1 };
+      }
+      return { ...state, tutorialStep: nextStep };
+    }),
+    prevTutorialStep: () => update(state => ({
+      ...state,
+      tutorialStep: Math.max(0, state.tutorialStep - 1)
     })),
     skipTutorial: () => update(state => ({
       ...state,
@@ -81,7 +92,9 @@ function createGameStore() {
     goToSelect: () => update(state => ({
       ...state,
       phase: 'select',
-      selectedAlbumPhoto: null
+      selectedAlbumPhoto: null,
+      isDeveloping: false,
+      developmentProgress: 0
     })),
     deletePhoto: (photoId: string) => update(state => {
       const newPhotos = state.processedPhotos.filter(p => p.id !== photoId);

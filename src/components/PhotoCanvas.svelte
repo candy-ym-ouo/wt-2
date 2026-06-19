@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount, createEventDispatcher } from 'svelte';
   import { generateBaseScene, applyDevelopment, renderToCanvas, createThumbnail, type RenderedImageData } from '../utils/renderEngine';
-  import type { PhotoSubject, FilmStock, DevParams } from '../types/game';
+  import type { PhotoSubject, FilmStock, DevParams, CanvasMode } from '../types/game';
 
   export let subject: PhotoSubject | null = null;
   export let film: FilmStock;
   export let params: DevParams;
   export let progress: number = 1;
   export let showNegative: boolean = false;
-  export let mode: 'preview' | 'developing' | 'final' = 'preview';
+  export let mode: CanvasMode = 'preview';
 
   const dispatch = createEventDispatcher<{
     rendered: { url: string; image: RenderedImageData };

@@ -65,13 +65,17 @@ export interface ScoreDetail {
   grade: 'S' | 'A' | 'B' | 'C' | 'D';
 }
 
+export type GamePhase = 'tutorial' | 'select' | 'expose' | 'develop' | 'fix' | 'wash' | 'result' | 'album';
+
+export type CanvasMode = 'preview' | 'developing' | 'final';
+
 export interface GameState {
   currentSubject: PhotoSubject | null;
   currentFilm: FilmStock;
   currentParams: DevParams;
   developmentProgress: number;
   isDeveloping: boolean;
-  phase: 'tutorial' | 'select' | 'expose' | 'develop' | 'fix' | 'wash' | 'result' | 'album';
+  phase: GamePhase;
   processedPhotos: ProcessedPhoto[];
   tutorialStep: number;
   selectedAlbumPhoto: ProcessedPhoto | null;

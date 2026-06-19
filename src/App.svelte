@@ -6,7 +6,7 @@
   import { calculateScore } from './utils/scoring';
   import { PHOTO_SUBJECTS, FILM_STOCKS } from './data/gameData';
   import { generateId } from './utils/math';
-  import type { ProcessedPhoto, GameState, DevParams } from './types/game';
+  import type { ProcessedPhoto, GameState, DevParams, CanvasMode, GamePhase } from './types/game';
 
   import SubjectList from './components/SubjectList.svelte';
   import FilmList from './components/FilmList.svelte';
@@ -37,6 +37,7 @@
   $: processedPhotos = $gameStore.processedPhotos;
   $: selectedAlbumPhoto = $gameStore.selectedAlbumPhoto;
 
+  let canvasMode: CanvasMode;
   $: canvasMode = phase === 'develop' ? 'developing' : (phase === 'result' ? 'final' : 'preview');
   $: isParamDisabled = phase === 'develop' || phase === 'result';
 
@@ -177,17 +178,11 @@
   }
 
   function handleTutorialNext() {
-    if (tutorialStep < 5) {
-      gameStore.setTutorialStep(tutorialStep + 1);
-    } else {
-      gameStore.skipTutorial();
-    }
+    gameStore.nextTutorialStep();
   }
 
   function handleTutorialPrev() {
-    if (tutorialStep > 0) {
-      gameStore.setTutorialStep(tutorialStep - 1);
-    }
+    gameStore.prevTutorialStep();
   }
 
   function handleTutorialGoTo(step: number) {
