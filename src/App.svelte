@@ -474,6 +474,7 @@
       <ParamPanel
         params={currentParams}
         subject={currentSubject}
+        film={currentFilm}
         disabled={isParamDisabled}
         on:update={handleParamUpdate}
         on:applyPreset={handleApplyPreset}
