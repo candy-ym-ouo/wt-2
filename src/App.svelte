@@ -160,7 +160,8 @@
       score: scoreDetails.overall,
       details: scoreDetails,
       imageDataUrl: imgUrl,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      tags: [...subject.tags]
     };
 
     lastProcessedPhoto = photo;

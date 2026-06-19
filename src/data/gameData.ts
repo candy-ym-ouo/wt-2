@@ -80,6 +80,7 @@ export const PHOTO_SUBJECTS: PhotoSubject[] = [
     idealSaturation: 0.5,
     baseBrightness: 0.4,
     seed: 42,
+    tags: ['人像', '柔和', '室内', '自然光', '女性'],
     keyAreas: [
       { name: '面部高光', x: 0.42, y: 0.2, w: 0.16, h: 0.25, importance: 0.3, idealBrightness: 0.72 },
       { name: '眼睛', x: 0.4, y: 0.28, w: 0.2, h: 0.08, importance: 0.25, idealBrightness: 0.45 },
@@ -97,6 +98,7 @@ export const PHOTO_SUBJECTS: PhotoSubject[] = [
     idealSaturation: 0.75,
     baseBrightness: 0.35,
     seed: 137,
+    tags: ['风光', '自然', '山景', '晨雾', '高反差'],
     keyAreas: [
       { name: '天空云层', x: 0, y: 0, w: 1, h: 0.4, importance: 0.3, idealBrightness: 0.7 },
       { name: '远山轮廓', x: 0, y: 0.35, w: 1, h: 0.25, importance: 0.25, idealBrightness: 0.35 },
@@ -114,6 +116,7 @@ export const PHOTO_SUBJECTS: PhotoSubject[] = [
     idealSaturation: 0.45,
     baseBrightness: 0.3,
     seed: 89,
+    tags: ['街头', '城市', '雨天', '纪实', '霓虹灯'],
     keyAreas: [
       { name: '行人剪影', x: 0.35, y: 0.4, w: 0.12, h: 0.45, importance: 0.3, idealBrightness: 0.12 },
       { name: '霓虹招牌', x: 0.6, y: 0.1, w: 0.25, h: 0.2, importance: 0.25, idealBrightness: 0.85 },
@@ -131,6 +134,7 @@ export const PHOTO_SUBJECTS: PhotoSubject[] = [
     idealSaturation: 0.6,
     baseBrightness: 0.38,
     seed: 204,
+    tags: ['静物', '复古', '暖调', '质感', '文艺'],
     keyAreas: [
       { name: '茶杯高光', x: 0.3, y: 0.4, w: 0.18, h: 0.25, importance: 0.3, idealBrightness: 0.78 },
       { name: '书页纹理', x: 0.48, y: 0.3, w: 0.4, h: 0.5, importance: 0.25, idealBrightness: 0.55 },
@@ -148,6 +152,7 @@ export const PHOTO_SUBJECTS: PhotoSubject[] = [
     idealSaturation: 0.7,
     baseBrightness: 0.15,
     seed: 311,
+    tags: ['夜景', '城市', '灯光', '高反差', '建筑'],
     keyAreas: [
       { name: '建筑灯光', x: 0.2, y: 0.1, w: 0.6, h: 0.6, importance: 0.3, idealBrightness: 0.65 },
       { name: '天空区域', x: 0, y: 0, w: 1, h: 0.25, importance: 0.2, idealBrightness: 0.08 },
@@ -165,6 +170,7 @@ export const PHOTO_SUBJECTS: PhotoSubject[] = [
     idealSaturation: 0.8,
     baseBrightness: 0.32,
     seed: 178,
+    tags: ['人像', '逆光', '日落', '剪影', '暖调', '户外'],
     keyAreas: [
       { name: '人物轮廓', x: 0.3, y: 0.2, w: 0.4, h: 0.7, importance: 0.35, idealBrightness: 0.15 },
       { name: '背景天空', x: 0, y: 0, w: 1, h: 0.6, importance: 0.3, idealBrightness: 0.75 },
@@ -172,6 +178,31 @@ export const PHOTO_SUBJECTS: PhotoSubject[] = [
       { name: '地面草地', x: 0, y: 0.6, w: 1, h: 0.4, importance: 0.15, idealBrightness: 0.2 }
     ]
   }
+];
+
+export const SCENE_TYPE_LABELS: Record<string, string> = {
+  portrait: '人像',
+  landscape: '风光',
+  street: '街头',
+  still_life: '静物',
+  night: '夜景'
+};
+
+export const SORT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'date_desc', label: '最新优先' },
+  { value: 'date_asc', label: '最早优先' },
+  { value: 'score_desc', label: '高分优先' },
+  { value: 'score_asc', label: '低分优先' },
+  { value: 'grade_desc', label: '等级优先' }
+];
+
+export const ALL_TAGS = [
+  '人像', '风光', '街头', '静物', '夜景',
+  '柔和', '室内', '自然光', '女性', '自然',
+  '山景', '晨雾', '高反差', '城市', '雨天',
+  '纪实', '霓虹灯', '复古', '暖调', '质感',
+  '文艺', '灯光', '建筑', '逆光', '日落',
+  '剪影', '户外'
 ];
 
 export const DEFAULT_PARAMS: DevParams = {

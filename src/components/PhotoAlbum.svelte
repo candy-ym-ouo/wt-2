@@ -1,7 +1,15 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { ProcessedPhoto } from '../types/game';
-  import { PHOTO_SUBJECTS, FILM_STOCKS, GRADE_COLORS, GRADE_NAMES } from '../data/gameData';
+  import type { ProcessedPhoto, AlbumFilter, SortOption } from '../types/game';
+  import {
+    PHOTO_SUBJECTS,
+    FILM_STOCKS,
+    GRADE_COLORS,
+    GRADE_NAMES,
+    SCENE_TYPE_LABELS,
+    SORT_OPTIONS,
+    ALL_TAGS
+  } from '../data/gameData';
   import ScorePanel from './ScorePanel.svelte';
 
   export let photos: ProcessedPhoto[] = [];
@@ -11,6 +19,7 @@
     bestScore: number;
     gradeCounts: Record<string, number>;
   };
+  void statistics;
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -20,6 +29,21 @@
   let selectedPhoto: ProcessedPhoto | null = null;
   let showDeleteConfirm = false;
   let photoToDelete: string | null = null;
+  let showFilters = true;
+
+  const gradesOrder = ['S', 'A', 'B', 'C', 'D'];
+  const gradeWeights: Record<string, number> = { S: 5, A: 4, B: 3, C: 2, D: 1 };
+
+  let filter: AlbumFilter = {
+    subjectIds: [],
+    filmIds: [],
+    sceneTypes: [],
+    grades: [],
+    minScore: 0,
+    maxScore: 100,
+    tags: [],
+    sortBy: 'date_desc'
+  };
 
   function formatDate(ts: number): string {
     return new Date(ts).toLocaleDateString('zh-CN', {
@@ -38,6 +62,10 @@
     return FILM_STOCKS.find(f => f.id === id)?.name || '未知';
   }
 
+  function getSubject(id: string) {
+    return PHOTO_SUBJECTS.find(s => s.id === id);
+  }
+
   function confirmDelete(id: string) {
     photoToDelete = id;
     showDeleteConfirm = true;
@@ -52,29 +80,315 @@
     selectedPhoto = null;
   }
 
-  const gradesOrder = ['S', 'A', 'B', 'C', 'D'];
+  function toggleArrayValue(arr: string[], value: string): string[] {
+    return arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
+  }
+
+  function toggleSubject(id: string) {
+    filter = { ...filter, subjectIds: toggleArrayValue(filter.subjectIds, id) };
+  }
+
+  function toggleFilm(id: string) {
+    filter = { ...filter, filmIds: toggleArrayValue(filter.filmIds, id) };
+  }
+
+  function toggleSceneType(type: string) {
+    filter = { ...filter, sceneTypes: toggleArrayValue(filter.sceneTypes, type) };
+  }
+
+  function toggleGrade(grade: string) {
+    filter = { ...filter, grades: toggleArrayValue(filter.grades, grade) };
+  }
+
+  function toggleTag(tag: string) {
+    filter = { ...filter, tags: toggleArrayValue(filter.tags, tag) };
+  }
+
+  function setSortBy(sort: string) {
+    filter = { ...filter, sortBy: sort as SortOption };
+  }
+
+  function resetFilters() {
+    filter = {
+      subjectIds: [],
+      filmIds: [],
+      sceneTypes: [],
+      grades: [],
+      minScore: 0,
+      maxScore: 100,
+      tags: [],
+      sortBy: 'date_desc'
+    };
+  }
+
+  function hasActiveFilters(): boolean {
+    return (
+      filter.subjectIds.length > 0 ||
+      filter.filmIds.length > 0 ||
+      filter.sceneTypes.length > 0 ||
+      filter.grades.length > 0 ||
+      filter.tags.length > 0 ||
+      filter.minScore > 0 ||
+      filter.maxScore < 100
+    );
+  }
+
+  function getPhotoTags(photo: ProcessedPhoto): string[] {
+    if (photo.tags && photo.tags.length > 0) return photo.tags;
+    const subject = getSubject(photo.subjectId);
+    return subject?.tags || [];
+  }
+
+  $: filteredPhotos = (() => {
+    let result = [...photos];
+
+    if (filter.subjectIds.length > 0) {
+      result = result.filter(p => filter.subjectIds.includes(p.subjectId));
+    }
+
+    if (filter.filmIds.length > 0) {
+      result = result.filter(p => filter.filmIds.includes(p.filmId));
+    }
+
+    if (filter.sceneTypes.length > 0) {
+      result = result.filter(p => {
+        const subject = getSubject(p.subjectId);
+        return subject && filter.sceneTypes.includes(subject.sceneType);
+      });
+    }
+
+    if (filter.grades.length > 0) {
+      result = result.filter(p => filter.grades.includes(p.details.grade));
+    }
+
+    if (filter.minScore > 0) {
+      result = result.filter(p => p.score >= filter.minScore);
+    }
+
+    if (filter.maxScore < 100) {
+      result = result.filter(p => p.score <= filter.maxScore);
+    }
+
+    if (filter.tags.length > 0) {
+      result = result.filter(p => {
+        const tags = getPhotoTags(p);
+        return filter.tags.some(t => tags.includes(t));
+      });
+    }
+
+    switch (filter.sortBy) {
+      case 'date_desc':
+        result.sort((a, b) => b.timestamp - a.timestamp);
+        break;
+      case 'date_asc':
+        result.sort((a, b) => a.timestamp - b.timestamp);
+        break;
+      case 'score_desc':
+        result.sort((a, b) => b.score - a.score);
+        break;
+      case 'score_asc':
+        result.sort((a, b) => a.score - b.score);
+        break;
+      case 'grade_desc':
+        result.sort((a, b) => gradeWeights[b.details.grade] - gradeWeights[a.details.grade]);
+        break;
+    }
+
+    return result;
+  })();
+
+  $: filteredStats = (() => {
+    if (filteredPhotos.length === 0) {
+      return { total: 0, avgScore: 0, bestScore: 0, gradeCounts: { S: 0, A: 0, B: 0, C: 0, D: 0 } };
+    }
+    const total = filteredPhotos.length;
+    const avgScore = Math.round(filteredPhotos.reduce((sum, p) => sum + p.score, 0) / total);
+    const bestScore = Math.max(...filteredPhotos.map(p => p.score));
+    const gradeCounts: Record<string, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+    filteredPhotos.forEach(p => { gradeCounts[p.details.grade]++; });
+    return { total, avgScore, bestScore, gradeCounts };
+  })();
+
+  $: activeFilterCount =
+    filter.subjectIds.length +
+    filter.filmIds.length +
+    filter.sceneTypes.length +
+    filter.grades.length +
+    filter.tags.length +
+    (filter.minScore > 0 ? 1 : 0) +
+    (filter.maxScore < 100 ? 1 : 0);
 </script>
 
 <div class="album-overlay">
   <div class="album-container">
     <div class="album-header">
-      <h2 class="album-title">📚 我的照片册</h2>
-      <button class="close-btn" on:click={() => dispatch('close')}>
-        <span>✕</span>
-      </button>
+      <div class="header-left">
+        <h2 class="album-title">📚 我的照片册</h2>
+        {#if activeFilterCount > 0}
+          <span class="filter-badge">{activeFilterCount} 个筛选条件</span>
+        {/if}
+      </div>
+      <div class="header-right">
+        <button class="filter-toggle" on:click={() => showFilters = !showFilters}>
+          <span>{showFilters ? '收起筛选' : '展开筛选'}</span>
+          <span class="toggle-icon">{showFilters ? '▲' : '▼'}</span>
+        </button>
+        <button class="close-btn" on:click={() => dispatch('close')}>
+          <span>✕</span>
+        </button>
+      </div>
     </div>
+
+    {#if showFilters}
+      <div class="filters-section">
+        <div class="filter-row">
+          <div class="filter-block">
+            <div class="filter-label">题材类型</div>
+            <div class="chip-group">
+              {#each Object.entries(SCENE_TYPE_LABELS) as [type, label] (type)}
+                <button
+                  class="chip"
+                  class:active={filter.sceneTypes.includes(type)}
+                  on:click={() => toggleSceneType(type)}
+                >
+                  {label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-row">
+          <div class="filter-block">
+            <div class="filter-label">具体题材</div>
+            <div class="chip-group">
+              {#each PHOTO_SUBJECTS as subject (subject.id)}
+                <button
+                  class="chip"
+                  class:active={filter.subjectIds.includes(subject.id)}
+                  on:click={() => toggleSubject(subject.id)}
+                  title={subject.description}
+                >
+                  {subject.name}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-row">
+          <div class="filter-block">
+            <div class="filter-label">胶片类型</div>
+            <div class="chip-group">
+              {#each FILM_STOCKS as film (film.id)}
+                <button
+                  class="chip"
+                  class:active={filter.filmIds.includes(film.id)}
+                  on:click={() => toggleFilm(film.id)}
+                  title={film.description}
+                >
+                  <span class="film-dot" style="background: {film.thumbnailColor};"></span>
+                  {film.name}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-row multi-row">
+          <div class="filter-block">
+            <div class="filter-label">等级</div>
+            <div class="chip-group">
+              {#each gradesOrder as g (g)}
+                <button
+                  class="chip grade-chip"
+                  class:active={filter.grades.includes(g)}
+                  style="--grade-color: {GRADE_COLORS[g]};"
+                  on:click={() => toggleGrade(g)}
+                >
+                  {g}
+                </button>
+              {/each}
+            </div>
+          </div>
+
+          <div class="filter-block">
+            <div class="filter-label">分数范围</div>
+            <div class="score-range">
+              <input
+                type="number"
+                class="range-input"
+                bind:value={filter.minScore}
+                min="0"
+                max="100"
+                placeholder="最低"
+              />
+              <span class="range-sep">~</span>
+              <input
+                type="number"
+                class="range-input"
+                bind:value={filter.maxScore}
+                min="0"
+                max="100"
+                placeholder="最高"
+              />
+            </div>
+          </div>
+
+          <div class="filter-block">
+            <div class="filter-label">排序</div>
+            <div class="chip-group">
+              {#each SORT_OPTIONS as opt (opt.value)}
+                <button
+                  class="chip"
+                  class:active={filter.sortBy === opt.value}
+                  on:click={() => setSortBy(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-row">
+          <div class="filter-block">
+            <div class="filter-label">标签</div>
+            <div class="chip-group">
+              {#each ALL_TAGS as tag (tag)}
+                <button
+                  class="chip tag-chip"
+                  class:active={filter.tags.includes(tag)}
+                  on:click={() => toggleTag(tag)}
+                >
+                  # {tag}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </div>
+
+        {#if hasActiveFilters()}
+          <div class="filter-actions">
+            <button class="reset-filters-btn" on:click={resetFilters}>
+              <span>✕</span> 清除所有筛选
+            </button>
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-value">{statistics.total}</div>
-        <div class="stat-label">总作品</div>
+        <div class="stat-value">{filteredStats.total}</div>
+        <div class="stat-label">{hasActiveFilters() ? '筛选结果' : '总作品'}</div>
       </div>
       <div class="stat-card highlight">
-        <div class="stat-value">{statistics.avgScore}</div>
+        <div class="stat-value">{filteredStats.avgScore}</div>
         <div class="stat-label">平均分</div>
       </div>
       <div class="stat-card gold">
-        <div class="stat-value">{statistics.bestScore}</div>
+        <div class="stat-value">{filteredStats.bestScore}</div>
         <div class="stat-label">最高分</div>
       </div>
       <div class="stat-card grades-card">
@@ -82,7 +396,7 @@
           {#each gradesOrder as g (g)}
             <div class="grade-mini-item" style="--c: {GRADE_COLORS[g]};">
               <span class="gm-letter">{g}</span>
-              <span class="gm-count">{statistics.gradeCounts[g] || 0}</span>
+              <span class="gm-count">{filteredStats.gradeCounts[g] || 0}</span>
             </div>
           {/each}
         </div>
@@ -99,9 +413,18 @@
           开始创作
         </button>
       </div>
+    {:else if filteredPhotos.length === 0}
+      <div class="empty-album">
+        <div class="empty-icon">🔍</div>
+        <h3 class="empty-title">没有匹配的作品</h3>
+        <p class="empty-desc">试试调整筛选条件，或者清除筛选查看全部作品</p>
+        <button class="go-create-btn" on:click={resetFilters}>
+          清除筛选
+        </button>
+      </div>
     {:else}
       <div class="photos-grid">
-        {#each photos as photo (photo.id)}
+        {#each filteredPhotos as photo (photo.id)}
           <div class="photo-card" on:click={() => selectedPhoto = photo}>
             <div class="photo-image-wrap">
               <img src={photo.imageDataUrl} alt={getSubjectName(photo.subjectId)} class="photo-image" />
@@ -121,6 +444,16 @@
                 <span class="meta-film">{getFilmName(photo.filmId)}</span>
                 <span class="meta-date">{formatDate(photo.timestamp)}</span>
               </div>
+              {#if getPhotoTags(photo).length > 0}
+                <div class="photo-tags">
+                  {#each getPhotoTags(photo).slice(0, 3) as tag (tag)}
+                    <span class="photo-tag">#{tag}</span>
+                  {/each}
+                  {#if getPhotoTags(photo).length > 3}
+                    <span class="photo-tag more">+{getPhotoTags(photo).length - 3}</span>
+                  {/if}
+                </div>
+              {/if}
             </div>
             <div class="photo-actions">
               <button
@@ -142,6 +475,25 @@
       <div class="modal-inner" on:click|stopPropagation>
         <div class="detail-image-wrap">
           <img src={selectedPhoto.imageDataUrl} alt="" class="detail-image" />
+          {#if getPhotoTags(selectedPhoto).length > 0}
+            <div class="detail-tags">
+              {#each getPhotoTags(selectedPhoto) as tag (tag)}
+                <button
+                  class="detail-tag"
+                  on:click={() => {
+                    if (!filter.tags.includes(tag)) {
+                      filter = { ...filter, tags: [...filter.tags, tag] };
+                    }
+                    selectedPhoto = null;
+                    showFilters = true;
+                  }}
+                  title="点击筛选此标签"
+                >
+                  #{tag}
+                </button>
+              {/each}
+            </div>
+          {/if}
         </div>
         <div class="detail-panel-wrap">
           <ScorePanel
@@ -193,7 +545,7 @@
     border-radius: 16px;
     padding: 24px;
     width: 100%;
-    max-width: 1100px;
+    max-width: 1200px;
     max-height: 92vh;
     overflow-y: auto;
     animation: slideUp 0.4s ease;
@@ -211,11 +563,56 @@
     margin-bottom: 20px;
   }
 
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
   .album-title {
     font-size: 24px;
     color: #f0d8a8;
     margin: 0;
     letter-spacing: 3px;
+  }
+
+  .filter-badge {
+    padding: 4px 12px;
+    background: linear-gradient(135deg, rgba(139, 90, 43, 0.4), rgba(100, 60, 30, 0.3));
+    border: 1px solid rgba(200, 150, 80, 0.3);
+    border-radius: 12px;
+    font-size: 11px;
+    color: #d4a574;
+    letter-spacing: 0.5px;
+  }
+
+  .filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(139, 90, 43, 0.15);
+    border: 1px solid rgba(139, 90, 43, 0.25);
+    border-radius: 8px;
+    color: #b8a878;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+
+  .filter-toggle:hover {
+    background: rgba(139, 90, 43, 0.25);
+    color: #e0c890;
+  }
+
+  .toggle-icon {
+    font-size: 10px;
+    opacity: 0.7;
   }
 
   .close-btn {
@@ -232,6 +629,164 @@
     background: rgba(160, 80, 80, 0.3);
     color: #e08080;
     transform: rotate(90deg);
+  }
+
+  .filters-section {
+    margin-bottom: 20px;
+    padding: 16px 20px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(139, 90, 43, 0.15);
+    border-radius: 12px;
+    animation: expandDown 0.3s ease;
+  }
+
+  @keyframes expandDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .filter-row {
+    margin-bottom: 14px;
+  }
+
+  .filter-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .filter-row.multi-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  @media (max-width: 900px) {
+    .filter-row.multi-row {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .filter-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .filter-label {
+    font-size: 11px;
+    color: #8a7a5a;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .chip {
+    padding: 6px 12px;
+    background: rgba(60, 40, 25, 0.4);
+    border: 1px solid rgba(139, 90, 43, 0.2);
+    border-radius: 14px;
+    font-size: 12px;
+    color: #a89878;
+    transition: all 0.2s;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .chip:hover {
+    background: rgba(100, 70, 40, 0.5);
+    border-color: rgba(200, 150, 80, 0.35);
+    color: #d4c090;
+  }
+
+  .chip.active {
+    background: linear-gradient(135deg, rgba(139, 90, 43, 0.6), rgba(100, 60, 30, 0.5));
+    border-color: rgba(230, 180, 100, 0.5);
+    color: #f0d8a8;
+  }
+
+  .chip.grade-chip {
+    min-width: 36px;
+    justify-content: center;
+    font-weight: bold;
+    padding: 6px 10px;
+  }
+
+  .chip.grade-chip.active {
+    background: var(--grade-color);
+    color: #1a0f0a;
+    border-color: var(--grade-color);
+  }
+
+  .chip.tag-chip {
+    font-size: 11px;
+  }
+
+  .film-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+  }
+
+  .score-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .range-input {
+    width: 72px;
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(139, 90, 43, 0.25);
+    border-radius: 6px;
+    color: #e0d0b0;
+    font-size: 13px;
+    font-family: 'SF Mono', Monaco, monospace;
+    text-align: center;
+  }
+
+  .range-input:focus {
+    outline: none;
+    border-color: rgba(200, 150, 80, 0.5);
+  }
+
+  .range-sep {
+    color: #6a5a45;
+    font-size: 14px;
+  }
+
+  .filter-actions {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(139, 90, 43, 0.15);
+    display: flex;
+    justify-content: center;
+  }
+
+  .reset-filters-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    background: rgba(160, 80, 80, 0.15);
+    border: 1px solid rgba(200, 100, 100, 0.25);
+    border-radius: 8px;
+    color: #d89080;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+
+  .reset-filters-btn:hover {
+    background: rgba(200, 80, 80, 0.25);
+    border-color: rgba(220, 100, 100, 0.4);
   }
 
   .stats-row {
@@ -364,6 +919,8 @@
     overflow: hidden;
     cursor: pointer;
     transition: all 0.25s ease;
+    display: flex;
+    flex-direction: column;
   }
 
   .photo-card:hover {
@@ -420,13 +977,16 @@
 
   .photo-info {
     padding: 10px 12px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .photo-name {
     font-size: 13px;
     color: #e0d0b0;
     font-weight: 500;
-    margin-bottom: 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -446,6 +1006,28 @@
   .meta-date {
     font-size: 10px;
     color: #5a4a35;
+  }
+
+  .photo-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 2px;
+  }
+
+  .photo-tag {
+    font-size: 9px;
+    padding: 2px 6px;
+    background: rgba(139, 90, 43, 0.2);
+    border: 1px solid rgba(139, 90, 43, 0.25);
+    border-radius: 8px;
+    color: #b89868;
+  }
+
+  .photo-tag.more {
+    background: rgba(100, 100, 100, 0.2);
+    color: #8a7a5a;
+    border-color: rgba(100, 100, 100, 0.3);
   }
 
   .photo-actions {
@@ -489,7 +1071,7 @@
     display: grid;
     grid-template-columns: minmax(280px, 1fr) minmax(320px, 420px);
     gap: 24px;
-    max-width: 900px;
+    max-width: 950px;
     max-height: 90vh;
     align-items: start;
   }
@@ -514,6 +1096,31 @@
     display: block;
     width: 100%;
     height: auto;
+  }
+
+  .detail-tags {
+    padding: 10px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    border-top: 1px solid rgba(139, 90, 43, 0.2);
+  }
+
+  .detail-tag {
+    font-size: 11px;
+    padding: 4px 10px;
+    background: rgba(139, 90, 43, 0.18);
+    border: 1px solid rgba(139, 90, 43, 0.3);
+    border-radius: 10px;
+    color: #c8a878;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .detail-tag:hover {
+    background: rgba(180, 120, 60, 0.3);
+    border-color: rgba(220, 170, 100, 0.5);
+    color: #f0d8a8;
   }
 
   .detail-panel-wrap {

@@ -21,6 +21,7 @@ export interface PhotoSubject {
   baseBrightness: number;
   keyAreas: KeyArea[];
   seed: number;
+  tags: string[];
 }
 
 export interface KeyArea {
@@ -53,6 +54,20 @@ export interface ProcessedPhoto {
   imageDataUrl: string;
   timestamp: number;
   notes?: string;
+  tags?: string[];
+}
+
+export type SortOption = 'date_desc' | 'date_asc' | 'score_desc' | 'score_asc' | 'grade_desc';
+
+export interface AlbumFilter {
+  subjectIds: string[];
+  filmIds: string[];
+  sceneTypes: string[];
+  grades: string[];
+  minScore: number;
+  maxScore: number;
+  tags: string[];
+  sortBy: SortOption;
 }
 
 export interface ScoreDetail {
