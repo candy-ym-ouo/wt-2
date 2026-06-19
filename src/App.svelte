@@ -20,6 +20,7 @@
   import PhotoCompareView from './components/PhotoCompareView.svelte';
   import StorageStatusBar from './components/StorageStatusBar.svelte';
   import AchievementPanel from './components/AchievementPanel.svelte';
+  import OrderManagement from './components/OrderManagement.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -32,6 +33,7 @@
   let showAchievements = false;
   let achievementNotifications: { id: string; name: string; icon: string; title: string; timestamp: number }[] = [];
   let notificationTimer: number | null = null;
+  let showOrders = false;
 
   let unsubscribe: () => void;
   let currentState: GameState;
@@ -461,6 +463,16 @@
     </div>
     <div class="header-actions">
       <button
+        class="header-btn orders"
+        on:click={() => showOrders = true}
+        title="委托订单"
+      >
+        <span>📋</span>
+        {#if $gameStore.orders.length > 0}
+          <span class="badge">{$gameStore.orders.length}</span>
+        {/if}
+      </button>
+      <button
         class="header-btn achievement"
         on:click={() => showAchievements = true}
         title="成就任务"
@@ -616,6 +628,10 @@
 
   {#if showAchievements}
     <AchievementPanel on:close={() => showAchievements = false} />
+  {/if}
+
+  {#if showOrders}
+    <OrderManagement onClose={() => showOrders = false} />
   {/if}
 
   {#if achievementNotifications.length > 0}

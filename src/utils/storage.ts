@@ -1,10 +1,11 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 
 export const CURRENT_STORAGE_VERSION = 3;
 export const MAX_PHOTOS = 100;
 export const MAX_PRESETS = 50;
 export const MAX_COLLECTIONS = 20;
+export const MAX_ORDERS = 50;
 export const STORAGE_QUOTA_WARNING = 0.8;
 export const BACKUP_COUNT = 3;
 
@@ -29,7 +30,7 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
@@ -37,7 +38,8 @@ const KEY_MAP: Record<StorageKey, string> = {
   tutorial: 'darkroom_tutorial',
   favorites: 'darkroom_favorites',
   collections: 'darkroom_collections',
-  achievements: 'darkroom_achievements'
+  achievements: 'darkroom_achievements',
+  orders: 'darkroom_orders'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -327,6 +329,23 @@ function validateCollection(collection: unknown): collection is PhotoCollection 
   );
 }
 
+function validateOrder(order: unknown): order is DarkroomOrder {
+  if (typeof order !== 'object' || order === null) return false;
+  const o = order as Record<string, unknown>;
+  return (
+    typeof o.id === 'string' &&
+    typeof o.orderNumber === 'string' &&
+    typeof o.customer === 'object' && o.customer !== null &&
+    typeof o.requirements === 'object' && o.requirements !== null &&
+    typeof o.status === 'string' &&
+    typeof o.priority === 'string' &&
+    Array.isArray(o.matchedFilms) &&
+    Array.isArray(o.photoIds) &&
+    typeof o.createdAt === 'number' &&
+    typeof o.updatedAt === 'number'
+  );
+}
+
 function validateAchievementState(data: unknown): data is AchievementState {
   if (typeof data !== 'object' || data === null) return false;
   const a = data as Record<string, unknown>;
@@ -364,6 +383,11 @@ function validateData<T>(key: StorageKey, data: unknown): T | null {
     case 'collections': {
       const arr = data as unknown[];
       const valid = arr.filter(validateCollection);
+      return valid as T;
+    }
+    case 'orders': {
+      const arr = data as unknown[];
+      const valid = arr.filter(validateOrder);
       return valid as T;
     }
     case 'achievements': {
@@ -477,6 +501,15 @@ export function enforceLimits<T>(key: StorageKey, data: T): T {
         return collections
           .sort((a, b) => b.updatedAt - a.updatedAt)
           .slice(0, MAX_COLLECTIONS) as T;
+      }
+      return data;
+    }
+    case 'orders': {
+      const orders = data as DarkroomOrder[];
+      if (orders.length > MAX_ORDERS) {
+        return orders
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .slice(0, MAX_ORDERS) as T;
       }
       return data;
     }
@@ -596,4 +629,36 @@ export function loadSavedAchievements(): AchievementState {
 
 export function saveAchievements(state: AchievementState): boolean {
   return saveWithBackup('achievements', state, 1);
+}
+
+export function repairOrders(orders: DarkroomOrder[], validPhotoIds: string[]): DarkroomOrder[] {
+  return orders
+    .filter(order => validateOrder(order))
+    .map(order => ({
+      ...order,
+      photoIds: order.photoIds.filter(id => validPhotoIds.includes(id)),
+      matchedFilms: order.matchedFilms || [],
+      internalNotes: order.internalNotes || ''
+    }));
+}
+
+export function loadSavedOrders(): { orders: DarkroomOrder[]; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<DarkroomOrder[]>('orders', []);
+  const status: Partial<StorageStatus> = {
+    ordersLoaded: result.success ? (result.data?.length || 0) : 0
+  };
+  
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+  
+  return { orders: result.data || [], status };
+}
+
+export function saveOrders(orders: DarkroomOrder[]): boolean {
+  const limited = enforceLimits('orders', orders);
+  return saveWithBackup('orders', limited, limited.length);
 }

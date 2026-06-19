@@ -266,6 +266,10 @@ export interface GameState {
   storageStatus: StorageStatus;
   attemptHistory: AttemptRecord[];
   achievements: AchievementState;
+  orders: DarkroomOrder[];
+  currentOrderId: string | null;
+  orderFilter: OrderFilter;
+  orderScheduleSlots: ScheduleSlot[];
 }
 
 export type TutorialUnlockCondition = 
@@ -330,6 +334,7 @@ export interface StorageStatus {
   tutorialLoaded: boolean;
   favoritesLoaded: number;
   collectionsLoaded: number;
+  ordersLoaded: number;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -341,6 +346,7 @@ export interface StorageStatus {
     presets: number;
     favorites: number;
     collections: number;
+    orders: number;
   };
 }
 
@@ -488,4 +494,103 @@ export interface CollectionFilter {
   viewMode: AlbumViewMode;
   activeCollectionId: string | null;
   activeGroupId: string | null;
+}
+
+export type OrderStatus = 'pending' | 'matched' | 'scheduled' | 'developing' | 'scoring' | 'completed' | 'archived';
+
+export type OrderPriority = 'low' | 'normal' | 'high' | 'urgent';
+
+export interface CustomerInfo {
+  name: string;
+  contact?: string;
+  notes?: string;
+}
+
+export interface OrderRequirements {
+  sceneType: string;
+  targetStyle: TargetStyle;
+  difficulty: DifficultyLevel;
+  preferredFilmType?: 'bw' | 'color' | 'any';
+  preferredIso?: 'low' | 'medium' | 'high' | 'any';
+  grainPreference?: 'fine' | 'medium' | 'coarse' | 'any';
+  specialInstructions?: string;
+  budget?: number;
+  quantity: number;
+}
+
+export interface FilmMatch {
+  filmId: string;
+  matchScore: number;
+  matchReasons: string[];
+  isRecommended: boolean;
+}
+
+export interface ScheduleSlot {
+  id: string;
+  date: number;
+  timeSlot: 'morning' | 'afternoon' | 'evening';
+  capacity: number;
+  filled: number;
+}
+
+export interface OrderSchedule {
+  slotId: string;
+  scheduledAt: number;
+  estimatedDuration: number;
+  developer: string;
+}
+
+export interface OrderScoreFeedback {
+  overallRating: number;
+  qualityRating: number;
+  speedRating: number;
+  serviceRating: number;
+  comment?: string;
+  wouldRecommend: boolean;
+  ratedAt: number;
+}
+
+export interface ArchiveInfo {
+  archivedAt: number;
+  albumCollectionId?: string;
+  archiveNotes?: string;
+}
+
+export interface DarkroomOrder {
+  id: string;
+  orderNumber: string;
+  customer: CustomerInfo;
+  requirements: OrderRequirements;
+  status: OrderStatus;
+  priority: OrderPriority;
+  matchedFilms: FilmMatch[];
+  selectedFilmId?: string;
+  selectedSubjectId?: string;
+  schedule?: OrderSchedule;
+  photoIds: string[];
+  scoreFeedback?: OrderScoreFeedback;
+  archiveInfo?: ArchiveInfo;
+  internalNotes?: string;
+  createdAt: number;
+  updatedAt: number;
+  completedAt?: number;
+}
+
+export interface OrderFilter {
+  statuses: OrderStatus[];
+  priorities: OrderPriority[];
+  searchKeyword: string;
+  dateFrom?: number;
+  dateTo?: number;
+  sortBy: 'created_desc' | 'created_asc' | 'priority_desc' | 'status';
+}
+
+export interface OrderStatistics {
+  total: number;
+  pending: number;
+  developing: number;
+  completed: number;
+  archived: number;
+  avgTurnaroundTime: number;
+  avgCustomerRating: number;
 }

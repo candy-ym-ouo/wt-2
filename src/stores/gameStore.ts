@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS } from '../data/gameData';
 import { generateId } from '../utils/math';
 import {
@@ -18,9 +18,13 @@ import {
   MAX_PHOTOS,
   MAX_PRESETS,
   MAX_COLLECTIONS,
+  MAX_ORDERS,
   loadSavedAchievements,
   saveAchievements,
-  createDefaultAchievementState
+  createDefaultAchievementState,
+  loadSavedOrders,
+  saveOrders,
+  repairOrders
 } from '../utils/storage';
 
 function createInitialStageState(): StageState {
@@ -83,6 +87,7 @@ function createInitialStorageStatus(): StorageStatus {
     tutorialLoaded: false,
     favoritesLoaded: 0,
     collectionsLoaded: 0,
+    ordersLoaded: 0,
     lastSaveSuccess: true,
     storageUsed: info.used,
     storageQuota: info.quota,
@@ -92,7 +97,8 @@ function createInitialStorageStatus(): StorageStatus {
       photos: 0,
       presets: 0,
       favorites: 0,
-      collections: 0
+      collections: 0,
+      orders: 0
     }
   };
 }
@@ -286,6 +292,181 @@ function canGoToStep(state: GameState, targetStep: number): { canGo: boolean; re
   return { canGo: true };
 }
 
+function generateDefaultScheduleSlots(): ScheduleSlot[] {
+  const slots: ScheduleSlot[] = [];
+  const now = new Date();
+  const timeSlots: Array<'morning' | 'afternoon' | 'evening'> = ['morning', 'afternoon', 'evening'];
+  
+  for (let day = 0; day < 7; day++) {
+    const date = new Date(now);
+    date.setDate(date.getDate() + day);
+    date.setHours(0, 0, 0, 0);
+    
+    timeSlots.forEach((timeSlot, idx) => {
+      slots.push({
+        id: `slot_${date.getTime()}_${timeSlot}`,
+        date: date.getTime(),
+        timeSlot,
+        capacity: 3,
+        filled: Math.floor(Math.random() * 2)
+      });
+    });
+  }
+  
+  return slots;
+}
+
+function matchFilmsForOrder(requirements: OrderRequirements): FilmMatch[] {
+  const matches: FilmMatch[] = [];
+  
+  FILM_STOCKS.forEach(film => {
+    let score = 0;
+    const reasons: string[] = [];
+    
+    if (requirements.preferredFilmType === 'bw' && film.color === 'bw') {
+      score += 25;
+      reasons.push('符合黑白胶片偏好');
+    } else if (requirements.preferredFilmType === 'color' && film.color === 'color') {
+      score += 25;
+      reasons.push('符合彩色胶片偏好');
+    } else if (requirements.preferredFilmType === 'any' || !requirements.preferredFilmType) {
+      score += 10;
+    }
+    
+    const isoLevel = film.iso <= 100 ? 'low' : film.iso <= 400 ? 'medium' : 'high';
+    if (requirements.preferredIso === isoLevel) {
+      score += 20;
+      reasons.push(`ISO ${film.iso} 符合感光度偏好`);
+    } else if (requirements.preferredIso === 'any' || !requirements.preferredIso) {
+      score += 8;
+    }
+    
+    const grainLevel = film.grainSize <= 0.3 ? 'fine' : film.grainSize <= 0.6 ? 'medium' : 'coarse';
+    if (requirements.grainPreference === grainLevel) {
+      score += 15;
+      reasons.push('颗粒感符合偏好');
+    } else if (requirements.grainPreference === 'any' || !requirements.grainPreference) {
+      score += 5;
+    }
+    
+    if (requirements.targetStyle) {
+      const styleMatch = calculateStyleMatch(film, requirements.targetStyle);
+      score += styleMatch.score;
+      if (styleMatch.reason) {
+        reasons.push(styleMatch.reason);
+      }
+    }
+    
+    const difficultyScore = calculateDifficultyFit(film, requirements.difficulty);
+    score += difficultyScore.score;
+    if (difficultyScore.reason) {
+      reasons.push(difficultyScore.reason);
+    }
+    
+    matches.push({
+      filmId: film.id,
+      matchScore: Math.min(100, Math.max(0, score)),
+      matchReasons: reasons,
+      isRecommended: score >= 60
+    });
+  });
+  
+  return matches.sort((a, b) => b.matchScore - a.matchScore);
+}
+
+function calculateStyleMatch(film: { baseContrast: number; baseSaturation: number; color: string; grainSize?: number }, style: string): { score: number; reason?: string } {
+  let score = 0;
+  let reason = '';
+  
+  switch (style) {
+    case 'soft':
+      if (film.baseContrast < 0.6) {
+        score += 15;
+        reason = '低反差适合柔和风格';
+      }
+      if (film.baseSaturation < 0.6) {
+        score += 10;
+      }
+      break;
+    case 'vivid':
+      if (film.baseSaturation >= 0.7) {
+        score += 18;
+        reason = '高饱和度适合鲜艳风格';
+      }
+      if (film.baseContrast >= 0.65) {
+        score += 7;
+      }
+      break;
+    case 'dramatic':
+      if (film.baseContrast >= 0.7) {
+        score += 15;
+        reason = '高反差适合戏剧风格';
+      }
+      break;
+    case 'retro':
+      if (film.baseSaturation >= 0.5 && film.baseSaturation <= 0.7) {
+        score += 12;
+        reason = '中等饱和度适合复古风格';
+      }
+      break;
+    case 'moody':
+      if (film.baseContrast >= 0.65) {
+        score += 12;
+        reason = '高反差有助于营造氛围感';
+      }
+      break;
+    case 'clean':
+      if (film.grainSize !== undefined && film.grainSize <= 0.35) {
+        score += 15;
+        reason = '细颗粒适合干净风格';
+      }
+      break;
+    case 'warm':
+      if (film.color === 'color') {
+        score += 10;
+        reason = '彩色胶片适合暖调表现';
+      }
+      break;
+    case 'cool':
+      if (film.color === 'color') {
+        score += 8;
+      }
+      break;
+    default:
+      score += 5;
+  }
+  
+  return { score, reason: reason || undefined };
+}
+
+function calculateDifficultyFit(film: { iso: number; baseContrast: number }, difficulty: number): { score: number; reason?: string } {
+  let score = 0;
+  let reason = '';
+  
+  if (difficulty <= 2) {
+    if (film.iso >= 200 && film.iso <= 800) {
+      score += 12;
+      reason = '中感光度易于上手';
+    }
+  } else if (difficulty >= 4) {
+    if (film.iso >= 1600 || film.iso <= 100) {
+      score += 12;
+      reason = '极端感光度更具挑战性';
+    }
+  } else {
+    score += 8;
+  }
+  
+  return { score, reason: reason || undefined };
+}
+
+function generateOrderNumber(): string {
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `DR-${dateStr}-${random}`;
+}
+
 function createInitialGameState(): GameState {
   const tutorialResult = loadSavedTutorialState();
   const photosResult = loadSavedPhotos();
@@ -295,6 +476,7 @@ function createInitialGameState(): GameState {
   const favoritesResult = loadSavedFavorites(validPhotoIds);
   const collectionsResult = loadSavedCollections(validPhotoIds);
   const achievementsResult = loadSavedAchievements();
+  const ordersResult = loadSavedOrders();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -305,17 +487,20 @@ function createInitialGameState(): GameState {
   storageStatus.presetsLoaded = presetsResult.status.presetsLoaded || 0;
   storageStatus.favoritesLoaded = favoritesResult.status.favoritesLoaded || 0;
   storageStatus.collectionsLoaded = collectionsResult.status.collectionsLoaded || 0;
+  storageStatus.ordersLoaded = ordersResult.status.ordersLoaded || 0;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
     tutorialResult.status.migrationPerformed ||
     favoritesResult.status.migrationPerformed ||
-    collectionsResult.status.migrationPerformed);
+    collectionsResult.status.migrationPerformed ||
+    ordersResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
     tutorialResult.status.recoveryPerformed ||
     favoritesResult.status.recoveryPerformed ||
-    collectionsResult.status.recoveryPerformed);
+    collectionsResult.status.recoveryPerformed ||
+    ordersResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
@@ -328,6 +513,9 @@ function createInitialGameState(): GameState {
   }
   if (collectionsResult.status.corruptedItems?.collections) {
     storageStatus.corruptedItems.collections = collectionsResult.status.corruptedItems.collections;
+  }
+  if (ordersResult.status.corruptedItems?.orders) {
+    storageStatus.corruptedItems.orders = ordersResult.status.corruptedItems.orders;
   }
   
   const warnings: StorageWarning[] = [];
@@ -352,13 +540,14 @@ function createInitialGameState(): GameState {
   const corruptedCount = storageStatus.corruptedItems.photos + 
     storageStatus.corruptedItems.presets + 
     storageStatus.corruptedItems.favorites + 
-    storageStatus.corruptedItems.collections;
+    storageStatus.corruptedItems.collections +
+    storageStatus.corruptedItems.orders;
   if (corruptedCount > 0) {
     warnings.push({
       type: 'corrupted',
       message: `发现 ${corruptedCount} 个损坏数据项，已自动清理`,
       timestamp: now,
-      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个`
+      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个, 订单: ${storageStatus.corruptedItems.orders} 个`
     });
   }
   
@@ -371,6 +560,8 @@ function createInitialGameState(): GameState {
   }
   
   storageStatus.warnings = warnings;
+
+  const scheduleSlots = generateDefaultScheduleSlots();
 
   return {
     currentSubject: null,
@@ -405,7 +596,16 @@ function createInitialGameState(): GameState {
     quickBrowsePhotoIds: [],
     storageStatus,
     attemptHistory: [],
-    achievements: achievementsResult
+    achievements: achievementsResult,
+    orders: ordersResult.orders,
+    currentOrderId: null,
+    orderFilter: {
+      statuses: [],
+      priorities: [],
+      searchKeyword: '',
+      sortBy: 'created_desc'
+    },
+    orderScheduleSlots: scheduleSlots
   };
 }
 
@@ -1723,7 +1923,321 @@ function createGameStore() {
     reset: () => {
       const newState = createInitialGameState();
       set(newState);
-    }
+    },
+
+    createOrder: (customer: CustomerInfo, requirements: OrderRequirements, priority: OrderPriority = 'normal'): string | null => {
+      let newOrderId: string | null = null;
+      
+      const updateFn = (state: GameState): GameState => {
+        if (state.orders.length >= MAX_ORDERS) {
+          return state;
+        }
+        
+        const now = Date.now();
+        const matchedFilms = matchFilmsForOrder(requirements);
+        const recommendedFilm = matchedFilms.find(f => f.isRecommended);
+        
+        const newOrder: DarkroomOrder = {
+          id: generateId(),
+          orderNumber: generateOrderNumber(),
+          customer: { ...customer },
+          requirements: { ...requirements },
+          status: 'pending',
+          priority,
+          matchedFilms,
+          selectedFilmId: recommendedFilm?.filmId,
+          photoIds: [],
+          createdAt: now,
+          updatedAt: now
+        };
+        
+        newOrderId = newOrder.id;
+        const newOrders = [newOrder, ...state.orders];
+        const saveSuccess = saveOrders(newOrders);
+        const info = getStorageInfo();
+        
+        return {
+          ...state,
+          orders: newOrders,
+          currentOrderId: newOrder.id,
+          storageStatus: {
+            ...state.storageStatus,
+            lastSaveSuccess: saveSuccess,
+            lastSaveError: saveSuccess ? undefined : '创建订单失败',
+            ordersLoaded: newOrders.length,
+            storageUsed: info.used,
+            storageQuota: info.quota
+          }
+        };
+      };
+      
+      update(updateFn);
+      return newOrderId;
+    },
+
+    updateOrder: (orderId: string, updates: Partial<DarkroomOrder>) => update(state => {
+      const now = Date.now();
+      const newOrders = state.orders.map(o =>
+        o.id === orderId ? { ...o, ...updates, updatedAt: now } : o
+      );
+      const saveSuccess = saveOrders(newOrders);
+      
+      return {
+        ...state,
+        orders: newOrders,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '更新订单失败'
+        }
+      };
+    }),
+
+    deleteOrder: (orderId: string) => update(state => {
+      const newOrders = state.orders.filter(o => o.id !== orderId);
+      const saveSuccess = saveOrders(newOrders);
+      
+      return {
+        ...state,
+        orders: newOrders,
+        currentOrderId: state.currentOrderId === orderId ? null : state.currentOrderId,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '删除订单失败',
+          ordersLoaded: newOrders.length
+        }
+      };
+    }),
+
+    setCurrentOrder: (orderId: string | null) => update(state => ({
+      ...state,
+      currentOrderId: orderId
+    })),
+
+    selectFilmForOrder: (orderId: string, filmId: string) => update(state => {
+      const now = Date.now();
+      const newOrders = state.orders.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          selectedFilmId: filmId,
+          status: 'matched' as OrderStatus,
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveOrders(newOrders);
+      
+      return {
+        ...state,
+        orders: newOrders,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '选择胶片失败'
+        }
+      };
+    }),
+
+    matchFilms: (requirements: OrderRequirements): FilmMatch[] => {
+      return matchFilmsForOrder(requirements);
+    },
+
+    scheduleOrder: (orderId: string, slotId: string, developer: string = '技师A') => update(state => {
+      const slot = state.orderScheduleSlots.find(s => s.id === slotId);
+      if (!slot || slot.filled >= slot.capacity) return state;
+      
+      const now = Date.now();
+      const estimatedDuration = 30 * 60 * 1000;
+      
+      const newOrders = state.orders.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          status: 'scheduled' as OrderStatus,
+          schedule: {
+            slotId,
+            scheduledAt: slot.date,
+            estimatedDuration,
+            developer
+          },
+          updatedAt: now
+        };
+      });
+      
+      const newSlots = state.orderScheduleSlots.map(s => 
+        s.id === slotId ? { ...s, filled: s.filled + 1 } : s
+      );
+      
+      const saveSuccess = saveOrders(newOrders);
+      
+      return {
+        ...state,
+        orders: newOrders,
+        orderScheduleSlots: newSlots,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '预约排期失败'
+        }
+      };
+    }),
+
+    startOrderDevelopment: (orderId: string, subjectId: string) => update(state => {
+      const now = Date.now();
+      const order = state.orders.find(o => o.id === orderId);
+      if (!order) return state;
+      
+      const newOrders = state.orders.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          status: 'developing' as OrderStatus,
+          selectedSubjectId: subjectId,
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveOrders(newOrders);
+      
+      return {
+        ...state,
+        orders: newOrders,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '开始冲洗失败'
+        }
+      };
+    }),
+
+    completeOrderDevelopment: (orderId: string, photoId: string) => update(state => {
+      const now = Date.now();
+      const order = state.orders.find(o => o.id === orderId);
+      if (!order) return state;
+      
+      const newPhotoIds = [...order.photoIds, photoId];
+      const isAllComplete = newPhotoIds.length >= order.requirements.quantity;
+      
+      const newOrders = state.orders.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          status: isAllComplete ? 'scoring' as OrderStatus : 'developing' as OrderStatus,
+          photoIds: newPhotoIds,
+          updatedAt: now,
+          completedAt: isAllComplete ? now : undefined
+        };
+      });
+      const saveSuccess = saveOrders(newOrders);
+      
+      return {
+        ...state,
+        orders: newOrders,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '完成冲洗失败'
+        }
+      };
+    }),
+
+    submitScoreFeedback: (orderId: string, feedback: Omit<import('../types/game').OrderScoreFeedback, 'ratedAt'>) => update(state => {
+      const now = Date.now();
+      const newOrders = state.orders.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          status: 'completed' as OrderStatus,
+          scoreFeedback: {
+            ...feedback,
+            ratedAt: now
+          },
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveOrders(newOrders);
+      
+      return {
+        ...state,
+        orders: newOrders,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '提交评价失败'
+        }
+      };
+    }),
+
+    archiveOrder: (orderId: string, archiveNotes?: string, collectionId?: string) => update(state => {
+      const now = Date.now();
+      const newOrders = state.orders.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          status: 'archived' as OrderStatus,
+          archiveInfo: {
+            archivedAt: now,
+            albumCollectionId: collectionId,
+            archiveNotes
+          },
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveOrders(newOrders);
+      
+      return {
+        ...state,
+        orders: newOrders,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '归档订单失败'
+        }
+      };
+    }),
+
+    updateOrderFilter: (filter: Partial<OrderFilter>) => update(state => ({
+      ...state,
+      orderFilter: { ...state.orderFilter, ...filter }
+    })),
+
+    refreshScheduleSlots: () => update(state => ({
+      ...state,
+      orderScheduleSlots: generateDefaultScheduleSlots()
+    })),
+
+    getOrderById: (orderId: string): DarkroomOrder | undefined => {
+      let result: DarkroomOrder | undefined;
+      const unsubscribe = subscribe(state => {
+        result = state.orders.find(o => o.id === orderId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    addPhotoToOrder: (orderId: string, photoId: string) => update(state => {
+      const now = Date.now();
+      const newOrders = state.orders.map(o => {
+        if (o.id !== orderId) return o;
+        if (o.photoIds.includes(photoId)) return o;
+        return {
+          ...o,
+          photoIds: [...o.photoIds, photoId],
+          updatedAt: now
+        };
+      });
+      const saveSuccess = saveOrders(newOrders);
+      
+      return {
+        ...state,
+        orders: newOrders,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '添加照片到订单失败'
+        }
+      };
+    })
   };
 }
 
@@ -1742,7 +2256,7 @@ function loadSavedPhotos(): { photos: ProcessedPhoto[]; status: Partial<StorageS
     status.recoveryPerformed = true;
   }
   if (photos.length !== repaired.length) {
-    status.corruptedItems = { photos: photos.length - repaired.length, presets: 0, favorites: 0, collections: 0 };
+    status.corruptedItems = { photos: photos.length - repaired.length, presets: 0, favorites: 0, collections: 0, orders: 0 };
   }
   
   const limited = enforceLimits('photos', repaired);
@@ -1770,7 +2284,7 @@ function loadSavedPresets(): { presets: ParamPreset[]; status: Partial<StorageSt
     status.recoveryPerformed = true;
   }
   if (userPresets.length !== repaired.length) {
-    status.corruptedItems = { photos: 0, presets: userPresets.length - repaired.length, favorites: 0, collections: 0 };
+    status.corruptedItems = { photos: 0, presets: userPresets.length - repaired.length, favorites: 0, collections: 0, orders: 0 };
   }
   
   const allPresets = [...DEFAULT_PRESETS, ...repaired];
@@ -1800,7 +2314,7 @@ function loadSavedFavorites(validPhotoIds: string[]): { favorites: FavoriteInfo[
     status.recoveryPerformed = true;
   }
   if (favorites.length !== repaired.length) {
-    status.corruptedItems = { photos: 0, presets: 0, favorites: favorites.length - repaired.length, collections: 0 };
+    status.corruptedItems = { photos: 0, presets: 0, favorites: favorites.length - repaired.length, collections: 0, orders: 0 };
   }
   
   return { favorites: repaired, status };
@@ -1825,7 +2339,7 @@ function loadSavedCollections(validPhotoIds: string[]): { collections: PhotoColl
     status.recoveryPerformed = true;
   }
   if (collections.length !== repaired.length) {
-    status.corruptedItems = { photos: 0, presets: 0, favorites: 0, collections: collections.length - repaired.length };
+    status.corruptedItems = { photos: 0, presets: 0, favorites: 0, collections: collections.length - repaired.length, orders: 0 };
   }
   
   const limited = enforceLimits('collections', repaired);
