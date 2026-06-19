@@ -1,7 +1,37 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS } from '../data/gameData';
 import { generateId } from '../utils/math';
+
+function createInitialStageState(): StageState {
+  return {
+    currentStage: 'presoak',
+    stageProgress: 0,
+    totalProgress: 0,
+    stageStartAt: 0,
+    developDuration: 0,
+    fixDuration: 0,
+    washDuration: 0,
+    developElapsed: 0,
+    fixElapsed: 0,
+    washElapsed: 0,
+    developDeviation: 0,
+    fixDeviation: 0,
+    washDeviation: 0
+  };
+}
+
+export function calculateIdealDurations(params: DevParams): StageDuration {
+  const developBase = 4000;
+  const fixBase = 2500;
+  const washBase = 2000;
+
+  const develop = developBase + params.developmentTime * 6000;
+  const fix = fixBase + (1 - params.dilution) * 2000;
+  const wash = washBase + params.agitation * 1500;
+
+  return { develop, fix, wash };
+}
 
 function createInitialTutorialState(): TutorialState {
   const stepStates: TutorialStepState[] = TUTORIAL_STEPS.map((step, index) => ({
@@ -243,7 +273,8 @@ function createInitialGameState(): GameState {
     subjectSelectedAt: null,
     filmSelectedAt: null,
     paramAdjustTimestamps: {},
-    developStartedAt: null
+    developStartedAt: null,
+    stageState: createInitialStageState()
   };
 }
 
@@ -302,18 +333,39 @@ function createGameStore() {
     })),
     startDevelopment: () => update(state => {
       const now = Date.now();
+      const durations = calculateIdealDurations(state.currentParams);
+      const newStageState: StageState = {
+        currentStage: 'presoak',
+        stageProgress: 0,
+        totalProgress: 0,
+        stageStartAt: now,
+        developDuration: durations.develop,
+        fixDuration: durations.fix,
+        washDuration: durations.wash,
+        developElapsed: 0,
+        fixElapsed: 0,
+        washElapsed: 0,
+        developDeviation: 0,
+        fixDeviation: 0,
+        washDeviation: 0
+      };
       const newState: GameState = {
         ...state,
         isDeveloping: true,
         developmentProgress: 0,
         phase: 'develop',
-        developStartedAt: now
+        developStartedAt: now,
+        stageState: newStageState
       };
       return checkAndUpdateTutorialProgress(newState);
     }),
     updateDevelopmentProgress: (progress: number) => update(state => ({
       ...state,
       developmentProgress: progress
+    })),
+    updateStageState: (stageState: Partial<StageState>) => update(state => ({
+      ...state,
+      stageState: { ...state.stageState, ...stageState }
     })),
     finishDevelopment: (photo: ProcessedPhoto) => update(state => {
       const newPhotos = [photo, ...state.processedPhotos].slice(0, 50);
@@ -323,7 +375,13 @@ function createGameStore() {
         isDeveloping: false,
         developmentProgress: 1,
         phase: 'result',
-        processedPhotos: newPhotos
+        processedPhotos: newPhotos,
+        stageState: {
+          ...state.stageState,
+          currentStage: 'complete',
+          stageProgress: 1,
+          totalProgress: 1
+        }
       };
     }),
     setTutorialStep: (step: number) => update(state => {
@@ -526,7 +584,8 @@ function createGameStore() {
       phase: 'select',
       selectedAlbumPhoto: null,
       isDeveloping: false,
-      developmentProgress: 0
+      developmentProgress: 0,
+      stageState: createInitialStageState()
     })),
     deletePhoto: (photoId: string) => update(state => {
       const newPhotos = state.processedPhotos.filter(p => p.id !== photoId);

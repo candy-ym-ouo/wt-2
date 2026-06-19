@@ -5,7 +5,9 @@ import type {
   KeyArea,
   KeyAreaResult,
   ParamDeviation,
-  DeductionItem
+  DeductionItem,
+  StageScoreImpact,
+  StageState
 } from '../types/game';
 import type { RenderedImageData } from './renderEngine';
 import { clamp, smoothstep } from './math';
@@ -40,7 +42,8 @@ export function calculateScore(
   subject: PhotoSubject,
   params: DevParams,
   finalImage: RenderedImageData,
-  isColorFilm: boolean
+  isColorFilm: boolean,
+  stageState?: Partial<StageState>
 ): ScoreDetail {
   const ctx: ScoreContext = {
     exposureScore: 0,
@@ -73,12 +76,17 @@ export function calculateScore(
   const colorW = isColorFilm ? 0.2 : 0;
   const detailW = isColorFilm ? 0.2 : 0.4;
 
-  ctx.overall = Math.round(
+  let baseOverall = Math.round(
     exposureResult * exposureW +
     contrastResult * contrastW +
     colorResult * colorW +
     detailResult * detailW
   );
+
+  const stageImpact = calculateStageImpact(stageState, params);
+
+  const stagePenalty = stageImpact.developPenalty + stageImpact.fixPenalty + stageImpact.washPenalty;
+  ctx.overall = clamp(baseOverall - Math.round(stagePenalty * 0.7), 0, 100);
 
   ctx.grade = getGrade(ctx.overall);
   const feedback = generateFeedback(subject, params, {
@@ -89,6 +97,10 @@ export function calculateScore(
     overall: ctx.overall,
     grade: ctx.grade
   }, isColorFilm);
+
+  if (stageImpact.developFeedback) feedback.push(stageImpact.developFeedback);
+  if (stageImpact.fixFeedback) feedback.push(stageImpact.fixFeedback);
+  if (stageImpact.washFeedback) feedback.push(stageImpact.washFeedback);
 
   generateParamDeviations(subject, params, isColorFilm, ctx);
   generateDeductions(ctx, subject, isColorFilm);
@@ -107,8 +119,69 @@ export function calculateScore(
     overexposedPct: ctx.overexposedPct,
     underexposedPct: ctx.underexposedPct,
     dynamicRange: ctx.dynamicRange,
-    sharpness: ctx.sharpness
+    sharpness: ctx.sharpness,
+    stageImpact
   };
+}
+
+function calculateStageImpact(
+  stageState: Partial<StageState> | undefined,
+  params: DevParams
+): StageScoreImpact {
+  const result: StageScoreImpact = {
+    developPenalty: 0,
+    fixPenalty: 0,
+    washPenalty: 0,
+    developFeedback: '',
+    fixFeedback: '',
+    washFeedback: ''
+  };
+
+  if (!stageState) return result;
+
+  const devDev = Math.abs(stageState.developDeviation ?? 0);
+  const fixDev = Math.abs(stageState.fixDeviation ?? 0);
+  const washDev = Math.abs(stageState.washDeviation ?? 0);
+
+  if (devDev > 0.05) {
+    result.developPenalty = Math.round(devDev * 120);
+    if ((stageState.developDeviation ?? 0) > 0) {
+      result.developFeedback = devDev > 0.2
+        ? '⚠️ 显影时间过长，反差过高，细节损失严重'
+        : '显影时间稍长，画面反差略有提升';
+    } else {
+      result.developFeedback = devDev > 0.2
+        ? '⚠️ 显影时间不足，画面密度不够，显得平淡'
+        : '显影时间稍短，画面略显单薄';
+    }
+  }
+
+  if (fixDev > 0.1) {
+    result.fixPenalty = Math.round(fixDev * 80);
+    if ((stageState.fixDeviation ?? 0) < 0) {
+      result.fixFeedback = fixDev > 0.25
+        ? '⚠️ 定影不充分，影像可能不稳定，细节表现差'
+        : '定影时间略短，建议适当延长';
+    } else {
+      result.fixFeedback = '定影时间稍长，不过总体影响不大';
+    }
+  }
+
+  if (washDev > 0.15) {
+    result.washPenalty = Math.round(washDev * 50);
+    if ((stageState.washDeviation ?? 0) < 0) {
+      result.washFeedback = washDev > 0.3
+        ? '⚠️ 水洗不充分，残留药液可能导致影像变色和污斑'
+        : '水洗时间稍短，建议增加水洗时间';
+    }
+  }
+
+  if (params.agitation < 0.2 && devDev < 0.05) {
+    result.developPenalty += 5;
+    result.developFeedback = result.developFeedback || '显影时搅动不足，画面均匀度受影响';
+  }
+
+  return result;
 }
 
 function calcExposureScore(

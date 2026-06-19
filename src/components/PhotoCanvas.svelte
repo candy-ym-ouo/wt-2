@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, createEventDispatcher } from 'svelte';
   import { generateBaseScene, applyDevelopment, renderToCanvas, createThumbnail, type RenderedImageData } from '../utils/renderEngine';
-  import type { PhotoSubject, FilmStock, DevParams, CanvasMode } from '../types/game';
+  import type { PhotoSubject, FilmStock, DevParams, CanvasMode, DevelopStage } from '../types/game';
 
   export let subject: PhotoSubject | null = null;
   export let film: FilmStock;
@@ -9,6 +9,8 @@
   export let progress: number = 1;
   export let showNegative: boolean = false;
   export let mode: CanvasMode = 'preview';
+  export let stage: DevelopStage = 'complete';
+  export let stageProgress: number = 0;
 
   const dispatch = createEventDispatcher<{
     rendered: { url: string; image: RenderedImageData };
@@ -44,6 +46,8 @@
 
     const isColorFilm = film.color === 'color';
     const renderProgress = mode === 'developing' ? progress : 1;
+    const renderStage = mode === 'developing' ? stage : 'complete';
+    const renderStageProgress = mode === 'developing' ? stageProgress : 1;
 
     const result = applyDevelopment(
       baseScene,
@@ -61,7 +65,9 @@
         grainSize: film.grainSize,
         subjectBaseBrightness: subject?.baseBrightness || 0.35,
         seed: subject?.seed || 1,
-        progress: renderProgress
+        progress: renderProgress,
+        stage: renderStage,
+        stageProgress: renderStageProgress
       },
       showNegative
     );
@@ -71,6 +77,39 @@
     if (mode === 'final' && progress >= 1) {
       const thumb = createThumbnail(ctx, result, 480, 640);
       dispatch('rendered', { url: thumb, image: result });
+    }
+  }
+
+  function getStageLabel(s: DevelopStage): string {
+    switch (s) {
+      case 'presoak': return '预浸';
+      case 'develop': return '显影';
+      case 'stop': return '停显';
+      case 'fix': return '定影';
+      case 'wash': return '水洗';
+      default: return '显影';
+    }
+  }
+
+  function getStageLiquidColor(s: DevelopStage): string {
+    switch (s) {
+      case 'presoak': return 'rgba(80, 140, 180, 0.5)';
+      case 'develop': return 'rgba(40, 90, 140, 0.6)';
+      case 'stop': return 'rgba(100, 120, 100, 0.45)';
+      case 'fix': return 'rgba(160, 140, 100, 0.5)';
+      case 'wash': return 'rgba(100, 160, 140, 0.45)';
+      default: return 'rgba(80, 140, 180, 0.5)';
+    }
+  }
+
+  function getLiquidHeight(): number {
+    switch (stage) {
+      case 'presoak': return stageProgress;
+      case 'develop': return 1;
+      case 'stop': return 1 - stageProgress * 0.2;
+      case 'fix': return 0.8 - stageProgress * 0.15;
+      case 'wash': return 0.65 - stageProgress * 0.5;
+      default: return 0;
     }
   }
 </script>
@@ -91,8 +130,31 @@
   />
   {#if mode === 'developing' && subject}
     <div class="develop-overlay">
-      <div class="liquid-wave" style="--progress: {progress}" />
-      <div class="progress-label">显影中 {Math.round(progress * 100)}%</div>
+      <div
+        class="liquid-wave"
+        style="--progress: {getLiquidHeight()}; --liquid-color: {getStageLiquidColor(stage)};"
+        class:stage-develop={stage === 'develop'}
+        class:stage-fix={stage === 'fix'}
+        class:stage-wash={stage === 'wash'}
+      />
+      {#if stage === 'develop' || stage === 'fix'}
+        <div class="bubbles-layer">
+          {#each Array(6) as _, i (i)}
+            <div class="bubble" style="--bubble-x: {15 + i * 14}%; --bubble-delay: {i * 0.4}s; --bubble-size: {4 + (i % 3) * 2}px;" />
+          {/each}
+        </div>
+      {/if}
+      {#if stage === 'wash'}
+        <div class="water-droplets">
+          {#each Array(8) as _, i (i)}
+            <div class="droplet" style="--drop-x: {10 + i * 11}%; --drop-delay: {i * 0.25}s;" />
+          {/each}
+        </div>
+      {/if}
+      <div class="progress-label">
+        <span class="stage-name">{getStageLabel(stage)}</span>
+        <span class="stage-pct">{Math.round(stageProgress * 100)}%</span>
+      </div>
     </div>
   {/if}
   {#if subject}
@@ -178,11 +240,35 @@
     height: calc(var(--progress) * 100%);
     background: linear-gradient(
       to top,
-      rgba(20, 80, 120, 0.6) 0%,
-      rgba(40, 120, 160, 0.4) 60%,
+      var(--liquid-color, rgba(20, 80, 120, 0.6)) 0%,
+      color-mix(in srgb, var(--liquid-color, rgba(20, 80, 120, 0.6)) 60%, transparent) 60%,
       transparent 100%
     );
     animation: wave 2s ease-in-out infinite;
+    transition: height 0.3s ease, background 0.5s ease;
+  }
+
+  .liquid-wave.stage-develop {
+    box-shadow: 0 -10px 30px rgba(40, 90, 140, 0.3) inset;
+  }
+
+  .liquid-wave.stage-fix {
+    box-shadow: 0 -10px 30px rgba(160, 140, 100, 0.25) inset;
+  }
+
+  .liquid-wave.stage-wash {
+    background: linear-gradient(
+      to top,
+      rgba(100, 180, 180, 0.35) 0%,
+      rgba(120, 200, 200, 0.2) 50%,
+      transparent 100%
+    );
+    animation: wave 1.5s ease-in-out infinite, waterShimmer 2s ease-in-out infinite;
+  }
+
+  @keyframes waterShimmer {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
   }
 
   @keyframes wave {
@@ -211,18 +297,100 @@
     to { transform: translateX(40px); }
   }
 
+  .bubbles-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .bubble {
+    position: absolute;
+    bottom: 5%;
+    left: var(--bubble-x);
+    width: var(--bubble-size);
+    height: var(--bubble-size);
+    background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.8), rgba(200, 230, 255, 0.2));
+    border-radius: 50%;
+    animation: bubbleRise 2.5s ease-in infinite;
+    animation-delay: var(--bubble-delay);
+    opacity: 0.7;
+  }
+
+  @keyframes bubbleRise {
+    0% {
+      transform: translateY(0) scale(1);
+      opacity: 0.8;
+    }
+    50% {
+      transform: translateY(-200px) translateX(10px) scale(1.2);
+      opacity: 0.5;
+    }
+    100% {
+      transform: translateY(-400px) scale(0.8);
+      opacity: 0;
+    }
+  }
+
+  .water-droplets {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .droplet {
+    position: absolute;
+    top: 0;
+    left: var(--drop-x);
+    width: 2px;
+    height: 25px;
+    background: linear-gradient(to bottom, transparent, rgba(180, 220, 255, 0.6));
+    border-radius: 0 0 2px 2px;
+    animation: dropletFall 1.8s linear infinite;
+    animation-delay: var(--drop-delay);
+  }
+
+  @keyframes dropletFall {
+    0% {
+      transform: translateY(-30px);
+      opacity: 0;
+    }
+    10% {
+      opacity: 0.8;
+    }
+    100% {
+      transform: translateY(680px);
+      opacity: 0.3;
+    }
+  }
+
   .progress-label {
     position: absolute;
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.7);
-    padding: 6px 16px;
+    background: rgba(0, 0, 0, 0.75);
+    padding: 6px 18px;
     border-radius: 20px;
     font-size: 13px;
     color: #8bc8e8;
     letter-spacing: 1px;
     border: 1px solid rgba(139, 180, 220, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+  }
+
+  .stage-name {
+    font-weight: 600;
+  }
+
+  .stage-pct {
+    color: #c8e8a8;
+    font-variant-numeric: tabular-nums;
   }
 
   .frame-corner {

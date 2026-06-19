@@ -1,11 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { DevParams } from '../types/game';
+  import type { DevParams, StageState, DevelopStage } from '../types/game';
 
   export let params: DevParams;
   export let isDeveloping: boolean = false;
   export let canDevelop: boolean = true;
   export let progress: number = 0;
+  export let stageState: StageState;
 
   const dispatch = createEventDispatcher<{
     startDevelop: void;
@@ -13,26 +14,74 @@
     reset: void;
   }>();
 
-  function getPhaseLabel(p: number): string {
-    if (p < 0.25) return '预浸中...';
-    if (p < 0.55) return '显影液中...';
-    if (p < 0.75) return '停显中...';
-    if (p < 0.95) return '定影中...';
-    if (p < 1) return '水洗中...';
-    return '完成！';
+  const STAGES: Array<{ key: DevelopStage; label: string; color: string }> = [
+    { key: 'presoak', label: '预浸', color: '#6aa8c8' },
+    { key: 'develop', label: '显影', color: '#5080a0' },
+    { key: 'stop', label: '停显', color: '#7a8a9a' },
+    { key: 'fix', label: '定影', color: '#9a8878' },
+    { key: 'wash', label: '水洗', color: '#88aa88' },
+    { key: 'complete', label: '完成', color: '#c8a868' }
+  ];
+
+  function getCurrentStageInfo(): { label: string; color: string } {
+    if (!stageState) {
+      const p = progress;
+      if (p < 0.25) return { label: '预浸中...', color: '#6aa8c8' };
+      if (p < 0.55) return { label: '显影液中...', color: '#5080a0' };
+      if (p < 0.75) return { label: '停显中...', color: '#7a8a9a' };
+      if (p < 0.95) return { label: '定影中...', color: '#9a8878' };
+      if (p < 1) return { label: '水洗中...', color: '#88aa88' };
+      return { label: '完成！', color: '#c8a868' };
+    }
+    const stage = STAGES.find(s => s.key === stageState.currentStage) || STAGES[0];
+    const suffix = stageState.currentStage === 'complete' ? '！' : '中...';
+    return { label: stage.label + suffix, color: stage.color };
   }
 
-  function getPhaseColor(p: number): string {
-    if (p < 0.25) return '#6aa8c8';
-    if (p < 0.55) return '#5080a0';
-    if (p < 0.75) return '#7a8a9a';
-    if (p < 0.95) return '#9a8878';
-    return '#88aa88';
+  function getStageIndex(key: DevelopStage): number {
+    return STAGES.findIndex(s => s.key === key);
   }
 
+  function isStageActive(key: DevelopStage): boolean {
+    if (!stageState) return false;
+    return stageState.currentStage === key;
+  }
+
+  function isStageCompleted(key: DevelopStage): boolean {
+    if (!stageState) return false;
+    const idx = getStageIndex(key);
+    const curIdx = getStageIndex(stageState.currentStage);
+    return idx < curIdx || stageState.currentStage === 'complete';
+  }
+
+  function formatMs(ms: number): string {
+    const sec = Math.round(ms / 1000 * 10) / 10;
+    if (sec < 60) return `${sec.toFixed(1)}s`;
+    const min = Math.floor(sec / 60);
+    const s = Math.round(sec % 60);
+    return `${min}m${s}s`;
+  }
+
+  function getDeviationClass(deviation: number, threshold: number): string {
+    const abs = Math.abs(deviation);
+    if (abs < threshold) return 'deviation-good';
+    if (abs < threshold * 2) return 'deviation-warn';
+    return 'deviation-bad';
+  }
+
+  function getDeviationLabel(deviation: number): string {
+    if (Math.abs(deviation) < 0.05) return '✓';
+    return deviation > 0 ? `+${Math.round(deviation * 100)}%` : `${Math.round(deviation * 100)}%`;
+  }
+
+  const phaseInfo = getCurrentStageInfo();
   const devMinutes = Math.round(4 + params.developmentTime * 10);
   const tempCelsius = Math.round(18 + params.temperature * 12);
   const diluteRatio = `1:${(1 + Math.round(params.dilution * 8)).toFixed(0)}`;
+
+  const idealDevelopMs = 4000 + params.developmentTime * 6000;
+  const idealFixMs = 2500 + (1 - params.dilution) * 2000;
+  const idealWashMs = 2000 + params.agitation * 1500;
 </script>
 
 <div class="develop-panel" id="develop-panel">
@@ -47,31 +96,77 @@
 
   {#if isDeveloping}
     <div class="develop-progress">
+      <div class="stages-bar">
+        {#each STAGES.slice(0, 5) as stage}
+          <div
+            class="stage-node"
+            class:active={isStageActive(stage.key)}
+            class:completed={isStageCompleted(stage.key)}
+            style="--stage-color: {stage.color};"
+          >
+            <div class="stage-dot" />
+            <span class="stage-text">{stage.label}</span>
+          </div>
+        {/each}
+      </div>
+
       <div class="progress-track">
         <div
           class="progress-fill"
-          style="width: {progress * 100}%; background: {getPhaseColor(progress)};"
+          style="width: {(stageState?.totalProgress ?? progress) * 100}%; background: {phaseInfo.color};"
         />
-        <div class="progress-markers">
-          <span style="left: 25%">预浸</span>
-          <span style="left: 55%">显影</span>
-          <span style="left: 75%">停显</span>
-          <span style="left: 95%">定影</span>
+      </div>
+
+      <div class="phase-info" style="color: {phaseInfo.color};">
+        <span class="phase-label">{phaseInfo.label}</span>
+        <span class="phase-percent">{Math.round((stageState?.totalProgress ?? progress) * 100)}%</span>
+      </div>
+
+      {#if stageState?.currentStage === 'develop'}
+        <div class="stage-duration-row">
+          <span class="dur-label">已显影</span>
+          <span class="dur-value">{formatMs(stageState.developElapsed)}</span>
+          <span class="dur-sep">/</span>
+          <span class="dur-target">{formatMs(stageState.developDuration)}</span>
+          <span class="dur-deviation {getDeviationClass(stageState.developDeviation, 0.1)}">
+            {getDeviationLabel(stageState.developDeviation)}
+          </span>
         </div>
-      </div>
-      <div class="phase-info" style="color: {getPhaseColor(progress)};">
-        <span class="phase-label">{getPhaseLabel(progress)}</span>
-        <span class="phase-percent">{Math.round(progress * 100)}%</span>
-      </div>
+      {:else if stageState?.currentStage === 'fix'}
+        <div class="stage-duration-row">
+          <span class="dur-label">已定影</span>
+          <span class="dur-value">{formatMs(stageState.fixElapsed)}</span>
+          <span class="dur-sep">/</span>
+          <span class="dur-target">{formatMs(stageState.fixDuration)}</span>
+          <span class="dur-deviation {getDeviationClass(stageState.fixDeviation, 0.15)}">
+            {getDeviationLabel(stageState.fixDeviation)}
+          </span>
+        </div>
+      {:else if stageState?.currentStage === 'wash'}
+        <div class="stage-duration-row">
+          <span class="dur-label">已水洗</span>
+          <span class="dur-value">{formatMs(stageState.washElapsed)}</span>
+          <span class="dur-sep">/</span>
+          <span class="dur-target">{formatMs(stageState.washDuration)}</span>
+          <span class="dur-deviation {getDeviationClass(stageState.washDeviation, 0.2)}">
+            {getDeviationLabel(stageState.washDeviation)}
+          </span>
+        </div>
+      {/if}
+
       <div class="agitation-hint">
-        {#if progress > 0.3 && progress < 0.55}
+        {#if stageState?.currentStage === 'develop' && (stageState.stageProgress > 0.3 && stageState.stageProgress < 0.8)}
           💡 显影过程中每隔30秒轻轻搅动
+        {:else if stageState?.currentStage === 'wash' && (stageState.stageProgress > 0.4 && stageState.stageProgress < 0.7)}
+          💡 水洗过程中保持水流均匀
+        {:else if stageState?.currentStage === 'fix'}
+          💡 定影确保未曝光的银盐完全溶解
         {/if}
       </div>
     </div>
 
     <div class="developing-actions">
-      <button class="btn btn-cancel" on:click={() => dispatch('cancelDevelop')} disabled={progress > 0.5}>
+      <button class="btn btn-cancel" on:click={() => dispatch('cancelDevelop')} disabled={(stageState?.totalProgress ?? progress) > 0.5}>
         停止冲洗
       </button>
     </div>
@@ -106,6 +201,28 @@
             <div class="info-value">
               {params.agitation < 0.3 ? '轻柔' : params.agitation < 0.7 ? '标准' : '频繁'}
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage-estimates">
+        <div class="estimates-title">⏳ 预估流程时长</div>
+        <div class="estimates-list">
+          <div class="estimate-item">
+            <span class="est-label" style="color: #5080a0;">显影</span>
+            <span class="est-value">{formatMs(idealDevelopMs)}</span>
+          </div>
+          <div class="estimate-item">
+            <span class="est-label" style="color: #9a8878;">定影</span>
+            <span class="est-value">{formatMs(idealFixMs)}</span>
+          </div>
+          <div class="estimate-item">
+            <span class="est-label" style="color: #88aa88;">水洗</span>
+            <span class="est-value">{formatMs(idealWashMs)}</span>
+          </div>
+          <div class="estimate-item total">
+            <span class="est-label">合计</span>
+            <span class="est-value">{formatMs(idealDevelopMs + idealFixMs + idealWashMs + 1500)}</span>
           </div>
         </div>
       </div>
@@ -355,5 +472,180 @@
 
   .btn-icon {
     font-size: 16px;
+  }
+
+  .stages-bar {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 0 4px;
+  }
+
+  .stage-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    opacity: 0.4;
+    transition: all 0.3s ease;
+  }
+
+  .stage-node.active {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+
+  .stage-node.completed {
+    opacity: 0.85;
+  }
+
+  .stage-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #333;
+    border: 2px solid #555;
+    transition: all 0.3s ease;
+  }
+
+  .stage-node.active .stage-dot {
+    background: var(--stage-color);
+    border-color: var(--stage-color);
+    box-shadow: 0 0 10px var(--stage-color);
+    animation: stagePulse 1s ease-in-out infinite;
+  }
+
+  .stage-node.completed .stage-dot {
+    background: var(--stage-color);
+    border-color: var(--stage-color);
+  }
+
+  @keyframes stagePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+  }
+
+  .stage-text {
+    font-size: 9px;
+    color: #7a6a55;
+    letter-spacing: 0.5px;
+  }
+
+  .stage-node.active .stage-text {
+    color: var(--stage-color);
+    font-weight: 600;
+  }
+
+  .stage-node.completed .stage-text {
+    color: #a89878;
+  }
+
+  .stage-duration-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+
+  .dur-label {
+    color: #7a6a55;
+    letter-spacing: 0.5px;
+    font-size: 11px;
+  }
+
+  .dur-value {
+    color: #c8a878;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dur-sep {
+    color: #555;
+  }
+
+  .dur-target {
+    color: #8a7a5a;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dur-deviation {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+
+  .deviation-good {
+    background: rgba(100, 180, 100, 0.15);
+    color: #7fc87f;
+  }
+
+  .deviation-warn {
+    background: rgba(200, 160, 80, 0.15);
+    color: #d8b060;
+  }
+
+  .deviation-bad {
+    background: rgba(200, 80, 80, 0.15);
+    color: #d87878;
+  }
+
+  .stage-estimates {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid rgba(139, 90, 43, 0.12);
+  }
+
+  .estimates-title {
+    font-size: 11px;
+    color: #8a7a5a;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+
+  .estimates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .estimate-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+  }
+
+  .estimate-item.total {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(139, 90, 43, 0.15);
+    font-weight: 600;
+  }
+
+  .estimate-item.total .est-label {
+    color: #c8a878;
+  }
+
+  .estimate-item.total .est-value {
+    color: #e0c088;
+  }
+
+  .est-label {
+    color: #7a6a55;
+    letter-spacing: 0.5px;
+  }
+
+  .est-value {
+    color: #a89878;
+    font-variant-numeric: tabular-nums;
   }
 </style>

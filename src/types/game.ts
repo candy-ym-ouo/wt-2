@@ -145,9 +145,43 @@ export interface ScoreDetail {
   underexposedPct: number;
   dynamicRange: number;
   sharpness: number;
+  stageImpact: StageScoreImpact;
 }
 
 export type GamePhase = 'tutorial' | 'select' | 'expose' | 'develop' | 'fix' | 'wash' | 'result' | 'album';
+
+export type DevelopStage = 'presoak' | 'develop' | 'stop' | 'fix' | 'wash' | 'complete';
+
+export interface StageDuration {
+  develop: number;
+  fix: number;
+  wash: number;
+}
+
+export interface StageState {
+  currentStage: DevelopStage;
+  stageProgress: number;
+  totalProgress: number;
+  stageStartAt: number;
+  developDuration: number;
+  fixDuration: number;
+  washDuration: number;
+  developElapsed: number;
+  fixElapsed: number;
+  washElapsed: number;
+  developDeviation: number;
+  fixDeviation: number;
+  washDeviation: number;
+}
+
+export interface StageScoreImpact {
+  developPenalty: number;
+  fixPenalty: number;
+  washPenalty: number;
+  developFeedback: string;
+  fixFeedback: string;
+  washFeedback: string;
+}
 
 export type CanvasMode = 'preview' | 'developing' | 'final';
 
@@ -170,6 +204,7 @@ export interface GameState {
   filmSelectedAt: number | null;
   paramAdjustTimestamps: Partial<Record<keyof DevParams, number>>;
   developStartedAt: number | null;
+  stageState: StageState;
 }
 
 export type TutorialUnlockCondition = 

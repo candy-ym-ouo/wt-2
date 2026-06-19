@@ -1,4 +1,4 @@
-import type { PhotoSubject, KeyArea } from '../types/game';
+import type { PhotoSubject, KeyArea, DevelopStage } from '../types/game';
 import { seededRandom, lerp, clamp, gaussian } from './math';
 
 const CANVAS_W = 480;
@@ -425,13 +425,15 @@ export function applyDevelopment(
     subjectBaseBrightness: number;
     seed: number;
     progress?: number;
+    stage?: DevelopStage;
+    stageProgress?: number;
   },
   isNegative = false
 ): RenderedImageData {
   const { width, height } = baseImage;
   const result = new Float32Array(width * height * 4);
   const rand = seededRandom(params.seed);
-  
+
   const exposureAdj = (params.exposure - 0.5) * 3;
   const devAdj = (params.developmentTime - 0.5) * 1.5;
   const tempAdj = (params.temperature - 0.5) * 0.8;
@@ -439,78 +441,152 @@ export function applyDevelopment(
   const contrastAdj = (params.contrast - 0.5) * 1.2 + params.filmBaseContrast - 0.5;
   const satAdj = (params.saturation - 0.5) * 1.5 + params.filmBaseSaturation - 0.5;
   const dilAdj = 1 + (params.dilution - 0.5) * 0.5;
-  
+
   const totalContrast = contrastAdj + devAdj * 0.5 + tempAdj * 0.3;
   const totalBrightness = exposureAdj + (params.subjectBaseBrightness - 0.35) * 1.5;
-  
+
   const prog = params.progress ?? 1;
+  const stage = params.stage ?? 'complete';
+  const stageProg = params.stageProgress ?? 1;
   const fadeIn = clamp(prog * 1.5, 0, 1);
   const unevenFactor = agiAdj * 0.15 * fadeIn;
-  
+
+  let developReveal = 1;
+  let fixClarity = 1;
+  let washClean = 1;
+  let liquidRise = 0;
+
+  switch (stage) {
+    case 'presoak':
+      developReveal = 0;
+      fixClarity = 0;
+      washClean = 0;
+      liquidRise = stageProg;
+      break;
+    case 'develop':
+      developReveal = stageProg;
+      fixClarity = 0;
+      washClean = 0;
+      liquidRise = 1;
+      break;
+    case 'stop':
+      developReveal = 1;
+      fixClarity = stageProg * 0.3;
+      washClean = 0;
+      liquidRise = 1 - stageProg * 0.3;
+      break;
+    case 'fix':
+      developReveal = 1;
+      fixClarity = 0.3 + stageProg * 0.7;
+      washClean = stageProg * 0.4;
+      liquidRise = 0.7 - stageProg * 0.2;
+      break;
+    case 'wash':
+      developReveal = 1;
+      fixClarity = 1;
+      washClean = 0.4 + stageProg * 0.6;
+      liquidRise = 0.5 - stageProg * 0.4;
+      break;
+    case 'complete':
+    default:
+      developReveal = 1;
+      fixClarity = 1;
+      washClean = 1;
+      liquidRise = 0;
+      break;
+  }
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = (y * width + x) * 4;
       let r = baseImage.pixels[idx];
       let g = baseImage.pixels[idx + 1];
       let b = baseImage.pixels[idx + 2];
-      
+
       const u = x / width;
       const v = y / height;
       const edgeDark = 1 - (Math.abs(u - 0.5) + Math.abs(v - 0.5)) * 0.3;
       const uneven = 1 + gaussian(rand) * unevenFactor;
-      
+      const riseV = 1 - v;
+      const revealMask = smoothstep(liquidRise - 0.15, liquidRise + 0.05, riseV) * developReveal
+        + (1 - developReveal) * 0.05;
+      const devFog = 1 - developReveal * 0.4;
+      const devContrastBoost = 0.5 + developReveal * 0.5;
+      const fixSharpness = 0.6 + fixClarity * 0.4;
+      const satBoost = 0.5 + fixClarity * 0.5;
+      const stainNoise = (1 - washClean) * gaussian(rand) * 15;
+      const tintStrength = (1 - washClean) * 0.25;
+      const chemTintR = 1 + tintStrength * 0.15;
+      const chemTintG = 1 + tintStrength * 0.05;
+      const chemTintB = 1 - tintStrength * 0.1;
+
       r = clamp((r * edgeDark * uneven) / dilAdj, 0, 255);
       g = clamp((g * edgeDark * uneven) / dilAdj, 0, 255);
       b = clamp((b * edgeDark * uneven) / dilAdj, 0, 255);
-      
-      r = clamp(r * Math.pow(2, totalBrightness * fadeIn), 0, 255);
-      g = clamp(g * Math.pow(2, totalBrightness * fadeIn), 0, 255);
-      b = clamp(b * Math.pow(2, totalBrightness * fadeIn), 0, 255);
-      
-      r = applyContrast(r, totalContrast * fadeIn);
-      g = applyContrast(g, totalContrast * fadeIn);
-      b = applyContrast(b, totalContrast * fadeIn);
-      
+
+      r = clamp(r * Math.pow(2, totalBrightness * fadeIn * devFog), 0, 255);
+      g = clamp(g * Math.pow(2, totalBrightness * fadeIn * devFog), 0, 255);
+      b = clamp(b * Math.pow(2, totalBrightness * fadeIn * devFog), 0, 255);
+
+      r = applyContrast(r, totalContrast * fadeIn * devContrastBoost);
+      g = applyContrast(g, totalContrast * fadeIn * devContrastBoost);
+      b = applyContrast(b, totalContrast * fadeIn * devContrastBoost);
+
       if (params.isColorFilm) {
         const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-        const satFactor = 1 + satAdj * fadeIn;
+        const satFactor = 1 + satAdj * fadeIn * satBoost;
         r = clamp(gray + (r - gray) * satFactor, 0, 255);
         g = clamp(gray + (g - gray) * satFactor, 0, 255);
         b = clamp(gray + (b - gray) * satFactor, 0, 255);
-        
-        const tempShift = tempAdj * 20 * fadeIn;
+
+        const tempShift = tempAdj * 20 * fadeIn * satBoost;
         r = clamp(r + tempShift, 0, 255);
         b = clamp(b - tempShift, 0, 255);
       } else {
         const gray = 0.299 * r + 0.587 * g + 0.114 * b;
         r = gray; g = gray; b = gray;
       }
-      
-      const grainAmt = params.grainSize * 25 * fadeIn;
+
+      const grainAmt = params.grainSize * 25 * fadeIn * (0.5 + fixSharpness * 0.5);
       const grain = gaussian(rand) * grainAmt;
       r = clamp(r + grain, 0, 255);
       g = clamp(g + grain * (params.isColorFilm ? 0.8 : 1), 0, 255);
       b = clamp(b + grain * (params.isColorFilm ? 0.7 : 1), 0, 255);
-      
+
+      r = r * chemTintR + stainNoise;
+      g = g * chemTintG + stainNoise * 0.8;
+      b = b * chemTintB + stainNoise * 0.6;
+      r = clamp(r, 0, 255);
+      g = clamp(g, 0, 255);
+      b = clamp(b, 0, 255);
+
       if (isNegative) {
         r = 255 - r;
         g = 255 - g;
         b = 255 - b;
       }
-      
-      const progOpacity = isNegative ? 1 : clamp(prog * 2, 0, 1);
-      r = r * progOpacity + (1 - progOpacity) * (isNegative ? 230 : 20);
-      g = g * progOpacity + (1 - progOpacity) * (isNegative ? 210 : 20);
-      b = b * progOpacity + (1 - progOpacity) * (isNegative ? 195 : 25);
-      
+
+      const progOpacity = isNegative ? 1 : clamp(revealMask * 2, 0, 1);
+      const darkBgR = 15 + (1 - washClean) * 25;
+      const darkBgG = 15 + (1 - washClean) * 20;
+      const darkBgB = 20 + (1 - washClean) * 15;
+      r = r * progOpacity + (1 - progOpacity) * (isNegative ? 230 : darkBgR);
+      g = g * progOpacity + (1 - progOpacity) * (isNegative ? 210 : darkBgG);
+      b = b * progOpacity + (1 - progOpacity) * (isNegative ? 195 : darkBgB);
+
       result[idx] = r;
       result[idx + 1] = g;
       result[idx + 2] = b;
       result[idx + 3] = 1;
     }
   }
-  
+
   return { pixels: result, width, height };
+}
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
 }
 
 function applyContrast(value: number, contrast: number): number {

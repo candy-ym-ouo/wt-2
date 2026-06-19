@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { gameStore, canStartDevelop, statistics } from './stores/gameStore';
+  import { gameStore, canStartDevelop, statistics, calculateIdealDurations } from './stores/gameStore';
   import { generateBaseScene, applyDevelopment, renderToCanvas, createThumbnail } from './utils/renderEngine';
   import type { RenderedImageData } from './utils/renderEngine';
   import { calculateScore } from './utils/scoring';
   import { PHOTO_SUBJECTS, FILM_STOCKS } from './data/gameData';
-  import { generateId } from './utils/math';
-  import type { ProcessedPhoto, GameState, DevParams, CanvasMode, GamePhase } from './types/game';
+  import { generateId, clamp } from './utils/math';
+  import type { ProcessedPhoto, GameState, DevParams, CanvasMode, GamePhase, DevelopStage, StageState } from './types/game';
 
   import SubjectList from './components/SubjectList.svelte';
   import FilmList from './components/FilmList.svelte';
@@ -36,6 +36,7 @@
   $: currentParams = $gameStore.currentParams;
   $: developmentProgress = $gameStore.developmentProgress;
   $: isDeveloping = $gameStore.isDeveloping;
+  $: stageState = $gameStore.stageState;
   $: tutorialStep = $gameStore.tutorialStep;
   $: tutorialState = $gameStore.tutorial;
   $: processedPhotos = $gameStore.processedPhotos;
@@ -82,10 +83,36 @@
     gameStore.resetParams();
   }
 
+  interface StageSchedule {
+    key: DevelopStage;
+    weight: number;
+    duration: number;
+  }
+
+  let currentSchedule: StageSchedule[] = [];
+  let currentStageIdx = 0;
+  let accumulatedWeight = 0;
+  let totalWeight = 0;
+
   function handleStartDevelop() {
     if (!currentSubject) return;
     gameStore.startDevelopment();
+    buildStageSchedule();
     animateDevelopment();
+  }
+
+  function buildStageSchedule() {
+    const durations = calculateIdealDurations(currentParams);
+    const presoak = { key: 'presoak' as DevelopStage, weight: 0.08, duration: 800 };
+    const develop = { key: 'develop' as DevelopStage, weight: 0.42, duration: durations.develop };
+    const stop = { key: 'stop' as DevelopStage, weight: 0.08, duration: 700 };
+    const fix = { key: 'fix' as DevelopStage, weight: 0.24, duration: durations.fix };
+    const wash = { key: 'wash' as DevelopStage, weight: 0.18, duration: durations.wash };
+
+    currentSchedule = [presoak, develop, stop, fix, wash];
+    totalWeight = currentSchedule.reduce((s, x) => s + x.weight, 0);
+    accumulatedWeight = 0;
+    currentStageIdx = 0;
   }
 
   function handleCancelDevelop() {
@@ -97,31 +124,100 @@
     gameStore.setPhase('select');
   }
 
+  let stageGlobalStart = 0;
+  let stageLocalStart = 0;
+  let stageAccumulatedElapsed = 0;
+
   function animateDevelopment() {
-    const duration = 5000;
-    const start = performance.now();
+    stageGlobalStart = performance.now();
+    stageLocalStart = stageGlobalStart;
+    stageAccumulatedElapsed = 0;
+    currentStageIdx = 0;
+    accumulatedWeight = 0;
+
+    updateStageState(0, 0);
 
     function tick(now: number) {
-      const elapsed = now - start;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = easeInOutCubic(progress);
-      gameStore.updateDevelopmentProgress(eased);
+      const globalElapsed = now - stageGlobalStart;
+      const current = currentSchedule[currentStageIdx];
+      const stageElapsed = now - stageLocalStart;
+      const stageProgress = clamp(stageElapsed / current.duration, 0, 1);
 
-      if (progress < 1) {
+      let developElapsed = stageAccumulatedElapsed;
+      let fixElapsed = 0;
+      let washElapsed = 0;
+
+      let idx = 0;
+      while (idx < currentStageIdx) {
+        const s = currentSchedule[idx];
+        if (s.key === 'develop') developElapsed += s.duration;
+        if (s.key === 'fix') fixElapsed += s.duration;
+        if (s.key === 'wash') washElapsed += s.duration;
+        idx++;
+      }
+      if (current.key === 'develop') developElapsed += stageElapsed;
+      if (current.key === 'fix') fixElapsed += stageElapsed;
+      if (current.key === 'wash') washElapsed += stageElapsed;
+
+      const durations = calculateIdealDurations(currentParams);
+      const developDeviation = durations.develop > 0 ? (developElapsed - durations.develop) / durations.develop : 0;
+      const fixDeviation = durations.fix > 0 ? (fixElapsed - durations.fix) / durations.fix : 0;
+      const washDeviation = durations.wash > 0 ? (washElapsed - durations.wash) / durations.wash : 0;
+
+      const stageTotalProgress = (accumulatedWeight + current.weight * stageProgress) / totalWeight;
+
+      gameStore.updateStageState({
+        currentStage: current.key,
+        stageProgress,
+        totalProgress: stageTotalProgress,
+        developElapsed,
+        fixElapsed,
+        washElapsed,
+        developDeviation,
+        fixDeviation,
+        washDeviation
+      });
+      gameStore.updateDevelopmentProgress(stageTotalProgress);
+
+      if (stageProgress < 1) {
         developAnimFrame = requestAnimationFrame(tick);
       } else {
-        developAnimFrame = null;
-        finalizeDevelopment();
+        stageAccumulatedElapsed += current.duration;
+        accumulatedWeight += current.weight;
+        currentStageIdx++;
+
+        if (currentStageIdx < currentSchedule.length) {
+          stageLocalStart = now;
+          updateStageState(currentStageIdx, accumulatedWeight);
+          developAnimFrame = requestAnimationFrame(tick);
+        } else {
+          developAnimFrame = null;
+          finalizeDevelopment({ developElapsed, fixElapsed, washElapsed, developDeviation, fixDeviation, washDeviation });
+        }
       }
     }
     developAnimFrame = requestAnimationFrame(tick);
+  }
+
+  function updateStageState(idx: number, accWeight: number) {
+    const current = currentSchedule[idx];
+    const durations = calculateIdealDurations(currentParams);
+    gameStore.updateStageState({
+      currentStage: current.key,
+      stageProgress: 0,
+      totalProgress: accWeight / totalWeight,
+      stageStartAt: performance.now(),
+      developDuration: durations.develop,
+      fixDuration: durations.fix,
+      washDuration: durations.wash
+    });
   }
 
   function easeInOutCubic(t: number): number {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   }
 
-  function finalizeDevelopment() {
+  function finalizeDevelopment(stageResult: { developElapsed: number; fixElapsed: number; washElapsed: number; developDeviation: number; fixDeviation: number; washDeviation: number }) {
     if (!currentSubject) return;
 
     const subject = currentSubject;
@@ -146,7 +242,9 @@
         grainSize: film.grainSize,
         subjectBaseBrightness: subject.baseBrightness,
         seed: subject.seed,
-        progress: 1
+        progress: 1,
+        stage: 'complete',
+        stageProgress: 1
       },
       false
     );
@@ -154,7 +252,7 @@
     renderToCanvas(renderCtx, finalImage);
     const imgUrl = createThumbnail(renderCtx, finalImage, 480, 640);
 
-    const scoreDetails = calculateScore(subject, params, finalImage, isColorFilm);
+    const scoreDetails = calculateScore(subject, params, finalImage, isColorFilm, stageResult);
 
     const photo: ProcessedPhoto = {
       id: generateId(),
@@ -318,6 +416,8 @@
           progress={developmentProgress}
           showNegative={false}
           mode={canvasMode}
+          stage={stageState.currentStage}
+          stageProgress={stageState.stageProgress}
           on:rendered={handleCanvasRendered}
         />
       </div>
@@ -345,6 +445,7 @@
           isDeveloping={isDeveloping}
           canDevelop={$canStartDevelop}
           progress={developmentProgress}
+          stageState={stageState}
           on:startDevelop={handleStartDevelop}
           on:cancelDevelop={handleCancelDevelop}
           on:reset={handleReset}
