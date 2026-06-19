@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
@@ -25,8 +25,32 @@ import {
   createDefaultAchievementState,
   loadSavedOrders,
   saveOrders,
-  repairOrders
+  repairOrders,
+  loadSavedQuestSystem,
+  saveQuestSystem
 } from '../utils/storage';
+import {
+  createInitialQuestSystemState,
+  evaluateQuestAttempt,
+  applyQuestResult,
+  claimQuestRewards,
+  checkStageBonus,
+  claimStageBonus,
+  setActiveQuest,
+  checkFilmRestrictions,
+  isSubjectUnlocked,
+  isFilmUnlocked,
+  getUnlockedSubjects,
+  getUnlockedFilms,
+  getQuestCompletionStats,
+  getStageCompletionStats,
+  recalculateQuestStatuses,
+  validateFilmRestrictions,
+  getQuestStatusFromState,
+  getStageStatusFromState,
+  getQuestById,
+  getStageById
+} from '../utils/questSystem';
 
 function createInitialStageState(): StageState {
   return {
@@ -492,6 +516,7 @@ function createInitialGameState(): GameState {
   const collectionsResult = loadSavedCollections(validPhotoIds);
   const achievementsResult = loadSavedAchievements();
   const ordersResult = loadSavedOrders();
+  const questSystemResult = loadSavedQuestSystem();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -503,19 +528,22 @@ function createInitialGameState(): GameState {
   storageStatus.favoritesLoaded = favoritesResult.status.favoritesLoaded || 0;
   storageStatus.collectionsLoaded = collectionsResult.status.collectionsLoaded || 0;
   storageStatus.ordersLoaded = ordersResult.status.ordersLoaded || 0;
+  storageStatus.questSystemLoaded = questSystemResult.status.questSystemLoaded || false;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
     tutorialResult.status.migrationPerformed ||
     favoritesResult.status.migrationPerformed ||
     collectionsResult.status.migrationPerformed ||
-    ordersResult.status.migrationPerformed);
+    ordersResult.status.migrationPerformed ||
+    questSystemResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
     tutorialResult.status.recoveryPerformed ||
     favoritesResult.status.recoveryPerformed ||
     collectionsResult.status.recoveryPerformed ||
-    ordersResult.status.recoveryPerformed);
+    ordersResult.status.recoveryPerformed ||
+    questSystemResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
@@ -621,7 +649,8 @@ function createInitialGameState(): GameState {
       sortBy: 'created_desc'
     },
     orderScheduleSlots: scheduleSlots,
-    filmLab: createInitialFilmLabState()
+    filmLab: createInitialFilmLabState(),
+    questSystem: questSystemResult.state
   };
 }
 
@@ -996,6 +1025,21 @@ function createGameStore() {
         }
       }
       
+      let updatedQuestSystem = state.questSystem;
+      if (state.questSystem.currentActiveQuestId) {
+        const questId = state.questSystem.currentActiveQuestId;
+        const warnings: string[] = [];
+        const questResult = evaluateQuestAttempt(
+          state.questSystem,
+          questId,
+          photo,
+          state.currentParams,
+          warnings
+        );
+        updatedQuestSystem = applyQuestResult(state.questSystem, questId, questResult);
+        saveQuestSystem(updatedQuestSystem);
+      }
+      
       return {
         ...state,
         isDeveloping: false,
@@ -1007,6 +1051,7 @@ function createGameStore() {
         storageStatus: newStorageStatus,
         orders: updatedOrders,
         currentOrderId: updatedCurrentOrderId,
+        questSystem: updatedQuestSystem,
         stageState: {
           ...state.stageState,
           currentStage: 'complete',
@@ -2593,6 +2638,79 @@ function createGameStore() {
       filmLab: {
         ...state.filmLab,
         compareHistory: []
+      }
+    })),
+
+    setActiveQuest: (questId: string | null) => update(state => {
+      const newQuestSystem = setActiveQuest(state.questSystem, questId);
+      saveQuestSystem(newQuestSystem);
+      return {
+        ...state,
+        questSystem: newQuestSystem
+      };
+    }),
+
+    claimQuestRewards: (questId: string) => update(state => {
+      const result = claimQuestRewards(state.questSystem, questId);
+      saveQuestSystem(result.state);
+      return {
+        ...state,
+        questSystem: result.state
+      };
+    }),
+
+    claimStageBonus: (stageId: string) => update(state => {
+      const result = claimStageBonus(state.questSystem, stageId);
+      saveQuestSystem(result.state);
+      return {
+        ...state,
+        questSystem: result.state
+      };
+    }),
+
+    resetQuestProgress: () => update(state => {
+      const newQuestSystem = createInitialQuestSystemState();
+      saveQuestSystem(newQuestSystem);
+      return {
+        ...state,
+        questSystem: newQuestSystem
+      };
+    }),
+
+    checkFilmRestrictionsForQuest: (questId: string, filmId: string, subjectId: string): { valid: boolean; warnings: string[] } => {
+      const warnings: string[] = [];
+      const valid = validateFilmRestrictions(
+        getQuestById(questId),
+        filmId,
+        subjectId,
+        warnings
+      );
+      return { valid, warnings };
+    },
+
+    getQuestStatus: (questId: string): QuestStatus | undefined => {
+      let result: QuestStatus | undefined;
+      const unsubscribe = subscribe(state => {
+        result = getQuestStatusFromState(state.questSystem, getQuestById(questId));
+      });
+      unsubscribe();
+      return result;
+    },
+
+    getStageStatus: (stageId: string): StageStatus | undefined => {
+      let result: StageStatus | undefined;
+      const unsubscribe = subscribe(state => {
+        result = getStageStatusFromState(state.questSystem, getStageById(stageId));
+      });
+      unsubscribe();
+      return result;
+    },
+
+    clearLastQuestRewards: () => update(state => ({
+      ...state,
+      questSystem: {
+        ...state.questSystem,
+        lastClaimedRewards: null
       }
     }))
   };

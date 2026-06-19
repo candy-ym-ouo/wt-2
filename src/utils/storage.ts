@@ -1,5 +1,6 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
+import { createInitialQuestSystemState } from './questSystem';
 
 export const CURRENT_STORAGE_VERSION = 3;
 export const MAX_PHOTOS = 100;
@@ -30,7 +31,7 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
@@ -39,7 +40,8 @@ const KEY_MAP: Record<StorageKey, string> = {
   favorites: 'darkroom_favorites',
   collections: 'darkroom_collections',
   achievements: 'darkroom_achievements',
-  orders: 'darkroom_orders'
+  orders: 'darkroom_orders',
+  quest_system: 'darkroom_quest_system'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -268,6 +270,8 @@ function migrateData<T>(key: StorageKey, data: unknown, fromVersion: number): T 
       return migrateCollections(data, fromVersion) as T;
     case 'achievements':
       return data as T;
+    case 'quest_system':
+      return repairQuestSystem(data as QuestSystemState) as T;
     default:
       return data as T;
   }
@@ -357,7 +361,7 @@ function validateAchievementState(data: unknown): data is AchievementState {
 }
 
 function validateData<T>(key: StorageKey, data: unknown): T | null {
-  if (!Array.isArray(data) && key !== 'tutorial' && key !== 'achievements') {
+  if (!Array.isArray(data) && key !== 'tutorial' && key !== 'achievements' && key !== 'quest_system') {
     return null;
   }
   
@@ -392,6 +396,9 @@ function validateData<T>(key: StorageKey, data: unknown): T | null {
     }
     case 'achievements': {
       return validateAchievementState(data) ? (data as T) : null;
+    }
+    case 'quest_system': {
+      return validateQuestSystemState(data) ? (data as T) : null;
     }
     default:
       return null;
@@ -661,4 +668,63 @@ export function loadSavedOrders(): { orders: DarkroomOrder[]; status: Partial<St
 export function saveOrders(orders: DarkroomOrder[]): boolean {
   const limited = enforceLimits('orders', orders);
   return saveWithBackup('orders', limited, limited.length);
+}
+
+function validateQuestSystemState(data: unknown): data is QuestSystemState {
+  if (typeof data !== 'object' || data === null) return false;
+  const q = data as Record<string, unknown>;
+  return (
+    typeof q.totalPoints === 'number' &&
+    Array.isArray(q.earnedBadges) &&
+    Array.isArray(q.earnedTitles) &&
+    Array.isArray(q.unlockedSubjectIds) &&
+    Array.isArray(q.unlockedFilmIds) &&
+    Array.isArray(q.unlockedRecipeIds) &&
+    typeof q.questProgress === 'object' && q.questProgress !== null &&
+    typeof q.stageProgress === 'object' && q.stageProgress !== null
+  );
+}
+
+export function repairQuestSystem(state: QuestSystemState): QuestSystemState {
+  const initial = createInitialQuestSystemState();
+  const repaired: QuestSystemState = {
+    totalPoints: typeof state.totalPoints === 'number' ? state.totalPoints : initial.totalPoints,
+    earnedBadges: Array.isArray(state.earnedBadges) ? state.earnedBadges : initial.earnedBadges,
+    earnedTitles: Array.isArray(state.earnedTitles) ? state.earnedTitles : initial.earnedTitles,
+    unlockedSubjectIds: Array.isArray(state.unlockedSubjectIds) ? state.unlockedSubjectIds : initial.unlockedSubjectIds,
+    unlockedFilmIds: Array.isArray(state.unlockedFilmIds) ? state.unlockedFilmIds : initial.unlockedFilmIds,
+    unlockedRecipeIds: Array.isArray(state.unlockedRecipeIds) ? state.unlockedRecipeIds : initial.unlockedRecipeIds,
+    questProgress: typeof state.questProgress === 'object' && state.questProgress !== null
+      ? { ...initial.questProgress, ...state.questProgress }
+      : initial.questProgress,
+    stageProgress: typeof state.stageProgress === 'object' && state.stageProgress !== null
+      ? { ...initial.stageProgress, ...state.stageProgress }
+      : initial.stageProgress,
+    currentActiveQuestId: state.currentActiveQuestId || null,
+    lastClaimedRewards: state.lastClaimedRewards || null
+  };
+  return repaired;
+}
+
+export function loadSavedQuestSystem(): { state: QuestSystemState; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<QuestSystemState>('quest_system', createInitialQuestSystemState());
+  const status: Partial<StorageStatus> = {
+    questSystemLoaded: result.success
+  };
+
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+
+  let state = result.data || createInitialQuestSystemState();
+  state = repairQuestSystem(state);
+
+  return { state, status };
+}
+
+export function saveQuestSystem(state: QuestSystemState): boolean {
+  return saveWithBackup('quest_system', state, 1);
 }

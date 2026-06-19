@@ -1066,3 +1066,430 @@ export const DEFAULT_RECIPES: DeveloperRecipe[] = [
     isDefault: true
   }
 ];
+
+import type { StageDefinition, QuestDefinition } from '../types/game';
+
+export const STAGE_DEFINITIONS: StageDefinition[] = [
+  {
+    id: 'stage_01',
+    order: 1,
+    title: '入门之章',
+    subtitle: '暗房学徒',
+    description: '欢迎来到暗房的世界！在这里，你将学习基础的胶片冲洗技术，从最简单的人像和静物开始，逐步掌握曝光、显影的基本要领。',
+    icon: '🌱',
+    color: '#7ec8a0',
+    backgroundGradient: 'linear-gradient(135deg, #a8e6cf 0%, #7ec8a0 100%)',
+    questIds: ['quest_01_01', 'quest_01_02', 'quest_01_03'],
+    prerequisites: [],
+    bonus: {
+      type: 'all_quests_grade',
+      value: 'B',
+      label: '全部任务B级以上通关',
+      rewards: [
+        { type: 'badge', value: '🌿', label: '新手入门徽章' }
+      ]
+    }
+  },
+  {
+    id: 'stage_02',
+    order: 2,
+    title: '进阶之路',
+    subtitle: '街头行者',
+    description: '你已经掌握了基础技巧。现在让我们走出影棚，迎接街头纪实摄影的挑战。复杂的光线条件、多变的场景，将考验你对参数的直觉判断。',
+    icon: '🚶',
+    color: '#6b8ec7',
+    backgroundGradient: 'linear-gradient(135deg, #89b3e0 0%, #6b8ec7 100%)',
+    questIds: ['quest_02_01', 'quest_02_02', 'quest_02_03'],
+    prerequisites: ['stage_01'],
+    bonus: {
+      type: 'all_quests_grade',
+      value: 'A',
+      label: '全部任务A级以上通关',
+      rewards: [
+        { type: 'badge', value: '🏅', label: '街头猎手徽章' }
+      ]
+    }
+  },
+  {
+    id: 'stage_03',
+    order: 3,
+    title: '风光无限',
+    subtitle: '自然捕手',
+    description: '大自然是最变幻莫测的暗房导师。从晨雾中的山峦到逆光下的剪影，你需要驾驭极端的反差，用色彩和层次书写壮丽的诗篇。',
+    icon: '🏔️',
+    color: '#c9a87c',
+    backgroundGradient: 'linear-gradient(135deg, #e0c9a8 0%, #c9a87c 100%)',
+    questIds: ['quest_03_01', 'quest_03_02', 'quest_03_03'],
+    prerequisites: ['stage_02'],
+    bonus: {
+      type: 'all_quests_grade',
+      value: 'A',
+      label: '全部任务A级以上通关',
+      rewards: [
+        { type: 'badge', value: '🎨', label: '风光大师徽章' }
+      ]
+    }
+  },
+  {
+    id: 'stage_04',
+    order: 4,
+    title: '暗夜挑战',
+    subtitle: '追光者',
+    description: '夜幕降临，真正的考验才刚刚开始。微弱的光线、极端的反差、神秘的氛围——只有最优秀的暗房技师才能在黑暗中创造奇迹。',
+    icon: '🌙',
+    color: '#7a6db4',
+    backgroundGradient: 'linear-gradient(135deg, #a79ed8 0%, #7a6db4 100%)',
+    questIds: ['quest_04_01', 'quest_04_02', 'quest_04_03'],
+    prerequisites: ['stage_03'],
+    bonus: {
+      type: 'all_quests_grade',
+      value: 'S',
+      label: '全部任务S级完美通关',
+      rewards: [
+        { type: 'badge', value: '💎', label: '暗夜之王徽章' },
+        { type: 'title', value: '暗房大师', label: '获得称号：暗房大师' }
+      ]
+    }
+  }
+];
+
+export const QUEST_DEFINITIONS: QuestDefinition[] = [
+  {
+    id: 'quest_01_01',
+    stageId: 'stage_01',
+    order: 1,
+    title: '温柔的窗光',
+    description: '使用黑白胶片，为窗边的少女拍摄一张柔和的人像。重点是细腻的肤色表现和自然的光影过渡。',
+    storyText: '"摄影是光的画笔。" —— 这是你在暗房学到的第一课。今天的任务很简单：用经典的黑白胶片，记录下窗光中少女的轮廓。记住，柔和不是平淡，而是藏在暗处的细节。',
+    difficulty: 1,
+    requirement: {
+      subjectId: 'portrait_01',
+      requireFilmColor: 'bw',
+      minScore: 55,
+      minGrade: 'C',
+      bonusConditions: [
+        { type: 'film_match', label: '使用推荐胶片 (HP5+)', bonusPoints: 50 },
+        { type: 'specific_grade', value: 'B', label: '达到B级评分', bonusPoints: 100 },
+        { type: 'perfect_exposure', label: '曝光偏差<10%', bonusPoints: 80 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 200, label: '200经验值', icon: '⭐' },
+      { type: 'unlock_film', value: ['portra400'], label: '解锁胶片：柯达 Portra 400', icon: '🎞️' },
+      { type: 'unlock_subject', value: ['still_life_01'], label: '解锁题材：茶与旧书', icon: '📷' }
+    ],
+    prerequisites: [],
+    tags: ['黑白', '人像', '入门']
+  },
+  {
+    id: 'quest_01_02',
+    stageId: 'stage_01',
+    order: 2,
+    title: '午后的时光',
+    description: '使用彩色胶片，为静物"茶与旧书"拍摄暖调照片。表现木纹的质感和书页的纹理。',
+    storyText: '一杯茶，一本旧书，就能构成一个故事。你的任务是用色彩诉说这个午后的慵懒时光。暖调不是偏色，而是恰到好处的温度感。',
+    difficulty: 2,
+    requirement: {
+      subjectId: 'still_life_01',
+      requireFilmColor: 'color',
+      allowedFilmIds: ['portra400', 'ektar100'],
+      minScore: 60,
+      minGrade: 'C',
+      bonusConditions: [
+        { type: 'film_match', label: '使用推荐胶片', bonusPoints: 50 },
+        { type: 'no_warnings', label: '无参数警告', bonusPoints: 100 },
+        { type: 'specific_grade', value: 'A', label: '达到A级评分', bonusPoints: 150 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 300, label: '300经验值', icon: '⭐' },
+      { type: 'unlock_recipe', value: ['recipe_c41_color'], label: '解锁配方：C-41彩色标准', icon: '🧪' },
+      { type: 'badge', value: '📚', label: '静物入门徽章' }
+    ],
+    prerequisites: ['quest_01_01'],
+    tags: ['彩色', '静物', '暖调']
+  },
+  {
+    id: 'quest_01_03',
+    stageId: 'stage_01',
+    order: 3,
+    title: '光影的练习',
+    description: '任选黑白胶片，完成逆光剪影人像的拍摄。重点表现轮廓光和发丝光的细节。',
+    storyText: '剪影，是摄影中最古老也最浪漫的技法之一。在日落的逆光中，人物的轮廓被镀上金边——你需要在保留暗部细节和突出轮廓之间找到完美的平衡。',
+    difficulty: 2,
+    requirement: {
+      subjectId: 'portrait_02',
+      requireFilmColor: 'bw',
+      minScore: 65,
+      minGrade: 'C',
+      requireKeyAreaHits: 2,
+      bonusConditions: [
+        { type: 'all_key_areas', label: '命中全部关键区域', bonusPoints: 120 },
+        { type: 'specific_grade', value: 'B', label: '达到B级评分', bonusPoints: 80 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 350, label: '350经验值', icon: '⭐' },
+      { type: 'unlock_film', value: ['ektar100'], label: '解锁胶片：柯达 Ektar 100', icon: '🎞️' },
+      { type: 'title', value: '光影学徒', label: '获得称号：光影学徒' }
+    ],
+    prerequisites: ['quest_01_02'],
+    tags: ['黑白', '人像', '逆光']
+  },
+
+  {
+    id: 'quest_02_01',
+    stageId: 'stage_02',
+    order: 1,
+    title: '雨中的城市',
+    description: '使用黑白街头经典胶片，完成雨中街角的拍摄。利用地面反光营造氛围。',
+    storyText: '雨，是街头摄影师最好的朋友。湿漉漉的柏油路像一面镜子，把霓虹和路灯揉成抽象的画作。请用 Tri-X 的粗犷颗粒，记录这个城市最真实的脉搏。',
+    difficulty: 3,
+    requirement: {
+      subjectId: 'street_01',
+      allowedFilmIds: ['tri-x', 'hp5'],
+      minScore: 65,
+      minGrade: 'B',
+      bonusConditions: [
+        { type: 'film_match', label: '使用推荐胶片 (Tri-X)', bonusPoints: 80 },
+        { type: 'specific_grade', value: 'A', label: '达到A级评分', bonusPoints: 150 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 400, label: '400经验值', icon: '⭐' },
+      { type: 'unlock_film', value: ['tri-x'], label: '解锁胶片：柯达 Tri-X 400', icon: '🎞️' },
+      { type: 'unlock_subject', value: ['street_01'], label: '解锁题材：雨中街角', icon: '📷' }
+    ],
+    prerequisites: [],
+    tags: ['街头', '黑白', '纪实']
+  },
+  {
+    id: 'quest_02_02',
+    stageId: 'stage_02',
+    order: 2,
+    title: '街头的色彩',
+    description: '使用任意彩色胶片，重新拍摄雨中街角。这次要表现霓虹灯的色彩与雨夜的氛围。',
+    storyText: '黑白摄影是减法，彩色摄影是加法。当你把颜色加回到雨夜的场景中，霓虹的艳红、伞面的明黄、倒影的混色——你需要在杂乱的色彩中找到秩序。',
+    difficulty: 3,
+    requirement: {
+      subjectId: 'street_01',
+      requireFilmColor: 'color',
+      minScore: 70,
+      minGrade: 'B',
+      bonusConditions: [
+        { type: 'no_warnings', label: '无参数警告', bonusPoints: 100 },
+        { type: 'all_key_areas', label: '命中全部关键区域', bonusPoints: 150 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 450, label: '450经验值', icon: '⭐' },
+      { type: 'unlock_recipe', value: ['recipe_d76_contrast'], label: '解锁配方：D-76高反差', icon: '🧪' },
+      { type: 'badge', value: '🌧️', label: '雨夜漫步者徽章' }
+    ],
+    prerequisites: ['quest_02_01'],
+    tags: ['街头', '彩色', '霓虹']
+  },
+  {
+    id: 'quest_02_03',
+    stageId: 'stage_02',
+    order: 3,
+    title: '风格的抉择',
+    description: '使用高感光度黑白胶片，在同一题材上与之前的作品对比。这是对胶片特性的深入理解。',
+    storyText: '每种胶片都有自己的脾气。HP5的细腻、Tri-X的粗犷、Delta 3200的狂野——只有真正理解它们的性格，才能在关键时刻做出正确的选择。',
+    difficulty: 3,
+    requirement: {
+      subjectId: 'street_01',
+      allowedFilmIds: ['delta3200'],
+      minScore: 68,
+      minGrade: 'B',
+      bonusConditions: [
+        { type: 'perfect_exposure', label: '曝光偏差<5%', bonusPoints: 200 },
+        { type: 'specific_grade', value: 'A', label: '达到A级评分', bonusPoints: 150 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 500, label: '500经验值', icon: '⭐' },
+      { type: 'unlock_film', value: ['delta3200'], label: '解锁胶片：伊尔福 Delta 3200', icon: '🎞️' },
+      { type: 'title', value: '街头猎手', label: '获得称号：街头猎手' }
+    ],
+    prerequisites: ['quest_02_02'],
+    tags: ['黑白', '高感', '胶片对比']
+  },
+
+  {
+    id: 'quest_03_01',
+    stageId: 'stage_03',
+    order: 1,
+    title: '山间晨雾',
+    description: '使用高饱和彩色胶片，完成山间晨雾风光的拍摄。重点是保留暗部细节同时突出天空层次。',
+    storyText: '山雾缭绕的清晨，是风光摄影师的黄金时刻。问题是：天空那么亮，森林那么暗——你要如何用一卷胶片，容纳这所有的层次？',
+    difficulty: 4,
+    requirement: {
+      subjectId: 'landscape_01',
+      requireFilmColor: 'color',
+      allowedFilmIds: ['velvia50', 'ektar100'],
+      minScore: 72,
+      minGrade: 'B',
+      requireKeyAreaHits: 3,
+      bonusConditions: [
+        { type: 'film_match', label: '使用 Velvia 50', bonusPoints: 100 },
+        { type: 'all_key_areas', label: '命中全部关键区域', bonusPoints: 200 },
+        { type: 'specific_grade', value: 'A', label: '达到A级评分', bonusPoints: 200 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 550, label: '550经验值', icon: '⭐' },
+      { type: 'unlock_film', value: ['velvia50'], label: '解锁胶片：富士 Velvia 50', icon: '🎞️' },
+      { type: 'unlock_subject', value: ['landscape_01'], label: '解锁题材：山间晨雾', icon: '📷' }
+    ],
+    prerequisites: [],
+    tags: ['风光', '彩色', '高反差']
+  },
+  {
+    id: 'quest_03_02',
+    stageId: 'stage_03',
+    order: 2,
+    title: '黑白的壮丽',
+    description: '使用黑白胶片重新演绎山间晨雾。用灰度层次而非色彩，表现山川的力量感。',
+    storyText: '当你剥离掉色彩，剩下的是什么？是光与影的对话，是线条与质感的交响。安塞尔·亚当斯用黑白创造了永恒的风光——现在轮到你了。',
+    difficulty: 4,
+    requirement: {
+      subjectId: 'landscape_01',
+      requireFilmColor: 'bw',
+      minScore: 75,
+      minGrade: 'B',
+      bonusConditions: [
+        { type: 'film_match', label: '使用推荐胶片 (HP5+)', bonusPoints: 80 },
+        { type: 'no_warnings', label: '无参数警告', bonusPoints: 120 },
+        { type: 'specific_grade', value: 'A', label: '达到A级评分', bonusPoints: 200 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 600, label: '600经验值', icon: '⭐' },
+      { type: 'unlock_recipe', value: ['recipe_xtol_sharp'], label: '解锁配方：Xtol高锐度', icon: '🧪' },
+      { type: 'badge', value: '🏔️', label: '山岳摄影师徽章' }
+    ],
+    prerequisites: ['quest_03_01'],
+    tags: ['风光', '黑白', '区域曝光']
+  },
+  {
+    id: 'quest_03_03',
+    stageId: 'stage_03',
+    order: 3,
+    title: '逆光的艺术',
+    description: '使用彩色反转片，完成逆光剪影人像。反转片的宽容度很低，你需要极其精准的曝光判断。',
+    storyText: '反转片是最严厉的老师——它没有"后期补救"的余地，曝光差了就是差了。但正是这种严苛，让每一张成功的反转片都如宝石般珍贵。',
+    difficulty: 4,
+    requirement: {
+      subjectId: 'portrait_02',
+      allowedFilmIds: ['velvia50'],
+      minScore: 78,
+      minGrade: 'B',
+      requireKeyAreaHits: 3,
+      bonusConditions: [
+        { type: 'all_key_areas', label: '命中全部关键区域', bonusPoints: 250 },
+        { type: 'perfect_exposure', label: '曝光偏差<5%', bonusPoints: 200 },
+        { type: 'specific_grade', value: 'S', label: '达到S级评分', bonusPoints: 300 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 700, label: '700经验值', icon: '⭐' },
+      { type: 'unlock_recipe', value: ['recipe_e6_reversal'], label: '解锁配方：E-6反转片工艺', icon: '🧪' },
+      { type: 'title', value: '自然捕手', label: '获得称号：自然捕手' }
+    ],
+    prerequisites: ['quest_03_02'],
+    tags: ['反转片', '人像', '逆光']
+  },
+
+  {
+    id: 'quest_04_01',
+    stageId: 'stage_04',
+    order: 1,
+    title: '都市霓虹',
+    description: '使用高感光度黑白胶片，完成都市夜景拍摄。在极端的明暗对比中保留细节。',
+    storyText: '城市在夜晚脱下伪装。写字楼的灯光、出租车的尾灯、24小时便利店的日光灯——所有这些光源都在考验你对曝光的掌控。记住：暗部不死黑，高光不溢出，这是夜景的铁律。',
+    difficulty: 5,
+    requirement: {
+      subjectId: 'night_01',
+      requireFilmColor: 'bw',
+      allowedFilmIds: ['delta3200', 'tri-x'],
+      minScore: 75,
+      minGrade: 'B',
+      requireKeyAreaHits: 3,
+      maxAttempts: 5,
+      bonusConditions: [
+        { type: 'film_match', label: '使用 Delta 3200', bonusPoints: 120 },
+        { type: 'all_key_areas', label: '命中全部关键区域', bonusPoints: 250 },
+        { type: 'specific_grade', value: 'A', label: '达到A级评分', bonusPoints: 250 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 800, label: '800经验值', icon: '⭐' },
+      { type: 'unlock_subject', value: ['night_01'], label: '解锁题材：都市夜景', icon: '📷' },
+      { type: 'badge', value: '🌃', label: '夜行者徽章' }
+    ],
+    prerequisites: [],
+    tags: ['夜景', '黑白', '高感']
+  },
+  {
+    id: 'quest_04_02',
+    stageId: 'stage_04',
+    order: 2,
+    title: '灯火阑珊处',
+    description: '使用彩色负片，重新诠释都市夜景。这次你需要精确控制色温，表现灯光的色彩温度。',
+    storyText: '霓虹灯为什么是红的？路灯为什么是黄的？这背后都有色温的科学。在彩色夜景中，你的任务不仅是保留层次，更是保留每一盏灯独特的性格。',
+    difficulty: 5,
+    requirement: {
+      subjectId: 'night_01',
+      requireFilmColor: 'color',
+      allowedFilmIds: ['portra400', 'ektar100'],
+      minScore: 80,
+      minGrade: 'A',
+      requireKeyAreaHits: 3,
+      maxAttempts: 5,
+      bonusConditions: [
+        { type: 'film_match', label: '使用 Portra 400', bonusPoints: 100 },
+        { type: 'no_warnings', label: '无参数警告', bonusPoints: 150 },
+        { type: 'perfect_exposure', label: '曝光偏差<5%', bonusPoints: 250 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 900, label: '900经验值', icon: '⭐' },
+      { type: 'unlock_recipe', value: ['recipe_id11_finegrain'], label: '解锁配方：ID-11细颗粒', icon: '🧪' },
+      { type: 'badge', value: '💡', label: '追光者徽章' }
+    ],
+    prerequisites: ['quest_04_01'],
+    tags: ['夜景', '彩色', '色温']
+  },
+  {
+    id: 'quest_04_03',
+    stageId: 'stage_04',
+    order: 3,
+    title: '大师的挑战',
+    description: '最终挑战：使用任意胶片，在都市夜景上达到S级评分。这是对全部所学的终极检验。',
+    storyText: '你已经走了很远。从窗边少女的柔和光线，到城市夜晚的霓虹幻影——现在，是时候证明自己了。请用一卷胶片，完成一幅真正的大师级作品。暗房在等待你。',
+    difficulty: 5,
+    requirement: {
+      subjectId: 'night_01',
+      minScore: 90,
+      minGrade: 'S',
+      requireKeyAreaHits: 4,
+      maxAttempts: 8,
+      bonusConditions: [
+        { type: 'all_key_areas', label: '完美命中全部关键区域', bonusPoints: 400 },
+        { type: 'no_warnings', label: '无任何参数警告', bonusPoints: 300 },
+        { type: 'perfect_exposure', label: '曝光偏差<3%', bonusPoints: 500 }
+      ]
+    },
+    rewards: [
+      { type: 'points', value: 1500, label: '1500经验值', icon: '⭐' },
+      { type: 'badge', value: '👑', label: '暗房之王徽章' },
+      { type: 'title', value: '传奇暗房师', label: '获得称号：传奇暗房师' }
+    ],
+    prerequisites: ['quest_04_02'],
+    tags: ['最终挑战', 'S级', '大师']
+  }
+];
+
+export const INITIAL_UNLOCKED_SUBJECTS = ['portrait_01'];
+export const INITIAL_UNLOCKED_FILMS = ['hp5'];

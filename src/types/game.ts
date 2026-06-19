@@ -271,6 +271,7 @@ export interface GameState {
   orderFilter: OrderFilter;
   orderScheduleSlots: ScheduleSlot[];
   filmLab: FilmLabState;
+  questSystem: QuestSystemState;
 }
 
 export type TutorialUnlockCondition = 
@@ -336,6 +337,7 @@ export interface StorageStatus {
   favoritesLoaded: number;
   collectionsLoaded: number;
   ordersLoaded: number;
+  questSystemLoaded?: boolean;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -741,4 +743,145 @@ export interface FilmLabState {
   selectedRecipeId: string | null;
   selectedSolutionId: string | null;
   selectedChemicalId: string | null;
+}
+
+export type QuestStatus = 'locked' | 'available' | 'in_progress' | 'completed' | 'claimed';
+
+export type StageStatus = 'locked' | 'unlocked' | 'cleared';
+
+export type QuestRewardType =
+  | { type: 'unlock_subject'; subjectIds: string[] }
+  | { type: 'unlock_film'; filmIds: string[] }
+  | { type: 'unlock_recipe'; recipeIds: string[] }
+  | { type: 'points'; amount: number }
+  | { type: 'title'; title: string }
+  | { type: 'badge'; badge: string; title?: string }
+  | { type: 'preset'; presetId: string };
+
+export interface QuestReward {
+  type: QuestRewardType['type'];
+  value: string[] | number | string;
+  label: string;
+  icon?: string;
+}
+
+export interface QuestRequirement {
+  subjectId: string;
+  allowedFilmIds?: string[];
+  forbiddenFilmIds?: string[];
+  requireFilmColor?: 'bw' | 'color';
+  minScore: number;
+  minGrade?: 'S' | 'A' | 'B' | 'C' | 'D';
+  requireKeyAreaHits?: number;
+  maxAttempts?: number;
+  bonusConditions?: {
+    type: 'film_match' | 'all_key_areas' | 'no_warnings' | 'perfect_exposure' | 'specific_grade';
+    value?: string | number;
+    label: string;
+    bonusPoints: number;
+  }[];
+}
+
+export interface QuestDefinition {
+  id: string;
+  stageId: string;
+  order: number;
+  title: string;
+  description: string;
+  storyText?: string;
+  difficulty: DifficultyLevel;
+  requirement: QuestRequirement;
+  rewards: QuestReward[];
+  prerequisites: string[];
+  tags: string[];
+}
+
+export interface StageDefinition {
+  id: string;
+  order: number;
+  title: string;
+  subtitle: string;
+  description: string;
+  icon: string;
+  color: string;
+  backgroundGradient?: string;
+  questIds: string[];
+  prerequisites: string[];
+  bonus?: {
+    type: 'all_quests_grade' | 'total_points' | 'streak';
+    value: string | number;
+    rewards: QuestReward[];
+    label: string;
+  };
+}
+
+export interface QuestProgress {
+  questId: string;
+  status: QuestStatus;
+  bestScore: number;
+  bestGrade: 'S' | 'A' | 'B' | 'C' | 'D' | null;
+  attempts: number;
+  completedAt?: number;
+  claimedAt?: number;
+  unlockedSubjectIds: string[];
+  unlockedFilmIds: string[];
+  bonusAchieved: string[];
+}
+
+export interface StageProgress {
+  stageId: string;
+  status: 'locked' | 'unlocked' | 'cleared';
+  totalScore: number;
+  unlockedAt?: number;
+  clearedAt?: number;
+  bonusClaimed?: boolean;
+}
+
+export interface QuestSystemState {
+  totalPoints: number;
+  earnedBadges: string[];
+  earnedTitles: string[];
+  unlockedSubjectIds: string[];
+  unlockedFilmIds: string[];
+  unlockedRecipeIds: string[];
+  questProgress: Record<string, QuestProgress>;
+  stageProgress: Record<string, StageProgress>;
+  currentActiveQuestId: string | null;
+  lastClaimedRewards: {
+    rewards: QuestReward[];
+    timestamp: number;
+  } | null;
+}
+
+export interface QuestAttemptResult {
+  success: boolean;
+  score: number;
+  grade: 'S' | 'A' | 'B' | 'C' | 'D';
+  passedRequirement: boolean;
+  failedReasons: string[];
+  bonusEarned: {
+    condition: string;
+    label: string;
+    points: number;
+  }[];
+  basePoints: number;
+  totalPoints: number;
+  isNewBest: boolean;
+  unlockedItems: {
+    subjects: string[];
+    films: string[];
+    recipes: string[];
+  };
+}
+
+export interface FilmRestrictionResult {
+  allowed: boolean;
+  filmId: string;
+  questId: string;
+  restrictions: {
+    type: 'allowed_list' | 'forbidden_list' | 'color_requirement';
+    value: string | string[];
+    passed: boolean;
+    message: string;
+  }[];
 }
