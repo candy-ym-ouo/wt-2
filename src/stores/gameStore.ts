@@ -1,7 +1,21 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS } from '../data/gameData';
 import { generateId } from '../utils/math';
+import {
+  loadWithFallback,
+  saveWithBackup,
+  enforceLimits,
+  isStorageNearLimit,
+  getStorageInfo,
+  repairPhotos,
+  repairPresets,
+  clearStorage,
+  exportAllData,
+  importAllData,
+  MAX_PHOTOS,
+  MAX_PRESETS
+} from '../utils/storage';
 
 function createInitialStageState(): StageState {
   return {
@@ -54,31 +68,43 @@ function createInitialTutorialState(): TutorialState {
   };
 }
 
-function loadSavedTutorialState(): TutorialState {
-  try {
-    const saved = localStorage.getItem('darkroom_tutorial');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return {
-        ...parsed,
-        steps: parsed.steps.map((s: TutorialStepState) => ({
-          ...s,
-          actionsPerformed: s.actionsPerformed || []
-        }))
-      };
+function createInitialStorageStatus(): StorageStatus {
+  const info = getStorageInfo();
+  return {
+    warnings: [],
+    photosLoaded: 0,
+    presetsLoaded: 0,
+    tutorialLoaded: false,
+    lastSaveSuccess: true,
+    storageUsed: info.used,
+    storageQuota: info.quota,
+    migrationPerformed: false,
+    recoveryPerformed: false,
+    corruptedItems: {
+      photos: 0,
+      presets: 0
     }
-  } catch (e) {
-    console.error('Failed to load tutorial state:', e);
-  }
-  return createInitialTutorialState();
+  };
 }
 
-function saveTutorialState(state: TutorialState) {
-  try {
-    localStorage.setItem('darkroom_tutorial', JSON.stringify(state));
-  } catch (e) {
-    console.error('Failed to save tutorial state:', e);
+function loadSavedTutorialState(): { state: TutorialState; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<TutorialState>('tutorial', createInitialTutorialState());
+  const status: Partial<StorageStatus> = {
+    tutorialLoaded: result.success
+  };
+  
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
   }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+  
+  return { state: result.data || createInitialTutorialState(), status };
+}
+
+function saveTutorialState(state: TutorialState): boolean {
+  return saveWithBackup('tutorial', state, 1);
 }
 
 function checkUnlockCondition(
@@ -251,9 +277,69 @@ function canGoToStep(state: GameState, targetStep: number): { canGo: boolean; re
 }
 
 function createInitialGameState(): GameState {
-  const savedTutorial = loadSavedTutorialState();
+  const tutorialResult = loadSavedTutorialState();
+  const photosResult = loadSavedPhotos();
+  const presetsResult = loadSavedPresets();
+  
+  const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
   const currentStep = savedTutorial.isCompleted ? TUTORIAL_STEPS.length - 1 : savedTutorial.currentStep;
+  
+  const storageStatus = createInitialStorageStatus();
+  storageStatus.photosLoaded = photosResult.status.photosLoaded || 0;
+  storageStatus.presetsLoaded = presetsResult.status.presetsLoaded || 0;
+  storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
+  storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
+    presetsResult.status.migrationPerformed || 
+    tutorialResult.status.migrationPerformed);
+  storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
+    presetsResult.status.recoveryPerformed || 
+    tutorialResult.status.recoveryPerformed);
+  
+  if (photosResult.status.corruptedItems?.photos) {
+    storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
+  }
+  if (presetsResult.status.corruptedItems?.presets) {
+    storageStatus.corruptedItems.presets = presetsResult.status.corruptedItems.presets;
+  }
+  
+  const warnings: StorageWarning[] = [];
+  const now = Date.now();
+  
+  if (storageStatus.recoveryPerformed) {
+    warnings.push({
+      type: 'recovered',
+      message: '检测到存档损坏，已从备份恢复部分数据',
+      timestamp: now
+    });
+  }
+  
+  if (storageStatus.migrationPerformed) {
+    warnings.push({
+      type: 'migrated',
+      message: '存档数据已升级到新版本',
+      timestamp: now
+    });
+  }
+  
+  if (storageStatus.corruptedItems.photos > 0 || storageStatus.corruptedItems.presets > 0) {
+    warnings.push({
+      type: 'corrupted',
+      message: `发现 ${storageStatus.corruptedItems.photos + storageStatus.corruptedItems.presets} 个损坏数据项，已自动清理`,
+      timestamp: now,
+      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个`
+    });
+  }
+  
+  if (isStorageNearLimit()) {
+    warnings.push({
+      type: 'quota',
+      message: '存储空间即将用尽，请及时清理旧数据',
+      timestamp: now
+    });
+  }
+  
+  storageStatus.warnings = warnings;
 
   return {
     currentSubject: null,
@@ -262,11 +348,11 @@ function createInitialGameState(): GameState {
     developmentProgress: 0,
     isDeveloping: false,
     phase: phase,
-    processedPhotos: loadSavedPhotos(),
+    processedPhotos: photosResult.photos,
     tutorial: savedTutorial,
     tutorialStep: currentStep,
     selectedAlbumPhoto: null,
-    presets: loadSavedPresets(),
+    presets: presetsResult.presets,
     presetHistory: [],
     lastAppliedPresetId: null,
     adjustedParams: [],
@@ -276,7 +362,8 @@ function createInitialGameState(): GameState {
     developStartedAt: null,
     stageState: createInitialStageState(),
     compareSelection: [],
-    compareSubjectId: null
+    compareSubjectId: null,
+    storageStatus
   };
 }
 
@@ -370,14 +457,53 @@ function createGameStore() {
       stageState: { ...state.stageState, ...stageState }
     })),
     finishDevelopment: (photo: ProcessedPhoto) => update(state => {
-      const newPhotos = [photo, ...state.processedPhotos].slice(0, 50);
-      savePhotos(newPhotos);
+      const newPhotos = [photo, ...state.processedPhotos].slice(0, MAX_PHOTOS);
+      const saveSuccess = savePhotos(newPhotos);
+      const info = getStorageInfo();
+      
+      let newWarnings = [...state.storageStatus.warnings];
+      const now = Date.now();
+      
+      const hasQuotaWarning = newWarnings.some(w => w.type === 'quota');
+      if (isStorageNearLimit() && !hasQuotaWarning) {
+        newWarnings.push({
+          type: 'quota',
+          message: '存储空间即将用尽，请及时清理旧数据',
+          timestamp: now
+        });
+      }
+      
+      let newStorageStatus = {
+        ...state.storageStatus,
+        lastSaveSuccess: saveSuccess,
+        lastSaveError: saveSuccess ? undefined : '保存照片失败',
+        photosLoaded: newPhotos.length,
+        storageUsed: info.used,
+        storageQuota: info.quota,
+        warnings: newWarnings
+      };
+      
+      if (state.processedPhotos.length >= MAX_PHOTOS - 1) {
+        const hasLimitWarning = newWarnings.some(w => w.type === 'limit_reached');
+        if (!hasLimitWarning) {
+          newStorageStatus.warnings = [
+            ...newWarnings,
+            {
+              type: 'limit_reached',
+              message: `照片数量已达上限 (${MAX_PHOTOS})，新照片将覆盖最旧的照片`,
+              timestamp: now
+            }
+          ];
+        }
+      }
+      
       return {
         ...state,
         isDeveloping: false,
         developmentProgress: 1,
         phase: 'result',
         processedPhotos: newPhotos,
+        storageStatus: newStorageStatus,
         stageState: {
           ...state.stageState,
           currentStage: 'complete',
@@ -591,24 +717,38 @@ function createGameStore() {
     })),
     deletePhoto: (photoId: string) => update(state => {
       const newPhotos = state.processedPhotos.filter(p => p.id !== photoId);
-      savePhotos(newPhotos);
+      const saveSuccess = savePhotos(newPhotos);
+      const info = getStorageInfo();
       return {
         ...state,
         processedPhotos: newPhotos,
-        selectedAlbumPhoto: state.selectedAlbumPhoto?.id === photoId ? null : state.selectedAlbumPhoto
+        selectedAlbumPhoto: state.selectedAlbumPhoto?.id === photoId ? null : state.selectedAlbumPhoto,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '删除照片失败',
+          photosLoaded: newPhotos.length,
+          storageUsed: info.used,
+          storageQuota: info.quota
+        }
       };
     }),
     updatePhotoNotes: (photoId: string, notes: string) => update(state => {
       const newPhotos = state.processedPhotos.map(p =>
         p.id === photoId ? { ...p, notes } : p
       );
-      savePhotos(newPhotos);
+      const saveSuccess = savePhotos(newPhotos);
       return {
         ...state,
         processedPhotos: newPhotos,
         selectedAlbumPhoto: state.selectedAlbumPhoto?.id === photoId
           ? { ...state.selectedAlbumPhoto, notes }
-          : state.selectedAlbumPhoto
+          : state.selectedAlbumPhoto,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '更新照片备注失败'
+        }
       };
     }),
     savePreset: (name: string, description: string, params: DevParams, subjectId?: string, filmId?: string) => update(state => {
@@ -635,11 +775,19 @@ function createGameStore() {
           version: existing.version + 1
         };
         
-        savePresets(newPresets);
+        const saveSuccess = savePresets(newPresets);
+        const userPresets = newPresets.filter(p => !p.isDefault);
+        
         return {
           ...state,
           presets: newPresets,
-          presetHistory: [historyEntry, ...state.presetHistory].slice(0, 20)
+          presetHistory: [historyEntry, ...state.presetHistory].slice(0, 20),
+          storageStatus: {
+            ...state.storageStatus,
+            lastSaveSuccess: saveSuccess,
+            lastSaveError: saveSuccess ? undefined : '保存预设失败',
+            presetsLoaded: userPresets.length
+          }
         };
       } else {
         const newPreset: ParamPreset = {
@@ -655,10 +803,18 @@ function createGameStore() {
         };
         
         const newPresets = [...state.presets, newPreset];
-        savePresets(newPresets);
+        const saveSuccess = savePresets(newPresets);
+        const userPresets = newPresets.filter(p => !p.isDefault);
+        
         return {
           ...state,
-          presets: newPresets
+          presets: newPresets,
+          storageStatus: {
+            ...state.storageStatus,
+            lastSaveSuccess: saveSuccess,
+            lastSaveError: saveSuccess ? undefined : '保存预设失败',
+            presetsLoaded: userPresets.length
+          }
         };
       }
     }),
@@ -674,11 +830,18 @@ function createGameStore() {
     }),
     deletePreset: (presetId: string) => update(state => {
       const newPresets = state.presets.filter(p => p.id !== presetId);
-      savePresets(newPresets);
+      const saveSuccess = savePresets(newPresets);
+      const userPresets = newPresets.filter(p => !p.isDefault);
       return {
         ...state,
         presets: newPresets,
-        lastAppliedPresetId: state.lastAppliedPresetId === presetId ? null : state.lastAppliedPresetId
+        lastAppliedPresetId: state.lastAppliedPresetId === presetId ? null : state.lastAppliedPresetId,
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '删除预设失败',
+          presetsLoaded: userPresets.length
+        }
       };
     }),
     revertPreset: (presetId: string, historyTimestamp: number) => update(state => {
@@ -707,11 +870,19 @@ function createGameStore() {
         version: existing.version + 1
       };
       
-      savePresets(newPresets);
+      const saveSuccess = savePresets(newPresets);
+      const userPresets = newPresets.filter(p => !p.isDefault);
+      
       return {
         ...state,
         presets: newPresets,
-        presetHistory: [currentHistory, ...state.presetHistory.filter(h => h !== historyEntry)].slice(0, 20)
+        presetHistory: [currentHistory, ...state.presetHistory.filter(h => h !== historyEntry)].slice(0, 20),
+        storageStatus: {
+          ...state.storageStatus,
+          lastSaveSuccess: saveSuccess,
+          lastSaveError: saveSuccess ? undefined : '还原预设失败',
+          presetsLoaded: userPresets.length
+        }
       };
     }),
     toggleComparePhoto: (photoId: string, subjectId: string) => update(state => {
@@ -753,6 +924,72 @@ function createGameStore() {
       compareSelection: [],
       compareSubjectId: null
     })),
+    refreshStorageStatus: () => update(state => {
+      const info = getStorageInfo();
+      const warnings = [...state.storageStatus.warnings];
+      const now = Date.now();
+      
+      const hasQuotaWarning = warnings.some(w => w.type === 'quota');
+      if (isStorageNearLimit() && !hasQuotaWarning) {
+        warnings.push({
+          type: 'quota',
+          message: '存储空间即将用尽，请及时清理旧数据',
+          timestamp: now
+        });
+      } else if (!isStorageNearLimit() && hasQuotaWarning) {
+        const filtered = warnings.filter(w => w.type !== 'quota');
+        return {
+          ...state,
+          storageStatus: {
+            ...state.storageStatus,
+            storageUsed: info.used,
+            storageQuota: info.quota,
+            warnings: filtered
+          }
+        };
+      }
+      
+      return {
+        ...state,
+        storageStatus: {
+          ...state.storageStatus,
+          storageUsed: info.used,
+          storageQuota: info.quota,
+          warnings
+        }
+      };
+    }),
+    dismissStorageWarning: (index: number) => update(state => {
+      const newWarnings = [...state.storageStatus.warnings];
+      newWarnings.splice(index, 1);
+      return {
+        ...state,
+        storageStatus: {
+          ...state.storageStatus,
+          warnings: newWarnings
+        }
+      };
+    }),
+    clearAllStorage: () => {
+      clearStorage();
+      const newState = createInitialGameState();
+      set(newState);
+    },
+    exportStorage: (): string => {
+      return exportAllData();
+    },
+    importStorage: (json: string): { success: boolean; error?: string } => {
+      const result = importAllData(json);
+      if (result.success) {
+        const newState = createInitialGameState();
+        set(newState);
+      }
+      return result;
+    },
+    getStorageLimits: () => ({
+      maxPhotos: MAX_PHOTOS,
+      maxPresets: MAX_PRESETS
+    }),
     reset: () => {
       const newState = createInitialGameState();
       set(newState);
@@ -760,44 +997,62 @@ function createGameStore() {
   };
 }
 
-function loadSavedPhotos(): ProcessedPhoto[] {
-  try {
-    const saved = localStorage.getItem('darkroom_photos');
-    if (saved) return JSON.parse(saved);
-  } catch (e) {
-    console.error('Failed to load photos:', e);
+function loadSavedPhotos(): { photos: ProcessedPhoto[]; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<ProcessedPhoto[]>('photos', []);
+  const photos = result.data || [];
+  const repaired = repairPhotos(photos);
+  const status: Partial<StorageStatus> = {
+    photosLoaded: repaired.length
+  };
+  
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
   }
-  return [];
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+  if (photos.length !== repaired.length) {
+    status.corruptedItems = { photos: photos.length - repaired.length, presets: 0 };
+  }
+  
+  const limited = enforceLimits('photos', repaired);
+  
+  return { photos: limited, status };
 }
 
-function savePhotos(photos: ProcessedPhoto[]) {
-  try {
-    localStorage.setItem('darkroom_photos', JSON.stringify(photos));
-  } catch (e) {
-    console.error('Failed to save photos:', e);
-  }
+function savePhotos(photos: ProcessedPhoto[]): boolean {
+  const limited = enforceLimits('photos', photos);
+  return saveWithBackup('photos', limited, limited.length);
 }
 
-function loadSavedPresets(): ParamPreset[] {
-  try {
-    const saved = localStorage.getItem('darkroom_presets');
-    if (saved) {
-      const userPresets = JSON.parse(saved);
-      return [...DEFAULT_PRESETS, ...userPresets];
-    }
-  } catch (e) {
-    console.error('Failed to load presets:', e);
+function loadSavedPresets(): { presets: ParamPreset[]; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<ParamPreset[]>('presets', []);
+  const userPresets = result.data || [];
+  const repaired = repairPresets(userPresets);
+  const status: Partial<StorageStatus> = {
+    presetsLoaded: repaired.length
+  };
+  
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
   }
-  return [...DEFAULT_PRESETS];
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+  if (userPresets.length !== repaired.length) {
+    status.corruptedItems = { photos: 0, presets: userPresets.length - repaired.length };
+  }
+  
+  const allPresets = [...DEFAULT_PRESETS, ...repaired];
+  const limited = enforceLimits('presets', allPresets);
+  
+  return { presets: limited, status };
 }
 
-function savePresets(presets: ParamPreset[]) {
-  try {
-    const userPresets = presets.filter(p => !p.isDefault);
-    localStorage.setItem('darkroom_presets', JSON.stringify(userPresets));
-  } catch (e) {
-    console.error('Failed to save presets:', e);
-  }
+function savePresets(presets: ParamPreset[]): boolean {
+  const userPresets = presets.filter(p => !p.isDefault);
+  const limited = enforceLimits('presets', userPresets);
+  return saveWithBackup('presets', limited, limited.length);
 }
 
 export const gameStore = createGameStore();

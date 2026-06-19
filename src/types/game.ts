@@ -239,6 +239,7 @@ export interface GameState {
   stageState: StageState;
   compareSelection: string[];
   compareSubjectId: string | null;
+  storageStatus: StorageStatus;
 }
 
 export type TutorialUnlockCondition = 
@@ -285,4 +286,30 @@ export interface TutorialState {
   startedAt: number;
   completedAt?: number;
   totalTimeSpent: number;
+}
+
+export type StorageWarningType = 'quota' | 'corrupted' | 'recovered' | 'migrated' | 'limit_reached';
+
+export interface StorageWarning {
+  type: StorageWarningType;
+  message: string;
+  timestamp: number;
+  details?: string;
+}
+
+export interface StorageStatus {
+  warnings: StorageWarning[];
+  photosLoaded: number;
+  presetsLoaded: number;
+  tutorialLoaded: boolean;
+  lastSaveSuccess: boolean;
+  lastSaveError?: string;
+  storageUsed: number;
+  storageQuota: number;
+  migrationPerformed: boolean;
+  recoveryPerformed: boolean;
+  corruptedItems: {
+    photos: number;
+    presets: number;
+  };
 }

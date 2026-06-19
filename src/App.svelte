@@ -18,6 +18,7 @@
   import TutorialGuide from './components/TutorialGuide.svelte';
   import ScoreDetailPanel from './components/ScoreDetailPanel.svelte';
   import PhotoCompareView from './components/PhotoCompareView.svelte';
+  import StorageStatusBar from './components/StorageStatusBar.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -407,6 +408,7 @@
 </script>
 
 <div class="app-root">
+  <StorageStatusBar />
   <header class="app-header">
     <div class="logo-area">
       <span class="logo-icon">🎞</span>
