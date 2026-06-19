@@ -1,4 +1,4 @@
-import type { FilmStock, PhotoSubject, TutorialStep, DevParams } from '../types/game';
+import type { FilmStock, PhotoSubject, TutorialStep, DevParams, ParamPreset } from '../types/game';
 
 export const FILM_STOCKS: FilmStock[] = [
   {
@@ -274,3 +274,120 @@ export const GRADE_NAMES: Record<string, string> = {
   C: '及格',
   D: '需要练习'
 };
+
+export const DEFAULT_PRESETS: ParamPreset[] = [
+  {
+    id: 'preset_portrait_soft',
+    name: '柔和人像',
+    description: '适用于人像摄影，低对比度，适中饱和度，展现细腻肤色',
+    params: {
+      exposure: 0.55,
+      developmentTime: 0.4,
+      temperature: 0.45,
+      agitation: 0.3,
+      contrast: 0.4,
+      saturation: 0.5,
+      dilution: 0.6
+    },
+    subjectId: 'portrait_01',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'preset_landscape_vivid',
+    name: '浓郁风光',
+    description: '高对比度高饱和度，突出风光摄影的色彩层次',
+    params: {
+      exposure: 0.5,
+      developmentTime: 0.65,
+      temperature: 0.55,
+      agitation: 0.6,
+      contrast: 0.75,
+      saturation: 0.8,
+      dilution: 0.4
+    },
+    subjectId: 'landscape_01',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'preset_street_documentary',
+    name: '街头纪实',
+    description: '中等反差，自然色调，适合城市街头记录',
+    params: {
+      exposure: 0.48,
+      developmentTime: 0.55,
+      temperature: 0.5,
+      agitation: 0.5,
+      contrast: 0.6,
+      saturation: 0.45,
+      dilution: 0.5
+    },
+    subjectId: 'street_01',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'preset_still_life_warm',
+    name: '暖调静物',
+    description: '柔和暖调，低反差，突出静物的质感与细节',
+    params: {
+      exposure: 0.58,
+      developmentTime: 0.45,
+      temperature: 0.5,
+      agitation: 0.35,
+      contrast: 0.45,
+      saturation: 0.6,
+      dilution: 0.55
+    },
+    subjectId: 'still_life_01',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'preset_night_dramatic',
+    name: '夜景戏剧',
+    description: '高反差，精确控制曝光，保留灯光细节',
+    params: {
+      exposure: 0.42,
+      developmentTime: 0.7,
+      temperature: 0.55,
+      agitation: 0.65,
+      contrast: 0.8,
+      saturation: 0.7,
+      dilution: 0.35
+    },
+    subjectId: 'night_01',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'preset_bw_classic',
+    name: '经典黑白',
+    description: '适用于黑白胶片，中等反差，层次丰富',
+    params: {
+      exposure: 0.52,
+      developmentTime: 0.6,
+      temperature: 0.5,
+      agitation: 0.55,
+      contrast: 0.65,
+      saturation: 0,
+      dilution: 0.5
+    },
+    filmId: 'hp5',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  }
+];

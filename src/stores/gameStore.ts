@@ -1,6 +1,7 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase } from '../types/game';
-import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS } from '../data/gameData';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory } from '../types/game';
+import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS } from '../data/gameData';
+import { generateId } from '../utils/math';
 
 function createGameStore() {
   const initialState: GameState = {
@@ -12,7 +13,10 @@ function createGameStore() {
     phase: 'tutorial',
     processedPhotos: loadSavedPhotos(),
     tutorialStep: 0,
-    selectedAlbumPhoto: null
+    selectedAlbumPhoto: null,
+    presets: loadSavedPresets(),
+    presetHistory: [],
+    lastAppliedPresetId: null
   };
 
   const { subscribe, set, update } = writable(initialState);
@@ -105,6 +109,107 @@ function createGameStore() {
         selectedAlbumPhoto: state.selectedAlbumPhoto?.id === photoId ? null : state.selectedAlbumPhoto
       };
     }),
+    savePreset: (name: string, description: string, params: DevParams, subjectId?: string, filmId?: string) => update(state => {
+      const existingIndex = state.presets.findIndex(p => p.name === name && !p.isDefault);
+      const now = Date.now();
+      
+      if (existingIndex >= 0) {
+        const existing = state.presets[existingIndex];
+        const historyEntry: PresetHistory = {
+          presetId: existing.id,
+          name: existing.name,
+          params: { ...existing.params },
+          timestamp: existing.updatedAt
+        };
+        
+        const newPresets = [...state.presets];
+        newPresets[existingIndex] = {
+          ...existing,
+          description,
+          params: { ...params },
+          subjectId,
+          filmId,
+          updatedAt: now,
+          version: existing.version + 1
+        };
+        
+        savePresets(newPresets);
+        return {
+          ...state,
+          presets: newPresets,
+          presetHistory: [historyEntry, ...state.presetHistory].slice(0, 20)
+        };
+      } else {
+        const newPreset: ParamPreset = {
+          id: generateId(),
+          name,
+          description,
+          params: { ...params },
+          subjectId,
+          filmId,
+          createdAt: now,
+          updatedAt: now,
+          version: 1
+        };
+        
+        const newPresets = [...state.presets, newPreset];
+        savePresets(newPresets);
+        return {
+          ...state,
+          presets: newPresets
+        };
+      }
+    }),
+    applyPreset: (presetId: string) => update(state => {
+      const preset = state.presets.find(p => p.id === presetId);
+      if (!preset) return state;
+      
+      return {
+        ...state,
+        currentParams: { ...preset.params },
+        lastAppliedPresetId: presetId
+      };
+    }),
+    deletePreset: (presetId: string) => update(state => {
+      const newPresets = state.presets.filter(p => p.id !== presetId);
+      savePresets(newPresets);
+      return {
+        ...state,
+        presets: newPresets,
+        lastAppliedPresetId: state.lastAppliedPresetId === presetId ? null : state.lastAppliedPresetId
+      };
+    }),
+    revertPreset: (presetId: string) => update(state => {
+      const historyEntry = state.presetHistory.find(h => h.presetId === presetId);
+      if (!historyEntry) return state;
+      
+      const presetIndex = state.presets.findIndex(p => p.id === presetId);
+      if (presetIndex < 0) return state;
+      
+      const now = Date.now();
+      const existing = state.presets[presetIndex];
+      const currentHistory: PresetHistory = {
+        presetId: existing.id,
+        name: existing.name,
+        params: { ...existing.params },
+        timestamp: existing.updatedAt
+      };
+      
+      const newPresets = [...state.presets];
+      newPresets[presetIndex] = {
+        ...existing,
+        params: { ...historyEntry.params },
+        updatedAt: now,
+        version: existing.version + 1
+      };
+      
+      savePresets(newPresets);
+      return {
+        ...state,
+        presets: newPresets,
+        presetHistory: [currentHistory, ...state.presetHistory.filter(h => h !== historyEntry)].slice(0, 20)
+      };
+    }),
     reset: () => set(initialState)
   };
 }
@@ -124,6 +229,28 @@ function savePhotos(photos: ProcessedPhoto[]) {
     localStorage.setItem('darkroom_photos', JSON.stringify(photos));
   } catch (e) {
     console.error('Failed to save photos:', e);
+  }
+}
+
+function loadSavedPresets(): ParamPreset[] {
+  try {
+    const saved = localStorage.getItem('darkroom_presets');
+    if (saved) {
+      const userPresets = JSON.parse(saved);
+      return [...DEFAULT_PRESETS, ...userPresets];
+    }
+  } catch (e) {
+    console.error('Failed to load presets:', e);
+  }
+  return [...DEFAULT_PRESETS];
+}
+
+function savePresets(presets: ParamPreset[]) {
+  try {
+    const userPresets = presets.filter(p => !p.isDefault);
+    localStorage.setItem('darkroom_presets', JSON.stringify(userPresets));
+  } catch (e) {
+    console.error('Failed to save presets:', e);
   }
 }
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { DevParams, PhotoSubject } from '../types/game';
+  import ParamPresets from './ParamPresets.svelte';
 
   export let params: DevParams;
   export let subject: PhotoSubject | null = null;
@@ -8,7 +9,12 @@
 
   const dispatch = createEventDispatcher<{
     update: Partial<DevParams>;
+    applyPreset: DevParams;
   }>();
+
+  function handleApplyPreset(e: CustomEvent<DevParams>) {
+    dispatch('applyPreset', e.detail);
+  }
 
   interface SliderConfig {
     key: keyof DevParams;
@@ -192,6 +198,14 @@
       </div>
     {/each}
   </div>
+
+  <ParamPresets
+    currentParams={params}
+    subjectId={subject?.id || null}
+    filmId={null}
+    {disabled}
+    on:apply={handleApplyPreset}
+  />
 </div>
 
 <style>

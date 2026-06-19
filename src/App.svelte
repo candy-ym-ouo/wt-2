@@ -194,6 +194,10 @@
     handleUpdateParams(e.detail);
   }
 
+  function handleApplyPreset(e: CustomEvent<DevParams>) {
+    handleUpdateParams(e.detail);
+  }
+
   function handlePhotoDelete(e: CustomEvent<string>) {
     handleDeletePhoto(e.detail);
   }
@@ -289,6 +293,7 @@
         subject={currentSubject}
         disabled={isParamDisabled}
         on:update={handleParamUpdate}
+        on:applyPreset={handleApplyPreset}
       />
       <div style="margin-top: 16px;">
         <DevelopPanel

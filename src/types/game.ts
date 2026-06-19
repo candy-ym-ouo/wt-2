@@ -44,6 +44,26 @@ export interface DevParams {
   dilution: number;
 }
 
+export interface ParamPreset {
+  id: string;
+  name: string;
+  description: string;
+  params: DevParams;
+  subjectId?: string;
+  filmId?: string;
+  createdAt: number;
+  updatedAt: number;
+  version: number;
+  isDefault?: boolean;
+}
+
+export interface PresetHistory {
+  presetId: string;
+  name: string;
+  params: DevParams;
+  timestamp: number;
+}
+
 export interface ProcessedPhoto {
   id: string;
   subjectId: string;
@@ -94,6 +114,9 @@ export interface GameState {
   processedPhotos: ProcessedPhoto[];
   tutorialStep: number;
   selectedAlbumPhoto: ProcessedPhoto | null;
+  presets: ParamPreset[];
+  presetHistory: PresetHistory[];
+  lastAppliedPresetId: string | null;
 }
 
 export interface TutorialStep {
