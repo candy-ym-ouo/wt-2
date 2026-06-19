@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { ProcessedPhoto, AlbumFilter, SortOption, PhotoCollection, CollectionGroup, AlbumViewMode, CollectionStats } from '../types/game';
+  import type { ProcessedPhoto, AlbumFilter, SortOption, PhotoCollection, CollectionGroup, AlbumViewMode, CollectionStats, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem } from '../types/game';
   import { gameStore, calculateCollectionStats } from '../stores/gameStore';
   import {
     PHOTO_SUBJECTS,
@@ -14,12 +14,9 @@
   import ScorePanel from './ScorePanel.svelte';
 
   export let photos: ProcessedPhoto[] = [];
-  export let statistics: {
-    total: number;
-    avgScore: number;
-    bestScore: number;
-    gradeCounts: Record<string, number>;
-  };
+  export let statistics: ExtendedStatistics;
+
+  let showAdvancedStats = false;
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -967,6 +964,169 @@
         <div class="stat-label">等级分布</div>
       </div>
     </div>
+
+    {#if statistics.total > 0 && !hasActiveFilters() && viewMode === 'all'}
+      <div class="advanced-stats-toggle">
+        <button class="toggle-btn" on:click={() => showAdvancedStats = !showAdvancedStats}>
+          <span>{showAdvancedStats ? '收起数据分析' : '📊 展开数据分析'}</span>
+          <span class="toggle-icon">{showAdvancedStats ? '▲' : '▼'}</span>
+        </button>
+        {#if statistics.overallTrend !== 'stable'}
+          <span class="trend-indicator" class:improving={statistics.overallTrend === 'improving'} class:declining={statistics.overallTrend === 'declining'}>
+            {statistics.overallTrend === 'improving' ? '📈 水平提升中' : '📉 需加强练习'}
+          </span>
+        {/if}
+      </div>
+
+      {#if showAdvancedStats}
+        <div class="advanced-stats-panel">
+          <div class="stats-grid">
+            <div class="analysis-section subject-preference">
+              <div class="section-header">
+                <h3 class="section-title">🎯 题材偏好分析</h3>
+                <span class="section-subtitle">你最常练习的题材</span>
+              </div>
+              {#if statistics.subjectPreferences.length > 0}
+                <div class="preference-list">
+                  {#each statistics.subjectPreferences.slice(0, 5) as pref (pref.subjectId)}
+                    <div class="preference-item">
+                      <div class="pref-info">
+                        <span class="pref-name">{pref.subjectName}</span>
+                        <span class="pref-count">{pref.count} 次</span>
+                      </div>
+                      <div class="pref-stats">
+                        <div class="pref-bar">
+                          <div class="pref-bar-fill" style="width: {pref.winRate}%;"></div>
+                        </div>
+                        <div class="pref-meta">
+                          <span class="pref-winrate">{pref.winRate}% 胜率</span>
+                          <span class="pref-avg">均分 {pref.avgScore}</span>
+                          <span class="pref-best">最高 {pref.bestScore}</span>
+                        </div>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <div class="empty-stats">
+                  <span>暂无足够数据分析题材偏好</span>
+                </div>
+              {/if}
+            </div>
+
+            <div class="analysis-section film-winrate">
+              <div class="section-header">
+                <h3 class="section-title">🎞 胶片胜率榜</h3>
+                <span class="section-subtitle">各胶片表现统计</span>
+              </div>
+              {#if statistics.filmWinRates.length > 0}
+                <div class="film-list">
+                  {#each statistics.filmWinRates.slice(0, 5) as film, index (film.filmId)}
+                    <div class="film-item">
+                      <div class="film-rank">{index + 1}</div>
+                      <div class="film-dot" style="background: {film.thumbnailColor};"></div>
+                      <div class="film-info">
+                        <span class="film-name">{film.filmName}</span>
+                        <span class="film-meta">{film.count}次 · {film.avgScore}分</span>
+                      </div>
+                      <div class="film-winrate">
+                        <span class="winrate-value">{film.winRate}%</span>
+                        <div class="winrate-bar">
+                          <div class="winrate-fill" style="width: {film.winRate}%;"></div>
+                        </div>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <div class="empty-stats">
+                  <span>暂无足够数据分析胶片胜率</span>
+                </div>
+              {/if}
+            </div>
+
+            <div class="analysis-section score-trend">
+              <div class="section-header">
+                <h3 class="section-title">📈 分段得分趋势</h3>
+                <span class="section-subtitle">每10张作品为一个阶段</span>
+              </div>
+              {#if statistics.scoreSegments.length > 1}
+                <div class="trend-chart">
+                  <div class="trend-bars">
+                    {#each statistics.scoreSegments as seg (seg.segment)}
+                      <div class="trend-bar-wrap">
+                        <div class="trend-bar" style="height: {Math.max(20, seg.avgScore)}%;">
+                          <span class="trend-score">{seg.avgScore}</span>
+                        </div>
+                        <span class="trend-label">{seg.segment}</span>
+                      </div>
+                    {/each}
+                  </div>
+                  <div class="trend-legend">
+                    <span class="legend-item"><span class="legend-dot high"></span>高分</span>
+                    <span class="legend-item"><span class="legend-dot mid"></span>中分</span>
+                    <span class="legend-item"><span class="legend-dot low"></span>低分</span>
+                  </div>
+                </div>
+              {:else}
+                <div class="empty-stats">
+                  <span>积累10张以上作品后显示分段趋势</span>
+                </div>
+              {/if}
+            </div>
+
+            <div class="analysis-section quality-fluctuation">
+              <div class="section-header">
+                <h3 class="section-title">📊 近期练习质量波动</h3>
+                <span class="section-subtitle">最近20次练习</span>
+              </div>
+              {#if statistics.qualityFluctuation.length > 0}
+                <div class="fluctuation-chart">
+                  <div class="fluctuation-line">
+                    {#each statistics.qualityFluctuation as item, i (i)}
+                      <div class="fluctuation-point-wrap">
+                        <div
+                          class="fluctuation-point"
+                          class:up={item.trend === 'up'}
+                          class:down={item.trend === 'down'}
+                          style="bottom: {Math.max(10, item.score - 40)}%;"
+                          title={`#${item.index + 1}: ${item.subjectName} - ${item.filmName} - ${item.score}分`}
+                        >
+                          <span class="point-grade" style="color: {GRADE_COLORS[item.grade]};">{item.grade}</span>
+                        </div>
+                        <div class="fluctuation-baseline"></div>
+                      </div>
+                    {/each}
+                  </div>
+                  <div class="fluctuation-summary">
+                    <div class="summary-item">
+                      <span class="summary-label">近期均分</span>
+                      <span class="summary-value">{statistics.recentAvgScore}</span>
+                    </div>
+                    <div class="summary-item">
+                      <span class="summary-label">总体均分</span>
+                      <span class="summary-value">{statistics.avgScore}</span>
+                    </div>
+                    <div class="summary-item">
+                      <span class="summary-label">波动幅度</span>
+                      <span class="summary-value">
+                        {#if statistics.qualityFluctuation.length > 0}
+                          {Math.max(...statistics.qualityFluctuation.map(f => f.score)) - Math.min(...statistics.qualityFluctuation.map(f => f.score))}
+                        {:else}0{/if}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              {:else}
+                <div class="empty-stats">
+                  <span>完成更多练习后显示质量波动分析</span>
+                </div>
+              {/if}
+            </div>
+          </div>
+        </div>
+      {/if}
+    {/if}
 
     {#if viewMode !== 'collections' || activeCollectionId}
       {#if viewModePhotos.length === 0 && viewMode === 'favorites'}
@@ -3131,5 +3291,454 @@
     background: rgba(255, 200, 80, 0.2);
     border-color: rgba(255, 200, 80, 0.5);
     color: #ffd060;
+  }
+
+  .advanced-stats-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 16px;
+    margin-bottom: 4px;
+  }
+
+  .toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, rgba(139, 90, 43, 0.25), rgba(100, 60, 30, 0.2));
+    border: 1px solid rgba(200, 150, 80, 0.35);
+    border-radius: 10px;
+    color: #d4a574;
+    font-size: 13px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+  }
+
+  .toggle-btn:hover {
+    background: linear-gradient(135deg, rgba(139, 90, 43, 0.4), rgba(100, 60, 30, 0.35));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(139, 90, 43, 0.2);
+  }
+
+  .toggle-icon {
+    font-size: 10px;
+    opacity: 0.7;
+  }
+
+  .trend-indicator {
+    padding: 6px 14px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+
+  .trend-indicator.improving {
+    background: rgba(100, 200, 150, 0.15);
+    border: 1px solid rgba(100, 200, 150, 0.35);
+    color: #8ad8a0;
+  }
+
+  .trend-indicator.declining {
+    background: rgba(200, 100, 100, 0.15);
+    border: 1px solid rgba(200, 100, 100, 0.35);
+    color: #d89080;
+  }
+
+  .advanced-stats-panel {
+    margin-top: 16px;
+    animation: slideDown 0.35s ease;
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  @media (max-width: 768px) {
+    .stats-grid { grid-template-columns: 1fr; }
+  }
+
+  .analysis-section {
+    background: linear-gradient(180deg, rgba(45, 26, 18, 0.6) 0%, rgba(26, 15, 10, 0.7) 100%);
+    border: 1px solid rgba(139, 90, 43, 0.25);
+    border-radius: 12px;
+    padding: 18px;
+    backdrop-filter: blur(6px);
+  }
+
+  .analysis-section .section-header {
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(139, 90, 43, 0.15);
+  }
+
+  .analysis-section .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f0d8a8;
+    margin: 0 0 2px;
+    letter-spacing: 1px;
+  }
+
+  .analysis-section .section-subtitle {
+    font-size: 11px;
+    color: #7a6a55;
+    letter-spacing: 0.5px;
+  }
+
+  .empty-stats {
+    padding: 30px 16px;
+    text-align: center;
+    color: #6a5a45;
+    font-size: 12px;
+  }
+
+  .preference-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .preference-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .pref-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .pref-name {
+    font-size: 13px;
+    color: #d4c090;
+    font-weight: 500;
+  }
+
+  .pref-count {
+    font-size: 11px;
+    color: #7a6a55;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .pref-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .pref-bar {
+    height: 6px;
+    background: rgba(60, 50, 40, 0.5);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .pref-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #c89860, #e8c890);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+
+  .pref-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 10px;
+    color: #8a7a5a;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .pref-winrate {
+    color: #8ad8a0;
+  }
+
+  .pref-avg {
+    color: #c8a878;
+  }
+
+  .pref-best {
+    color: #ffd060;
+  }
+
+  .film-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .film-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    border: 1px solid rgba(139, 90, 43, 0.1);
+    transition: all 0.2s;
+  }
+
+  .film-item:hover {
+    background: rgba(0, 0, 0, 0.25);
+    border-color: rgba(139, 90, 43, 0.2);
+  }
+
+  .film-rank {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #8b5a2b, #6b4520);
+    color: #f0d8a8;
+    font-size: 10px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .film-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.3);
+  }
+
+  .film-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .film-name {
+    display: block;
+    font-size: 12px;
+    color: #d4c090;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .film-meta {
+    font-size: 10px;
+    color: #7a6a55;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .film-winrate {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+    flex-shrink: 0;
+    min-width: 60px;
+  }
+
+  .winrate-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: #8ad8a0;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .winrate-bar {
+    width: 50px;
+    height: 4px;
+    background: rgba(60, 50, 40, 0.5);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .winrate-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #60b870, #8ad8a0);
+    border-radius: 2px;
+  }
+
+  .trend-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .trend-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    height: 120px;
+    padding: 10px 4px 0;
+    border-bottom: 1px solid rgba(139, 90, 43, 0.2);
+  }
+
+  .trend-bar-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    height: 100%;
+  }
+
+  .trend-bar {
+    width: 100%;
+    max-width: 36px;
+    background: linear-gradient(180deg, #c89860, #8b5a2b);
+    border-radius: 4px 4px 0 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 4px;
+    min-height: 20px;
+    transition: all 0.3s ease;
+  }
+
+  .trend-bar:hover {
+    filter: brightness(1.2);
+  }
+
+  .trend-score {
+    font-size: 9px;
+    font-weight: 600;
+    color: #1a0f0a;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .trend-label {
+    font-size: 9px;
+    color: #7a6a55;
+    white-space: nowrap;
+  }
+
+  .trend-legend {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    font-size: 10px;
+    color: #7a6a55;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .legend-dot.high { background: #ffd060; }
+  .legend-dot.mid { background: #c89860; }
+  .legend-dot.low { background: #8b5a2b; }
+
+  .fluctuation-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .fluctuation-line {
+    position: relative;
+    height: 120px;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    padding: 10px 0 20px;
+    border-bottom: 1px solid rgba(139, 90, 43, 0.2);
+  }
+
+  .fluctuation-point-wrap {
+    flex: 1;
+    position: relative;
+    height: 100%;
+    min-width: 0;
+  }
+
+  .fluctuation-point {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(26, 15, 10, 0.9);
+    border: 2px solid #c89860;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 2;
+  }
+
+  .fluctuation-point:hover {
+    transform: translateX(-50%) scale(1.2);
+    box-shadow: 0 0 12px rgba(200, 150, 80, 0.5);
+  }
+
+  .fluctuation-point.up {
+    border-color: #8ad8a0;
+  }
+
+  .fluctuation-point.down {
+    border-color: #d89080;
+  }
+
+  .point-grade {
+    font-size: 10px;
+    font-weight: bold;
+  }
+
+  .fluctuation-baseline {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(139, 90, 43, 0.3);
+    z-index: 1;
+  }
+
+  .fluctuation-summary {
+    display: flex;
+    justify-content: space-around;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+  }
+
+  .summary-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .summary-label {
+    font-size: 10px;
+    color: #7a6a55;
+    letter-spacing: 0.5px;
+  }
+
+  .summary-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #f0d8a8;
+    font-family: 'SF Mono', Monaco, monospace;
   }
 </style>

@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS } from '../data/gameData';
 import { generateId } from '../utils/math';
 import {
@@ -1686,18 +1686,208 @@ export const canStartDevelop = derived(
   $store => $store.currentSubject !== null && !$store.isDeveloping
 );
 
+function calculateSubjectPreferences(photos: ProcessedPhoto[]): SubjectPreferenceItem[] {
+  const subjectMap = new Map<string, ProcessedPhoto[]>();
+  photos.forEach(p => {
+    if (!subjectMap.has(p.subjectId)) {
+      subjectMap.set(p.subjectId, []);
+    }
+    subjectMap.get(p.subjectId)!.push(p);
+  });
+
+  const preferences: SubjectPreferenceItem[] = [];
+  subjectMap.forEach((subjectPhotos, subjectId) => {
+    const subject = PHOTO_SUBJECTS.find(s => s.id === subjectId);
+    const scores = subjectPhotos.map(p => p.score);
+    const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    const bestScore = Math.max(...scores);
+    const winCount = subjectPhotos.filter(p => p.score >= 70).length;
+    const winRate = Math.round((winCount / subjectPhotos.length) * 100);
+
+    preferences.push({
+      subjectId,
+      subjectName: subject?.name || '未知题材',
+      count: subjectPhotos.length,
+      avgScore,
+      bestScore,
+      winRate,
+      totalAttempts: subjectPhotos.length
+    });
+  });
+
+  return preferences.sort((a, b) => b.count - a.count);
+}
+
+function calculateFilmWinRates(photos: ProcessedPhoto[]): FilmWinRateItem[] {
+  const filmMap = new Map<string, ProcessedPhoto[]>();
+  photos.forEach(p => {
+    if (!filmMap.has(p.filmId)) {
+      filmMap.set(p.filmId, []);
+    }
+    filmMap.get(p.filmId)!.push(p);
+  });
+
+  const winRates: FilmWinRateItem[] = [];
+  filmMap.forEach((filmPhotos, filmId) => {
+    const film = FILM_STOCKS.find(f => f.id === filmId);
+    const scores = filmPhotos.map(p => p.score);
+    const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    const bestScore = Math.max(...scores);
+    const winCount = filmPhotos.filter(p => p.score >= 70).length;
+    const winRate = Math.round((winCount / filmPhotos.length) * 100);
+    const gradeCounts: Record<string, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+    filmPhotos.forEach(p => { gradeCounts[p.details.grade]++; });
+
+    winRates.push({
+      filmId,
+      filmName: film?.name || '未知胶片',
+      count: filmPhotos.length,
+      avgScore,
+      bestScore,
+      winRate,
+      gradeCounts,
+      color: film?.color || 'bw',
+      thumbnailColor: film?.thumbnailColor || '#666666'
+    });
+  });
+
+  return winRates.sort((a, b) => b.winRate - a.winRate);
+}
+
+function calculateScoreSegments(photos: ProcessedPhoto[], segmentSize: number = 10): ScoreSegmentItem[] {
+  if (photos.length === 0) return [];
+
+  const sortedPhotos = [...photos].sort((a, b) => a.timestamp - b.timestamp);
+  const segments: ScoreSegmentItem[] = [];
+  const totalSegments = Math.ceil(sortedPhotos.length / segmentSize);
+
+  for (let i = 0; i < totalSegments; i++) {
+    const startIdx = i * segmentSize;
+    const endIdx = Math.min(startIdx + segmentSize, sortedPhotos.length);
+    const segmentPhotos = sortedPhotos.slice(startIdx, endIdx);
+    const scores = segmentPhotos.map(p => p.score);
+    const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    const bestScore = Math.max(...scores);
+    const worstScore = Math.min(...scores);
+    const gradeCounts: Record<string, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+    segmentPhotos.forEach(p => { gradeCounts[p.details.grade]++; });
+
+    segments.push({
+      segment: `第 ${i + 1} 段`,
+      startIndex: startIdx,
+      endIndex: endIdx - 1,
+      count: segmentPhotos.length,
+      avgScore,
+      bestScore,
+      worstScore,
+      gradeCounts,
+      dateRange: {
+        start: segmentPhotos[0].timestamp,
+        end: segmentPhotos[segmentPhotos.length - 1].timestamp
+      }
+    });
+  }
+
+  return segments;
+}
+
+function calculateQualityFluctuation(photos: ProcessedPhoto[], recentCount: number = 20): QualityFluctuationItem[] {
+  if (photos.length === 0) return [];
+
+  const sortedPhotos = [...photos].sort((a, b) => a.timestamp - b.timestamp);
+  const recentPhotos = sortedPhotos.slice(-recentCount);
+  const allScores = sortedPhotos.map(p => p.score);
+  const overallAvg = allScores.reduce((a, b) => a + b, 0) / allScores.length;
+
+  const fluctuation: QualityFluctuationItem[] = [];
+  recentPhotos.forEach((photo, idx) => {
+    const subject = PHOTO_SUBJECTS.find(s => s.id === photo.subjectId);
+    const film = FILM_STOCKS.find(f => f.id === photo.filmId);
+    const deviation = Math.round((photo.score - overallAvg) * 10) / 10;
+
+    let trend: 'up' | 'down' | 'stable' = 'stable';
+    if (idx > 0) {
+      const prevScore = recentPhotos[idx - 1].score;
+      if (photo.score - prevScore > 3) trend = 'up';
+      else if (photo.score - prevScore < -3) trend = 'down';
+    }
+
+    fluctuation.push({
+      index: sortedPhotos.length - recentPhotos.length + idx,
+      score: photo.score,
+      grade: photo.details.grade,
+      timestamp: photo.timestamp,
+      deviation,
+      trend,
+      subjectName: subject?.name || '未知',
+      filmName: film?.name || '未知'
+    });
+  });
+
+  return fluctuation;
+}
+
+function calculateOverallTrend(fluctuation: QualityFluctuationItem[]): 'improving' | 'declining' | 'stable' {
+  if (fluctuation.length < 3) return 'stable';
+
+  const firstHalf = fluctuation.slice(0, Math.floor(fluctuation.length / 2));
+  const secondHalf = fluctuation.slice(Math.floor(fluctuation.length / 2));
+  const firstAvg = firstHalf.reduce((s, f) => s + f.score, 0) / firstHalf.length;
+  const secondAvg = secondHalf.reduce((s, f) => s + f.score, 0) / secondHalf.length;
+  const diff = secondAvg - firstAvg;
+
+  if (diff > 3) return 'improving';
+  if (diff < -3) return 'declining';
+  return 'stable';
+}
+
 export const statistics = derived(
   gameStore,
   $store => {
     const photos = $store.processedPhotos;
     if (photos.length === 0) {
-      return { total: 0, avgScore: 0, bestScore: 0, gradeCounts: { S: 0, A: 0, B: 0, C: 0, D: 0 } };
+      return {
+        total: 0,
+        avgScore: 0,
+        bestScore: 0,
+        gradeCounts: { S: 0, A: 0, B: 0, C: 0, D: 0 },
+        subjectPreferences: [],
+        filmWinRates: [],
+        scoreSegments: [],
+        qualityFluctuation: [],
+        recentAvgScore: 0,
+        overallTrend: 'stable' as const
+      } satisfies ExtendedStatistics;
     }
+
     const total = photos.length;
     const avgScore = Math.round(photos.reduce((sum, p) => sum + p.score, 0) / total);
     const bestScore = Math.max(...photos.map(p => p.score));
     const gradeCounts = { S: 0, A: 0, B: 0, C: 0, D: 0 };
     photos.forEach(p => { gradeCounts[p.details.grade]++; });
-    return { total, avgScore, bestScore, gradeCounts };
+
+    const subjectPreferences = calculateSubjectPreferences(photos);
+    const filmWinRates = calculateFilmWinRates(photos);
+    const scoreSegments = calculateScoreSegments(photos);
+    const qualityFluctuation = calculateQualityFluctuation(photos);
+
+    const recentPhotos = qualityFluctuation;
+    const recentAvgScore = recentPhotos.length > 0
+      ? Math.round(recentPhotos.reduce((s, f) => s + f.score, 0) / recentPhotos.length)
+      : avgScore;
+    const overallTrend = calculateOverallTrend(qualityFluctuation);
+
+    return {
+      total,
+      avgScore,
+      bestScore,
+      gradeCounts,
+      subjectPreferences,
+      filmWinRates,
+      scoreSegments,
+      qualityFluctuation,
+      recentAvgScore,
+      overallTrend
+    } satisfies ExtendedStatistics;
   }
 );

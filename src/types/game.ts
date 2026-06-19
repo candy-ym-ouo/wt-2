@@ -382,6 +382,64 @@ export interface CollectionStats {
   scoreDistribution: number[];
 }
 
+export interface SubjectPreferenceItem {
+  subjectId: string;
+  subjectName: string;
+  count: number;
+  avgScore: number;
+  bestScore: number;
+  winRate: number;
+  totalAttempts: number;
+}
+
+export interface FilmWinRateItem {
+  filmId: string;
+  filmName: string;
+  count: number;
+  avgScore: number;
+  bestScore: number;
+  winRate: number;
+  gradeCounts: Record<string, number>;
+  color: 'bw' | 'color';
+  thumbnailColor: string;
+}
+
+export interface ScoreSegmentItem {
+  segment: string;
+  startIndex: number;
+  endIndex: number;
+  count: number;
+  avgScore: number;
+  bestScore: number;
+  worstScore: number;
+  gradeCounts: Record<string, number>;
+  dateRange: { start: number; end: number };
+}
+
+export interface QualityFluctuationItem {
+  index: number;
+  score: number;
+  grade: string;
+  timestamp: number;
+  deviation: number;
+  trend: 'up' | 'down' | 'stable';
+  subjectName: string;
+  filmName: string;
+}
+
+export interface ExtendedStatistics {
+  total: number;
+  avgScore: number;
+  bestScore: number;
+  gradeCounts: Record<string, number>;
+  subjectPreferences: SubjectPreferenceItem[];
+  filmWinRates: FilmWinRateItem[];
+  scoreSegments: ScoreSegmentItem[];
+  qualityFluctuation: QualityFluctuationItem[];
+  recentAvgScore: number;
+  overallTrend: 'improving' | 'declining' | 'stable';
+}
+
 export type AlbumViewMode = 'all' | 'favorites' | 'collections';
 
 export interface CollectionFilter {
