@@ -10,6 +10,10 @@ export interface FilmStock {
   thumbnailColor: string;
 }
 
+export type DifficultyLevel = 1 | 2 | 3 | 4 | 5;
+
+export type TargetStyle = 'soft' | 'vivid' | 'dramatic' | 'retro' | 'moody' | 'clean' | 'warm' | 'cool';
+
 export interface PhotoSubject {
   id: string;
   name: string;
@@ -22,6 +26,10 @@ export interface PhotoSubject {
   keyAreas: KeyArea[];
   seed: number;
   tags: string[];
+  difficulty: DifficultyLevel;
+  recommendedFilms: string[];
+  targetStyle: TargetStyle;
+  scoreMultiplier: number;
 }
 
 export interface KeyArea {

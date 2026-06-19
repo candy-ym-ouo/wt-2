@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PhotoSubject } from '../types/game';
-  import { PHOTO_SUBJECTS } from '../data/gameData';
+  import { PHOTO_SUBJECTS, FILM_STOCKS, DIFFICULTY_LABELS, TARGET_STYLE_LABELS, TARGET_STYLE_ICONS } from '../data/gameData';
   import { gameStore } from '../stores/gameStore';
   import { getSubjectRecommendations } from '../utils/recommendation';
   import type { Recommendation } from '../utils/recommendation';
@@ -10,6 +10,7 @@
   let showRecReasons: string | null = null;
 
   $: recMap = buildRecMap($gameStore.processedPhotos);
+  $: selectedSubject = PHOTO_SUBJECTS.find(s => s.id === selectedId);
 
   function buildRecMap(photos: any[]): Map<string, Recommendation> {
     const recs = getSubjectRecommendations(photos, PHOTO_SUBJECTS, []);
@@ -36,6 +37,22 @@
     night: '夜景'
   };
 
+  function getDifficultyStars(difficulty: number): string {
+    return '★'.repeat(difficulty) + '☆'.repeat(5 - difficulty);
+  }
+
+  function getDifficultyClass(difficulty: number): string {
+    if (difficulty <= 2) return 'diff-easy';
+    if (difficulty === 3) return 'diff-medium';
+    if (difficulty === 4) return 'diff-hard';
+    return 'diff-master';
+  }
+
+  function getFilmName(filmId: string): string {
+    const film = FILM_STOCKS.find(f => f.id === filmId);
+    return film?.name.split(' ').pop() || filmId;
+  }
+
   function getRecLabel(score: number): string {
     if (score >= 0.85) return '强烈推荐';
     if (score >= 0.6) return '推荐';
@@ -52,6 +69,11 @@
 
   function selectSubject(id: string) {
     selectedId = id;
+    const subject = PHOTO_SUBJECTS.find(s => s.id === id);
+    if (subject && subject.recommendedFilms.length > 0) {
+      const event = new CustomEvent('recommendFilms', { detail: subject.recommendedFilms });
+      document.dispatchEvent(event);
+    }
     const event = new CustomEvent('select', { detail: id });
     document.dispatchEvent(event);
   }
@@ -89,7 +111,26 @@
                 </span>
               {/if}
             </div>
+            <div class="card-tags-row">
+              <span class="difficulty-badge {getDifficultyClass(subject.difficulty)}" title="难度：{DIFFICULTY_LABELS[subject.difficulty]}">
+                <span class="diff-stars">{getDifficultyStars(subject.difficulty)}</span>
+                <span class="diff-label">{DIFFICULTY_LABELS[subject.difficulty]}</span>
+              </span>
+              <span class="style-badge" title="目标风格：{TARGET_STYLE_LABELS[subject.targetStyle]}">
+                <span class="style-icon">{TARGET_STYLE_ICONS[subject.targetStyle]}</span>
+                <span class="style-label">{TARGET_STYLE_LABELS[subject.targetStyle]}</span>
+              </span>
+              {#if subject.scoreMultiplier > 1.0}
+                <span class="multiplier-badge">×{subject.scoreMultiplier.toFixed(2)}</span>
+              {/if}
+            </div>
             <p class="card-desc">{subject.description}</p>
+            <div class="recommended-films">
+              <span class="rec-films-label">推荐胶片：</span>
+              {#each subject.recommendedFilms as filmId}
+                <span class="rec-film-tag">{getFilmName(filmId)}</span>
+              {/each}
+            </div>
             <div class="card-meta">
               <div class="meta-item">
                 <span class="meta-label">曝光</span>
@@ -298,6 +339,97 @@
     color: #a89878;
     line-height: 1.6;
     padding: 2px 0;
+  }
+
+  .card-tags-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .difficulty-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  .diff-easy {
+    background: rgba(100, 180, 100, 0.15);
+    color: #8bc88b;
+  }
+
+  .diff-medium {
+    background: rgba(200, 160, 80, 0.15);
+    color: #e0b060;
+  }
+
+  .diff-hard {
+    background: rgba(200, 100, 60, 0.15);
+    color: #e08060;
+  }
+
+  .diff-master {
+    background: rgba(200, 60, 60, 0.15);
+    color: #e06060;
+  }
+
+  .diff-stars {
+    font-size: 8px;
+    letter-spacing: -1px;
+  }
+
+  .style-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(160, 120, 180, 0.15);
+    color: #c0a0d0;
+    font-size: 9px;
+    font-weight: 500;
+  }
+
+  .style-icon {
+    font-size: 10px;
+  }
+
+  .multiplier-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 215, 0, 0.15);
+    color: #ffd700;
+    font-size: 9px;
+    font-weight: 600;
+  }
+
+  .recommended-films {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: #7a6a55;
+    margin-bottom: 6px;
+  }
+
+  .rec-films-label {
+    color: #6a5a45;
+  }
+
+  .rec-film-tag {
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(139, 90, 43, 0.15);
+    color: #c8a878;
+    font-size: 9px;
+    font-weight: 500;
   }
 
   .card-desc {

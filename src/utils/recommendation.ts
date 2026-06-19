@@ -100,11 +100,19 @@ export function getSubjectRecommendations(
     if (triedCount === 0) {
       recScore += 0.35;
       reasons.push('尚未尝试，探索新题材');
+      if (subject.difficulty <= 2) {
+        recScore += 0.1;
+        reasons.push('难度较低，适合新手入门');
+      }
     } else {
       if (bestScore !== undefined) {
         if (bestScore >= 80) {
           recScore += 0.25;
           reasons.push('历史高分，继续保持');
+          if (subject.scoreMultiplier > 1.0) {
+            recScore += 0.1;
+            reasons.push('高难度题材，挑战更高分数');
+          }
         } else if (bestScore >= 60) {
           recScore += 0.15;
           reasons.push('有提升空间，尝试优化参数');

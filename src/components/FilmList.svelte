@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
   import type { FilmStock } from '../types/game';
   import { FILM_STOCKS, PHOTO_SUBJECTS } from '../data/gameData';
   import { gameStore } from '../stores/gameStore';
@@ -8,9 +9,24 @@
   export let selectedId: string = FILM_STOCKS[0].id;
 
   let showRecReasons: string | null = null;
+  let recommendedFilmIds: string[] = [];
 
   $: selectedFilm = FILM_STOCKS.find(f => f.id === selectedId);
   $: recMap = buildFilmRecMap($gameStore.processedPhotos, $gameStore.currentSubject?.id ?? null);
+
+  function handleRecommendFilms(e: Event) {
+    const ce = e as CustomEvent<string[]>;
+    recommendedFilmIds = ce.detail;
+    if (recommendedFilmIds.length > 0 && !recommendedFilmIds.includes(selectedId)) {
+      selectedId = recommendedFilmIds[0];
+      const selectEvent = new CustomEvent('selectFilm', { detail: selectedId });
+      document.dispatchEvent(selectEvent);
+    }
+  }
+
+  function isRecommended(filmId: string): boolean {
+    return recommendedFilmIds.includes(filmId);
+  }
 
   function buildFilmRecMap(photos: any[], subjectId: string | null): Map<string, Recommendation> {
     const recs = getFilmRecommendations(photos, PHOTO_SUBJECTS, FILM_STOCKS, subjectId);
@@ -20,6 +36,14 @@
     }
     return map;
   }
+
+  onMount(() => {
+    document.addEventListener('recommendFilms', handleRecommendFilms);
+  });
+
+  onDestroy(() => {
+    document.removeEventListener('recommendFilms', handleRecommendFilms);
+  });
 
   function getRecLabel(score: number): string {
     if (score >= 0.85) return '强烈推荐';
@@ -58,6 +82,7 @@
         <button
           class="film-card"
           class:selected={selectedId === film.id}
+          class:recommended={isRecommended(film.id)}
           on:click={() => selectFilm(film.id)}
           title="{film.name} - {film.description}"
         >
@@ -82,14 +107,22 @@
                 {film.color === 'bw' ? '黑白' : '彩色'}
               </span>
             </div>
-            {#if rec && getRecLabel(rec.score)}
-              <span class="rec-badge {getRecClass(rec.score)}" on:click|stopPropagation={() => toggleRecReasons(film.id)}>
-                {getRecLabel(rec.score)}
-              </span>
-            {/if}
+            <div class="film-badges">
+              {#if isRecommended(film.id)}
+                <span class="subject-rec-badge" title="当前题材推荐">✓ 推荐</span>
+              {/if}
+              {#if rec && getRecLabel(rec.score)}
+                <span class="rec-badge {getRecClass(rec.score)}" on:click|stopPropagation={() => toggleRecReasons(film.id)}>
+                  {getRecLabel(rec.score)}
+                </span>
+              {/if}
+            </div>
           </div>
           {#if selectedId === film.id}
             <div class="film-glow" />
+          {/if}
+          {#if isRecommended(film.id) && selectedId !== film.id}
+            <div class="recommended-indicator" title="当前题材推荐">☆</div>
           {/if}
         </button>
         {#if rec && showRecReasons === film.id && rec.reasons.length > 0}
@@ -184,6 +217,16 @@
     border-color: rgba(200, 150, 80, 0.5);
   }
 
+  .film-card.recommended {
+    border-color: rgba(100, 180, 100, 0.4);
+    background: rgba(60, 120, 60, 0.1);
+  }
+
+  .film-card.recommended:hover {
+    border-color: rgba(100, 180, 100, 0.6);
+    background: rgba(60, 120, 60, 0.15);
+  }
+
   .film-strip {
     position: relative;
     width: 52px;
@@ -244,9 +287,56 @@
     color: #f0d8a8;
   }
 
+  .film-card.recommended .film-name {
+    color: #a8d8a8;
+  }
+
   .film-tags {
     display: flex;
     gap: 3px;
+  }
+
+  .film-badges {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin-top: 2px;
+  }
+
+  .subject-rec-badge {
+    font-size: 8px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(100, 180, 100, 0.2);
+    color: #8bc88b;
+    border: 1px solid rgba(100, 180, 100, 0.3);
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    line-height: 1.4;
+  }
+
+  .recommended-indicator {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: rgba(100, 180, 100, 0.2);
+    color: #8bc88b;
+    font-size: 10px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(100, 180, 100, 0.3);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.1); }
   }
 
   .tag {

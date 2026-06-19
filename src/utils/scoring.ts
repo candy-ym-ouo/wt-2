@@ -43,7 +43,8 @@ export function calculateScore(
   params: DevParams,
   finalImage: RenderedImageData,
   isColorFilm: boolean,
-  stageState?: Partial<StageState>
+  stageState?: Partial<StageState>,
+  filmId?: string
 ): ScoreDetail {
   const ctx: ScoreContext = {
     exposureScore: 0,
@@ -83,10 +84,23 @@ export function calculateScore(
     detailResult * detailW
   );
 
+  const styleMatchBonus = calcStyleMatchScore(subject, params, isColorFilm);
+  const filmMatchBonus = filmId ? calcFilmMatchScore(subject, filmId) : 0;
+
+  baseOverall = clamp(baseOverall + styleMatchBonus + filmMatchBonus, 0, 100);
+
   const stageImpact = calculateStageImpact(stageState, params);
 
   const stagePenalty = stageImpact.developPenalty + stageImpact.fixPenalty + stageImpact.washPenalty;
-  ctx.overall = clamp(baseOverall - Math.round(stagePenalty * 0.7), 0, 100);
+  let rawScore = baseOverall - Math.round(stagePenalty * 0.7);
+
+  const scoreMultiplier = subject.scoreMultiplier || 1.0;
+  if (scoreMultiplier > 1.0 && rawScore >= 60) {
+    const bonusPoints = Math.round((rawScore - 60) * (scoreMultiplier - 1.0));
+    rawScore = clamp(rawScore + bonusPoints, 0, 100);
+  }
+
+  ctx.overall = clamp(rawScore, 0, 100);
 
   ctx.grade = getGrade(ctx.overall);
   const feedback = generateFeedback(subject, params, {
@@ -96,7 +110,21 @@ export function calculateScore(
     detail: Math.round(detailResult),
     overall: ctx.overall,
     grade: ctx.grade
-  }, isColorFilm);
+  }, isColorFilm, filmId);
+
+  if (styleMatchBonus >= 3) {
+    feedback.push(`✨ 目标风格「${getTargetStyleLabel(subject.targetStyle)}」完美呈现！+${styleMatchBonus}分`);
+  } else if (styleMatchBonus > 0) {
+    feedback.push(`风格表现不错，符合「${getTargetStyleLabel(subject.targetStyle)}」的要求 +${styleMatchBonus}分`);
+  }
+
+  if (filmMatchBonus > 0) {
+    feedback.push(`🎞 使用推荐胶片，搭配默契 +${filmMatchBonus}分`);
+  }
+
+  if (scoreMultiplier > 1.0 && ctx.overall >= 60) {
+    feedback.push(`🔥 高难度题材加成 ×${scoreMultiplier.toFixed(2)}，挑战成功！`);
+  }
 
   if (stageImpact.developFeedback) feedback.push(stageImpact.developFeedback);
   if (stageImpact.fixFeedback) feedback.push(stageImpact.fixFeedback);
@@ -122,6 +150,78 @@ export function calculateScore(
     sharpness: ctx.sharpness,
     stageImpact
   };
+}
+
+const TARGET_STYLE_LABELS: Record<string, string> = {
+  soft: '柔和',
+  vivid: '鲜艳',
+  dramatic: '戏剧',
+  retro: '复古',
+  moody: '氛围感',
+  clean: '干净',
+  warm: '暖调',
+  cool: '冷调'
+};
+
+function getTargetStyleLabel(style: string): string {
+  return TARGET_STYLE_LABELS[style] || style;
+}
+
+function calcStyleMatchScore(subject: PhotoSubject, params: DevParams, isColorFilm: boolean): number {
+  const style = subject.targetStyle;
+  let matchScore = 0;
+
+  const effectiveContrast = params.contrast * 0.5 + params.developmentTime * 0.3 + params.temperature * 0.2;
+  const effectiveSat = params.saturation;
+  const effectiveExp = params.exposure;
+  const tempBias = params.temperature - 0.5;
+
+  switch (style) {
+    case 'soft':
+      if (effectiveContrast < 0.5 && effectiveSat < 0.6 && effectiveExp > 0.45) matchScore += 5;
+      else if (effectiveContrast < 0.6 && effectiveSat < 0.7) matchScore += 2;
+      break;
+    case 'vivid':
+      if (effectiveContrast > 0.6 && effectiveSat > 0.7 && isColorFilm) matchScore += 5;
+      else if (effectiveContrast > 0.55 && effectiveSat > 0.6) matchScore += 2;
+      break;
+    case 'dramatic':
+      if (effectiveContrast > 0.7 && effectiveExp < 0.55) matchScore += 5;
+      else if (effectiveContrast > 0.6) matchScore += 2;
+      break;
+    case 'retro':
+      if (effectiveSat > 0.5 && effectiveSat < 0.75 && tempBias > 0) matchScore += 5;
+      else if (tempBias > 0.05) matchScore += 2;
+      break;
+    case 'moody':
+      if (effectiveContrast > 0.6 && effectiveExp < 0.5 && effectiveSat < 0.65) matchScore += 5;
+      else if (effectiveExp < 0.55) matchScore += 2;
+      break;
+    case 'clean':
+      if (effectiveContrast > 0.45 && effectiveContrast < 0.6 && effectiveSat > 0.4 && effectiveSat < 0.65) matchScore += 5;
+      else if (effectiveContrast > 0.4 && effectiveContrast < 0.7) matchScore += 2;
+      break;
+    case 'warm':
+      if (tempBias > 0.1 && effectiveSat > 0.5) matchScore += 5;
+      else if (tempBias > 0.05) matchScore += 2;
+      break;
+    case 'cool':
+      if (tempBias < -0.1 && effectiveSat > 0.4) matchScore += 5;
+      else if (tempBias < -0.05) matchScore += 2;
+      break;
+  }
+
+  return matchScore;
+}
+
+function calcFilmMatchScore(subject: PhotoSubject, filmId: string): number {
+  if (subject.recommendedFilms && subject.recommendedFilms.includes(filmId)) {
+    const index = subject.recommendedFilms.indexOf(filmId);
+    if (index === 0) return 5;
+    if (index === 1) return 3;
+    return 2;
+  }
+  return 0;
 }
 
 function calculateStageImpact(
@@ -391,7 +491,8 @@ function generateFeedback(
   subject: PhotoSubject,
   params: DevParams,
   scores: { exposure: number; contrast: number; color: number; detail: number; overall: number; grade: string },
-  isColorFilm: boolean
+  isColorFilm: boolean,
+  filmId?: string
 ): string[] {
   const messages: string[] = [];
 

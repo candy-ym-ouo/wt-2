@@ -254,7 +254,7 @@
     renderToCanvas(renderCtx, finalImage);
     const imgUrl = createThumbnail(renderCtx, finalImage, 480, 640);
 
-    const scoreDetails = calculateScore(subject, params, finalImage, isColorFilm, stageResult);
+    const scoreDetails = calculateScore(subject, params, finalImage, isColorFilm, stageResult, film.id);
 
     const photo: ProcessedPhoto = {
       id: generateId(),
