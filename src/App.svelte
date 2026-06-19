@@ -22,6 +22,7 @@
   import AchievementPanel from './components/AchievementPanel.svelte';
   import OrderManagement from './components/OrderManagement.svelte';
   import FilmLab from './components/FilmLab.svelte';
+  import ReviewPanel from './components/ReviewPanel.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -38,6 +39,7 @@
   let ordersInitialOrderId: string | null = null;
   let ordersInitialTab: string | null = null;
   let showFilmLab = false;
+  let showReview = false;
 
   function goToOrderScoring() {
     if (currentOrder) {
@@ -521,6 +523,16 @@
         <span>🔬</span>
       </button>
       <button
+        class="header-btn review"
+        on:click={() => { showReview = true; }}
+        title="多人评审台"
+      >
+        <span>🎭</span>
+        {#if $gameStore.reviewSystem.submissions.length > 0}
+          <span class="badge">{$gameStore.reviewSystem.submissions.length}</span>
+        {/if}
+      </button>
+      <button
         class="header-btn help"
         on:click={() => { gameStore.resetTutorial(); }}
         title="重新开始教程"
@@ -699,6 +711,10 @@
 
   {#if showFilmLab}
     <FilmLab onClose={() => { showFilmLab = false; }} />
+  {/if}
+
+  {#if showReview}
+    <ReviewPanel on:close={() => { showReview = false; }} />
   {/if}
 
   <footer class="app-footer">

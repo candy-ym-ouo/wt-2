@@ -272,6 +272,7 @@ export interface GameState {
   orderScheduleSlots: ScheduleSlot[];
   filmLab: FilmLabState;
   questSystem: QuestSystemState;
+  reviewSystem: ReviewSystemState;
 }
 
 export type TutorialUnlockCondition = 
@@ -338,6 +339,7 @@ export interface StorageStatus {
   collectionsLoaded: number;
   ordersLoaded: number;
   questSystemLoaded?: boolean;
+  reviewSystemLoaded?: boolean;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -350,6 +352,7 @@ export interface StorageStatus {
     favorites: number;
     collections: number;
     orders: number;
+    reviewSystem?: number;
   };
 }
 
@@ -885,3 +888,176 @@ export interface FilmRestrictionResult {
     message: string;
   }[];
 }
+
+export type ReviewDimensionId = 'composition' | 'lighting' | 'color' | 'detail' | 'creativity' | 'emotion';
+
+export interface ReviewDimension {
+  id: ReviewDimensionId;
+  name: string;
+  description: string;
+  weight: number;
+  icon: string;
+}
+
+export type ReviewerRole = 'junior' | 'senior' | 'master' | 'automated';
+
+export interface Reviewer {
+  id: string;
+  name: string;
+  role: ReviewerRole;
+  avatar: string;
+  expertise: ReviewDimensionId[];
+  biasTendency: 'strict' | 'moderate' | 'lenient';
+}
+
+export interface ReviewScore {
+  dimensionId: ReviewDimensionId;
+  score: number;
+  weight: number;
+  comment: string;
+}
+
+export interface Review {
+  id: string;
+  submissionId: string;
+  reviewerId: string;
+  scores: ReviewScore[];
+  overallComment: string;
+  weightedScore: number;
+  recommendation: 'reject' | 'revise' | 'accept' | 'excellent';
+  reviewedAt: number;
+  isAutomated: boolean;
+}
+
+export type SubmissionStatus = 
+  | 'draft' 
+  | 'submitted' 
+  | 'reviewing' 
+  | 'reviewed' 
+  | 'disputed' 
+  | 're_reviewing' 
+  | 'finalized' 
+  | 'archived';
+
+export interface ReviewSubmission {
+  id: string;
+  photoId: string;
+  photoDataUrl: string;
+  subjectId: string;
+  filmId: string;
+  submitterId: string;
+  submitterName: string;
+  title: string;
+  description: string;
+  tags: string[];
+  status: SubmissionStatus;
+  submittedAt: number;
+  reviews: Review[];
+  finalScore: number | null;
+  finalGrade: 'S' | 'A' | 'B' | 'C' | 'D' | null;
+  disputeReason?: string;
+  disputeAt?: number;
+  finalizedAt?: number;
+  ranking?: number;
+  contestId?: string;
+}
+
+export type ContestStatus = 'upcoming' | 'active' | 'reviewing' | 'completed' | 'archived';
+
+export interface ContestDefinition {
+  id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  icon: string;
+  theme: string;
+  startDate: number;
+  endDate: number;
+  reviewStartDate: number;
+  reviewEndDate: number;
+  dimensions: ReviewDimension[];
+  allowedSubjectIds?: string[];
+  allowedFilmIds?: string[];
+  requireFilmColor?: 'bw' | 'color';
+  maxSubmissionsPerUser: number;
+  minReviewsPerSubmission: number;
+  status: ContestStatus;
+  prizes: {
+    rank: number;
+    title: string;
+    description: string;
+    points: number;
+    badge?: string;
+    titleReward?: string;
+  }[];
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  submissionId: string;
+  photoDataUrl: string;
+  title: string;
+  submitterName: string;
+  finalScore: number;
+  finalGrade: string;
+  reviewCount: number;
+  submissionTime: number;
+  subjectName: string;
+  filmName: string;
+  isDisputed: boolean;
+}
+
+export interface LeaderboardFilter {
+  contestId: string | null;
+  sortBy: 'score_desc' | 'score_asc' | 'date_desc' | 'date_asc' | 'reviews_desc';
+  gradeFilter: string[];
+  subjectFilter: string[];
+  filmFilter: string[];
+  includeDisputed: boolean;
+}
+
+export interface DisputeRecord {
+  submissionId: string;
+  disputeReason: string;
+  disputedAt: number;
+  resolvedAt?: number;
+  resolution?: 'upheld' | 'rejected' | 'modified';
+  resolutionNote?: string;
+  resolvedBy?: string;
+  originalScore: number | null;
+  newScore?: number | null;
+}
+
+export interface ReviewCommentSummary {
+  positivePoints: string[];
+  negativePoints: string[];
+  suggestions: string[];
+  commonThemes: {
+    theme: string;
+    count: number;
+    sentiment: 'positive' | 'negative' | 'neutral';
+  }[];
+  dimensionAverages: {
+    dimensionId: ReviewDimensionId;
+    dimensionName: string;
+    averageScore: number;
+    standardDeviation: number;
+    minScore: number;
+    maxScore: number;
+  }[];
+  reviewerAgreement: number;
+  totalReviewers: number;
+}
+
+export interface ReviewSystemState {
+  submissions: ReviewSubmission[];
+  contests: ContestDefinition[];
+  reviewers: Reviewer[];
+  disputes: DisputeRecord[];
+  activeContestId: string | null;
+  selectedSubmissionId: string | null;
+  activeTab: ReviewSystemTab;
+  leaderboardFilter: LeaderboardFilter;
+}
+
+export type ReviewSystemTab = 'submit' | 'review' | 'leaderboard' | 'my_submissions' | 'disputes';

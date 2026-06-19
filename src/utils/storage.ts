@@ -1,12 +1,14 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 import { createInitialQuestSystemState } from './questSystem';
+import { createInitialReviewSystemState } from './reviewSystem';
 
 export const CURRENT_STORAGE_VERSION = 3;
 export const MAX_PHOTOS = 100;
 export const MAX_PRESETS = 50;
 export const MAX_COLLECTIONS = 20;
 export const MAX_ORDERS = 50;
+export const MAX_REVIEW_SUBMISSIONS = 50;
 export const STORAGE_QUOTA_WARNING = 0.8;
 export const BACKUP_COUNT = 3;
 
@@ -31,7 +33,7 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
@@ -41,7 +43,8 @@ const KEY_MAP: Record<StorageKey, string> = {
   collections: 'darkroom_collections',
   achievements: 'darkroom_achievements',
   orders: 'darkroom_orders',
-  quest_system: 'darkroom_quest_system'
+  quest_system: 'darkroom_quest_system',
+  review_system: 'darkroom_review_system'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -727,4 +730,55 @@ export function loadSavedQuestSystem(): { state: QuestSystemState; status: Parti
 
 export function saveQuestSystem(state: QuestSystemState): boolean {
   return saveWithBackup('quest_system', state, 1);
+}
+
+function validateReviewSystemState(data: unknown): data is ReviewSystemState {
+  if (typeof data !== 'object' || data === null) return false;
+  const r = data as Record<string, unknown>;
+  return (
+    Array.isArray(r.submissions) &&
+    Array.isArray(r.contests) &&
+    Array.isArray(r.reviewers) &&
+    Array.isArray(r.disputes) &&
+    typeof r.activeTab === 'string'
+  );
+}
+
+export function repairReviewSystem(state: ReviewSystemState): ReviewSystemState {
+  const initial = createInitialReviewSystemState();
+  const repaired: ReviewSystemState = {
+    submissions: Array.isArray(state.submissions) ? state.submissions.slice(0, MAX_REVIEW_SUBMISSIONS) : initial.submissions,
+    contests: Array.isArray(state.contests) && state.contests.length > 0 ? state.contests : initial.contests,
+    reviewers: Array.isArray(state.reviewers) && state.reviewers.length > 0 ? state.reviewers : initial.reviewers,
+    disputes: Array.isArray(state.disputes) ? state.disputes : initial.disputes,
+    activeContestId: state.activeContestId || null,
+    selectedSubmissionId: state.selectedSubmissionId || null,
+    activeTab: typeof state.activeTab === 'string' ? state.activeTab : initial.activeTab,
+    leaderboardFilter: state.leaderboardFilter || initial.leaderboardFilter
+  };
+  return repaired;
+}
+
+export function loadSavedReviewSystem(): { state: ReviewSystemState; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<ReviewSystemState>('review_system', createInitialReviewSystemState());
+  const status: Partial<StorageStatus> = {
+    reviewSystemLoaded: result.success
+  };
+
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+
+  let state = result.data || createInitialReviewSystemState();
+  state = repairReviewSystem(state);
+
+  return { state, status };
+}
+
+export function saveReviewSystem(state: ReviewSystemState): boolean {
+  const limited = enforceLimits('review_system', state) as ReviewSystemState;
+  return saveWithBackup('review_system', limited, limited.submissions.length);
 }

@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
@@ -27,7 +27,9 @@ import {
   saveOrders,
   repairOrders,
   loadSavedQuestSystem,
-  saveQuestSystem
+  saveQuestSystem,
+  loadSavedReviewSystem,
+  saveReviewSystem
 } from '../utils/storage';
 import {
   createInitialQuestSystemState,
@@ -51,6 +53,26 @@ import {
   getQuestById,
   getStageById
 } from '../utils/questSystem';
+import {
+  createInitialReviewSystemState,
+  submitWork,
+  generateAutomatedReview,
+  addReview,
+  summarizeComments,
+  submitDispute,
+  resolveDispute,
+  generateLeaderboard,
+  canSubmitToContest,
+  checkPhotoMeetsContestRequirements,
+  finalizeSubmission,
+  updateLeaderboardRanking,
+  getContestById,
+  getActiveContests,
+  getMySubmissions,
+  getPendingReviews,
+  REVIEW_DIMENSIONS,
+  REVIEWERS
+} from '../utils/reviewSystem';
 
 function createInitialStageState(): StageState {
   return {
@@ -517,6 +539,7 @@ function createInitialGameState(): GameState {
   const achievementsResult = loadSavedAchievements();
   const ordersResult = loadSavedOrders();
   const questSystemResult = loadSavedQuestSystem();
+  const reviewSystemResult = loadSavedReviewSystem();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -529,6 +552,7 @@ function createInitialGameState(): GameState {
   storageStatus.collectionsLoaded = collectionsResult.status.collectionsLoaded || 0;
   storageStatus.ordersLoaded = ordersResult.status.ordersLoaded || 0;
   storageStatus.questSystemLoaded = questSystemResult.status.questSystemLoaded || false;
+  storageStatus.reviewSystemLoaded = reviewSystemResult.status.reviewSystemLoaded || false;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
@@ -536,14 +560,16 @@ function createInitialGameState(): GameState {
     favoritesResult.status.migrationPerformed ||
     collectionsResult.status.migrationPerformed ||
     ordersResult.status.migrationPerformed ||
-    questSystemResult.status.migrationPerformed);
+    questSystemResult.status.migrationPerformed ||
+    reviewSystemResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
     tutorialResult.status.recoveryPerformed ||
     favoritesResult.status.recoveryPerformed ||
     collectionsResult.status.recoveryPerformed ||
     ordersResult.status.recoveryPerformed ||
-    questSystemResult.status.recoveryPerformed);
+    questSystemResult.status.recoveryPerformed ||
+    reviewSystemResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
@@ -584,13 +610,14 @@ function createInitialGameState(): GameState {
     storageStatus.corruptedItems.presets + 
     storageStatus.corruptedItems.favorites + 
     storageStatus.corruptedItems.collections +
-    storageStatus.corruptedItems.orders;
+    storageStatus.corruptedItems.orders +
+    (storageStatus.corruptedItems.reviewSystem || 0);
   if (corruptedCount > 0) {
     warnings.push({
       type: 'corrupted',
       message: `发现 ${corruptedCount} 个损坏数据项，已自动清理`,
       timestamp: now,
-      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个, 订单: ${storageStatus.corruptedItems.orders} 个`
+      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个, 订单: ${storageStatus.corruptedItems.orders} 个, 评审: ${storageStatus.corruptedItems.reviewSystem || 0} 个`
     });
   }
   
@@ -650,7 +677,8 @@ function createInitialGameState(): GameState {
     },
     orderScheduleSlots: scheduleSlots,
     filmLab: createInitialFilmLabState(),
-    questSystem: questSystemResult.state
+    questSystem: questSystemResult.state,
+    reviewSystem: reviewSystemResult.state
   };
 }
 
@@ -2712,7 +2740,80 @@ function createGameStore() {
         ...state.questSystem,
         lastClaimedRewards: null
       }
-    }))
+    })),
+
+    setReviewTab: (tab: ReviewSystemState['activeTab']) => update(state => {
+      const newReviewSystem = { ...state.reviewSystem, activeTab: tab };
+      saveReviewSystem(newReviewSystem);
+      return { ...state, reviewSystem: newReviewSystem };
+    }),
+
+    setActiveContest: (contestId: string | null) => update(state => {
+      const newReviewSystem = { ...state.reviewSystem, activeContestId: contestId };
+      saveReviewSystem(newReviewSystem);
+      return { ...state, reviewSystem: newReviewSystem };
+    }),
+
+    setSelectedSubmission: (submissionId: string | null) => update(state => {
+      const newReviewSystem = { ...state.reviewSystem, selectedSubmissionId: submissionId };
+      saveReviewSystem(newReviewSystem);
+      return { ...state, reviewSystem: newReviewSystem };
+    }),
+
+    setLeaderboardFilter: (filter: Partial<LeaderboardFilter>) => update(state => {
+      const newReviewSystem = {
+        ...state.reviewSystem,
+        leaderboardFilter: { ...state.reviewSystem.leaderboardFilter, ...filter }
+      };
+      saveReviewSystem(newReviewSystem);
+      return { ...state, reviewSystem: newReviewSystem };
+    }),
+
+    submitToReview: (photo: ProcessedPhoto, title: string, description: string, tags: string[], contestId?: string) => update(state => {
+      const { state: newReviewState } = submitWork(state.reviewSystem, photo, title, description, tags, contestId);
+      saveReviewSystem(newReviewState);
+      return { ...state, reviewSystem: newReviewState };
+    }),
+
+    addAutomatedReviews: (submissionId: string, photo: ProcessedPhoto) => update(state => {
+      let newReviewSystem = state.reviewSystem;
+      const submission = newReviewSystem.submissions.find(s => s.id === submissionId);
+      if (!submission) return state;
+
+      const contest = submission.contestId ? getContestById(newReviewSystem, submission.contestId) : null;
+      const dimensions = contest?.dimensions || REVIEW_DIMENSIONS;
+      const autoReviewers = REVIEWERS.filter(r => r.role === 'automated' || r.role === 'junior');
+
+      autoReviewers.slice(0, 3).forEach(reviewer => {
+        const review = generateAutomatedReview(submission, photo, dimensions, reviewer);
+        newReviewSystem = addReview(newReviewSystem, submissionId, review);
+      });
+
+      saveReviewSystem(newReviewSystem);
+      return { ...state, reviewSystem: newReviewSystem };
+    }),
+
+    submitDispute: (submissionId: string, reason: string) => update(state => {
+      const { state: newReviewState } = submitDispute(state.reviewSystem, submissionId, reason);
+      saveReviewSystem(newReviewState);
+      return { ...state, reviewSystem: newReviewState };
+    }),
+
+    resolveDispute: (submissionId: string, resolution: 'upheld' | 'rejected' | 'modified', note: string, newScore?: number) => update(state => {
+      const newReviewSystem = resolveDispute(state.reviewSystem, submissionId, resolution, note, 'admin', newScore);
+      saveReviewSystem(newReviewSystem);
+      return { ...state, reviewSystem: newReviewSystem };
+    }),
+
+    finalizeSubmissionReview: (submissionId: string) => update(state => {
+      let newReviewSystem = finalizeSubmission(state.reviewSystem, submissionId);
+      const submission = newReviewSystem.submissions.find(s => s.id === submissionId);
+      if (submission?.contestId) {
+        newReviewSystem = updateLeaderboardRanking(newReviewSystem, submission.contestId);
+      }
+      saveReviewSystem(newReviewSystem);
+      return { ...state, reviewSystem: newReviewSystem };
+    })
   };
 }
 
