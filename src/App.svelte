@@ -34,6 +34,16 @@
   let achievementNotifications: { id: string; name: string; icon: string; title: string; timestamp: number }[] = [];
   let notificationTimer: number | null = null;
   let showOrders = false;
+  let ordersInitialOrderId: string | null = null;
+  let ordersInitialTab: string | null = null;
+
+  function goToOrderScoring() {
+    if (currentOrder) {
+      ordersInitialOrderId = currentOrder.id;
+      ordersInitialTab = 'score';
+    }
+    showOrders = true;
+  }
 
   let unsubscribe: () => void;
   let currentState: GameState;
@@ -51,6 +61,9 @@
   $: selectedAlbumPhoto = $gameStore.selectedAlbumPhoto;
   $: attemptHistory = $gameStore.attemptHistory;
   $: achievements = $gameStore.achievements;
+  $: orders = $gameStore.orders;
+  $: currentOrderId = $gameStore.currentOrderId;
+  $: currentOrder = orders.find(o => o.id === currentOrderId) || null;
 
   $: if (achievements.newlyUnlocked.length > 0) {
     const newItems = achievements.newlyUnlocked.map(id => {
@@ -308,7 +321,13 @@
     lastProcessedPhoto = null;
     gameStore.updateDevelopmentProgress(0);
     gameStore.resetParams();
-    gameStore.setPhase('select');
+    
+    if (currentOrder && currentOrder.status === 'developing') {
+      gameStore.setPhase('select');
+    } else {
+      gameStore.setCurrentOrder(null);
+      gameStore.setPhase('select');
+    }
   }
 
   function handleTutorialNext() {
@@ -562,6 +581,19 @@
     <div class="result-overlay" on:click={() => {}}>
       <div class="result-layout">
         <div class="result-image-area">
+          {#if currentOrder}
+            <div class="order-progress-bar">
+              <span class="op-label">📋 订单 {currentOrder.orderNumber}</span>
+              <span class="op-progress">进度：{currentOrder.photoIds.length} / {currentOrder.requirements.quantity} 张</span>
+              {#if currentOrder.status === 'scoring'}
+                <button class="op-action-btn" on:click={goToOrderScoring}>
+                  ✨ 前往评价与归档
+                </button>
+              {:else}
+                <span class="op-hint">还需冲洗 {currentOrder.requirements.quantity - currentOrder.photoIds.length} 张</span>
+              {/if}
+            </div>
+          {/if}
           <div class="result-frame">
             <img src={lastProcessedPhoto.imageDataUrl} alt="冲洗结果" />
             <div class="corner tl" />
@@ -631,7 +663,15 @@
   {/if}
 
   {#if showOrders}
-    <OrderManagement onClose={() => showOrders = false} />
+    <OrderManagement 
+      initialOrderId={ordersInitialOrderId}
+      initialTab={ordersInitialTab}
+      onClose={() => { 
+        showOrders = false; 
+        ordersInitialOrderId = null;
+        ordersInitialTab = null;
+      }} 
+    />
   {/if}
 
   {#if achievementNotifications.length > 0}
@@ -856,7 +896,56 @@
 
   .result-image-area {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .order-progress-bar {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, rgba(139, 90, 43, 0.25), rgba(180, 140, 90, 0.15));
+    border: 1px solid rgba(180, 140, 90, 0.4);
+    border-radius: 10px;
+    color: #e8dcc8;
+    font-size: 14px;
+  }
+
+  .op-label {
+    font-weight: 600;
+    color: #d4a574;
+  }
+
+  .op-progress {
+    color: #c9b896;
+  }
+
+  .op-hint {
+    color: #a08b6c;
+    font-size: 13px;
+  }
+
+  .op-action-btn {
+    margin-left: auto;
+    padding: 6px 14px;
+    background: linear-gradient(135deg, #d4a574, #8b5a2b);
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .op-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(212, 165, 116, 0.4);
   }
 
   .result-frame {

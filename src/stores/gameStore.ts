@@ -953,6 +953,33 @@ function createGameStore() {
         }
       }
       
+      let updatedOrders = state.orders;
+      let updatedCurrentOrderId = state.currentOrderId;
+      
+      if (state.currentOrderId) {
+        const order = state.orders.find(o => o.id === state.currentOrderId);
+        if (order) {
+          const newPhotoIds = [...order.photoIds, photo.id];
+          const isAllComplete = newPhotoIds.length >= order.requirements.quantity;
+          
+          updatedOrders = state.orders.map(o => {
+            if (o.id !== state.currentOrderId) return o;
+            return {
+              ...o,
+              status: isAllComplete ? 'scoring' as OrderStatus : 'developing' as OrderStatus,
+              photoIds: newPhotoIds,
+              updatedAt: now,
+              completedAt: isAllComplete ? now : undefined
+            };
+          });
+          saveOrders(updatedOrders);
+          
+          if (isAllComplete) {
+            updatedCurrentOrderId = null;
+          }
+        }
+      }
+      
       return {
         ...state,
         isDeveloping: false,
@@ -962,6 +989,8 @@ function createGameStore() {
         attemptHistory: newAttemptHistory,
         achievements: newAchievements,
         storageStatus: newStorageStatus,
+        orders: updatedOrders,
+        currentOrderId: updatedCurrentOrderId,
         stageState: {
           ...state.stageState,
           currentStage: 'complete',
@@ -2102,6 +2131,8 @@ function createGameStore() {
       return {
         ...state,
         orders: newOrders,
+        currentOrderId: orderId,
+        phase: 'select',
         storageStatus: {
           ...state.storageStatus,
           lastSaveSuccess: saveSuccess,

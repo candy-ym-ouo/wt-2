@@ -1,7 +1,7 @@
 <script lang="ts">
   import { gameStore } from '../stores/gameStore';
   import type { DarkroomOrder, PhotoCollection, ProcessedPhoto } from '../types/game';
-  import { FILM_STOCKS, SCENE_TYPE_LABELS } from '../data/gameData';
+  import { FILM_STOCKS, SCENE_TYPE_LABELS, PHOTO_SUBJECTS } from '../data/gameData';
   import FilmMatcher from './FilmMatcher.svelte';
   import DevelopSchedule from './DevelopSchedule.svelte';
   import ScoreFeedback from './ScoreFeedback.svelte';
@@ -9,6 +9,8 @@
   import { get } from 'svelte/store';
 
   export let onClose: () => void = () => {};
+  export let initialOrderId: string | null = null;
+  export let initialTab: string | null = null;
 
   let selectedOrderId: string | null = null;
   let activeTab = 'detail';
@@ -20,6 +22,14 @@
   $: orders = $gameStore.orders;
   $: collections = $gameStore.collections;
   $: processedPhotos = $gameStore.processedPhotos;
+
+  $: if (initialOrderId && !selectedOrderId) {
+    selectedOrderId = initialOrderId;
+    gameStore.setCurrentOrder(initialOrderId);
+  }
+  $: if (initialTab && activeTab !== initialTab) {
+    activeTab = initialTab;
+  }
 
   $: selectedOrder = orders.find(o => o.id === selectedOrderId) || null;
   $: orderPhotos = selectedOrder 
@@ -148,11 +158,12 @@
   function startDevelopment() {
     if (!selectedOrder || !selectedOrder.selectedFilmId) return;
     
-    const state = get(gameStore);
-    if (state.currentSubject) {
-      gameStore.startOrderDevelopment(selectedOrder.id, state.currentSubject.id);
-    }
+    const matchedSubject = PHOTO_SUBJECTS.find(s => s.sceneType === selectedOrder.requirements.sceneType) 
+      || PHOTO_SUBJECTS[0];
+    
+    gameStore.setSubject(matchedSubject.id);
     gameStore.setFilm(selectedOrder.selectedFilmId);
+    gameStore.startOrderDevelopment(selectedOrder.id, matchedSubject.id);
     onClose();
   }
 
