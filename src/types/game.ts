@@ -223,6 +223,17 @@ export interface StageScoreImpact {
   washFeedback: string;
 }
 
+export interface AttemptRecord {
+  attemptNumber: number;
+  params: DevParams;
+  score: number;
+  overall: number;
+  grade: 'S' | 'A' | 'B' | 'C' | 'D';
+  timestamp: number;
+  subjectId: string;
+  filmId: string;
+}
+
 export type CanvasMode = 'preview' | 'developing' | 'final';
 
 export interface GameState {
@@ -253,6 +264,7 @@ export interface GameState {
   quickBrowseIndex: number;
   quickBrowsePhotoIds: string[];
   storageStatus: StorageStatus;
+  attemptHistory: AttemptRecord[];
 }
 
 export type TutorialUnlockCondition = 

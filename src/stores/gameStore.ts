@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS } from '../data/gameData';
 import { generateId } from '../utils/math';
 import {
@@ -399,7 +399,8 @@ function createInitialGameState(): GameState {
     },
     quickBrowseIndex: 0,
     quickBrowsePhotoIds: [],
-    storageStatus
+    storageStatus,
+    attemptHistory: []
   };
 }
 
@@ -497,6 +498,25 @@ function createGameStore() {
       const saveSuccess = savePhotos(newPhotos);
       const info = getStorageInfo();
       
+      const newAttempt: AttemptRecord = {
+        attemptNumber: state.attemptHistory.length + 1,
+        params: { ...photo.params },
+        score: photo.score,
+        overall: photo.details.overall,
+        grade: photo.details.grade,
+        timestamp: photo.timestamp,
+        subjectId: photo.subjectId,
+        filmId: photo.filmId
+      };
+      
+      const isSameSession = state.attemptHistory.length > 0
+        && state.attemptHistory[0].subjectId === photo.subjectId
+        && state.attemptHistory[0].filmId === photo.filmId;
+      
+      const newAttemptHistory = isSameSession
+        ? [...state.attemptHistory, newAttempt]
+        : [newAttempt];
+      
       let newWarnings = [...state.storageStatus.warnings];
       const now = Date.now();
       
@@ -539,6 +559,7 @@ function createGameStore() {
         developmentProgress: 1,
         phase: 'result',
         processedPhotos: newPhotos,
+        attemptHistory: newAttemptHistory,
         storageStatus: newStorageStatus,
         stageState: {
           ...state.stageState,
@@ -747,6 +768,14 @@ function createGameStore() {
       ...state,
       phase: 'select',
       selectedAlbumPhoto: null,
+      isDeveloping: false,
+      developmentProgress: 0,
+      stageState: createInitialStageState(),
+      attemptHistory: []
+    })),
+    retryDevelop: () => update(state => ({
+      ...state,
+      phase: 'select',
       isDeveloping: false,
       developmentProgress: 0,
       stageState: createInitialStageState()

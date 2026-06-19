@@ -1,16 +1,18 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { ScoreDetail, ProcessedPhoto, PhotoSubject, FilmStock } from '../types/game';
+  import type { ScoreDetail, ProcessedPhoto, PhotoSubject, FilmStock, AttemptRecord } from '../types/game';
   import { GRADE_COLORS, GRADE_NAMES, PHOTO_SUBJECTS, FILM_STOCKS } from '../data/gameData';
 
   export let photo: ProcessedPhoto;
   export let mode: 'result' | 'view' = 'result';
+  export let attemptHistory: AttemptRecord[] = [];
 
   const dispatch = createEventDispatcher<{
     newPhoto: void;
     openAlbum: void;
     close: void;
     viewDetail: void;
+    retry: void;
   }>();
 
   const details = photo.details;
@@ -39,6 +41,16 @@
     hour: '2-digit',
     minute: '2-digit'
   });
+
+  $: showAttemptHistory = attemptHistory.length > 1;
+
+  $: scoreChange = showAttemptHistory
+    ? attemptHistory[attemptHistory.length - 1].overall - attemptHistory[attemptHistory.length - 2].overall
+    : 0;
+
+  function gradeColor(grade: string): string {
+    return GRADE_COLORS[grade as keyof typeof GRADE_COLORS] || '#888888';
+  }
 </script>
 
 <div class="result-panel" class:modal={mode === 'view'}>
@@ -61,6 +73,11 @@
       <div class="overall-score">
         <span class="score-value">{details.overall}</span>
         <span class="score-max">/100</span>
+        {#if showAttemptHistory}
+          <span class="score-change" class:positive={scoreChange > 0} class:negative={scoreChange < 0}>
+            {scoreChange > 0 ? '+' : ''}{scoreChange}
+          </span>
+        {/if}
       </div>
       <div class="meta-row">
         <span class="meta-pill">📷 {subject?.name || '未知题材'}</span>
@@ -123,8 +140,34 @@
     </div>
   </div>
 
+  {#if showAttemptHistory}
+    <div class="attempt-history-section">
+      <h3 class="section-title">📊 冲洗记录</h3>
+      <div class="attempt-list">
+        {#each attemptHistory as attempt, i (i)}
+          <div class="attempt-row" class:latest={i === attemptHistory.length - 1}>
+            <span class="attempt-num">V{attempt.attemptNumber}</span>
+            <span class="attempt-grade" style="color: {gradeColor(attempt.grade)}">{attempt.grade}</span>
+            <span class="attempt-score">{attempt.overall}分</span>
+            {#if i > 0}
+              {@const diff = attemptHistory[i].overall - attemptHistory[i - 1].overall}
+              <span class="attempt-diff" class:up={diff > 0} class:down={diff < 0}>
+                {diff > 0 ? '↑' : diff < 0 ? '↓' : '→'}{diff > 0 ? '+' : ''}{diff}
+              </span>
+            {:else}
+              <span class="attempt-diff placeholder">—</span>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
   {#if mode === 'result'}
     <div class="result-actions">
+      <button class="action-btn retry" on:click={() => dispatch('retry')}>
+        <span>🔄</span> 再冲一次
+      </button>
       <button class="action-btn primary" on:click={() => dispatch('newPhoto')}>
         <span>🎬</span> 继续创作
       </button>
@@ -403,9 +446,10 @@
 
   .result-actions {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     padding-top: 8px;
     border-top: 1px solid rgba(139, 90, 43, 0.2);
+    flex-wrap: wrap;
   }
 
   .action-btn {
@@ -442,5 +486,106 @@
 
   .action-btn.secondary:hover {
     background: rgba(120, 120, 120, 0.25);
+  }
+
+  .action-btn.retry {
+    background: linear-gradient(135deg, rgba(139, 90, 43, 0.4) 0%, rgba(100, 65, 25, 0.5) 100%);
+    color: #f5e6d3;
+    border: 1px solid rgba(200, 160, 100, 0.35);
+  }
+
+  .action-btn.retry:hover {
+    background: linear-gradient(135deg, rgba(160, 110, 50, 0.5) 0%, rgba(130, 80, 35, 0.6) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(139, 90, 43, 0.35);
+  }
+
+  .score-change {
+    margin-left: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    font-family: 'SF Mono', Monaco, monospace;
+    opacity: 0.9;
+  }
+
+  .score-change.positive {
+    color: #7ecf7e;
+  }
+
+  .score-change.negative {
+    color: #cf7e7e;
+  }
+
+  .attempt-history-section {
+    margin-bottom: 20px;
+    padding: 14px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    border-left: 3px solid rgba(100, 180, 200, 0.4);
+  }
+
+  .attempt-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .attempt-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: rgba(139, 90, 43, 0.08);
+    border-radius: 8px;
+    border: 1px solid rgba(139, 90, 43, 0.1);
+    transition: all 0.2s;
+  }
+
+  .attempt-row.latest {
+    background: rgba(139, 90, 43, 0.18);
+    border-color: rgba(139, 90, 43, 0.3);
+  }
+
+  .attempt-num {
+    font-size: 11px;
+    font-weight: 600;
+    color: #a89878;
+    font-family: 'SF Mono', Monaco, monospace;
+    min-width: 28px;
+  }
+
+  .attempt-grade {
+    font-size: 16px;
+    font-weight: bold;
+    min-width: 22px;
+  }
+
+  .attempt-score {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    color: #c8b898;
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  .attempt-diff {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'SF Mono', Monaco, monospace;
+    min-width: 44px;
+    text-align: right;
+  }
+
+  .attempt-diff.up {
+    color: #7ecf7e;
+  }
+
+  .attempt-diff.down {
+    color: #cf7e7e;
+  }
+
+  .attempt-diff.placeholder {
+    color: #5a4a35;
   }
 </style>

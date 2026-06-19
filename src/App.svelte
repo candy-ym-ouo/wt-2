@@ -43,6 +43,7 @@
   $: tutorialState = $gameStore.tutorial;
   $: processedPhotos = $gameStore.processedPhotos;
   $: selectedAlbumPhoto = $gameStore.selectedAlbumPhoto;
+  $: attemptHistory = $gameStore.attemptHistory;
 
   let canvasMode: CanvasMode;
   $: canvasMode = phase === 'develop' ? 'developing' : (phase === 'result' ? 'final' : 'preview');
@@ -314,6 +315,21 @@
     handleNewPhoto();
   }
 
+  function handleRetryDevelop() {
+    if (!lastProcessedPhoto) return;
+    const photo = lastProcessedPhoto;
+    const subject = PHOTO_SUBJECTS.find(s => s.id === photo.subjectId);
+    if (subject) {
+      gameStore.setSubject(subject.id);
+      selectedSubjectId = subject.id;
+    }
+    gameStore.setFilm(photo.filmId);
+    selectedFilmId = photo.filmId;
+    gameStore.updateParams({ ...photo.params });
+    lastProcessedPhoto = null;
+    gameStore.retryDevelop();
+  }
+
   function handleScoreOpenAlbum() {
     gameStore.openAlbum();
   }
@@ -510,9 +526,11 @@
           <ScorePanel
             photo={lastProcessedPhoto}
             mode="result"
+            {attemptHistory}
             on:newPhoto={handleScoreNewPhoto}
             on:openAlbum={handleScoreOpenAlbum}
             on:viewDetail={() => handleViewScoreDetail(lastProcessedPhoto ?? null)}
+            on:retry={handleRetryDevelop}
           />
         </div>
       </div>
