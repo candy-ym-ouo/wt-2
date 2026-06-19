@@ -10,6 +10,7 @@
     newPhoto: void;
     openAlbum: void;
     close: void;
+    viewDetail: void;
   }>();
 
   const details = photo.details;
@@ -70,7 +71,13 @@
   </div>
 
   <div class="score-breakdown">
-    <h3 class="section-title">评分详情</h3>
+    <div class="section-header">
+      <h3 class="section-title">评分详情</h3>
+      <button class="detail-btn" on:click={() => dispatch('viewDetail')}>
+        <span>🔍</span>
+        <span>扣分明细</span>
+      </button>
+    </div>
     <div class="bars-list">
       {#each scoreBars as bar (bar.key)}
         <div class="score-bar-row">
@@ -254,12 +261,39 @@
     border: 1px solid rgba(139, 90, 43, 0.2);
   }
 
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
   .section-title {
     font-size: 13px;
     color: #d4a574;
-    margin: 0 0 12px;
+    margin: 0;
     letter-spacing: 2px;
     font-weight: 600;
+  }
+
+  .detail-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    background: rgba(139, 90, 43, 0.15);
+    border: 1px solid rgba(139, 90, 43, 0.25);
+    border-radius: 6px;
+    color: #c8a878;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .detail-btn:hover {
+    background: rgba(139, 90, 43, 0.25);
+    color: #f0d8a8;
+    transform: translateY(-1px);
   }
 
   .score-breakdown {

@@ -1,6 +1,40 @@
-import type { PhotoSubject, DevParams, ScoreDetail, KeyArea } from '../types/game';
+import type {
+  PhotoSubject,
+  DevParams,
+  ScoreDetail,
+  KeyArea,
+  KeyAreaResult,
+  ParamDeviation,
+  DeductionItem
+} from '../types/game';
 import type { RenderedImageData } from './renderEngine';
 import { clamp, smoothstep } from './math';
+
+interface ScoreContext {
+  exposureScore: number;
+  contrastScore: number;
+  colorScore: number;
+  detailScore: number;
+  overall: number;
+  grade: string;
+  keyAreaResults: KeyAreaResult[];
+  paramDeviations: ParamDeviation[];
+  deductions: DeductionItem[];
+  overexposedPct: number;
+  underexposedPct: number;
+  dynamicRange: number;
+  sharpness: number;
+}
+
+const PARAM_LABELS: Record<string, string> = {
+  exposure: '曝光',
+  contrast: '反差',
+  developmentTime: '显影时间',
+  temperature: '显影温度',
+  saturation: '饱和度',
+  agitation: '搅动方式',
+  dilution: '药液稀释'
+};
 
 export function calculateScore(
   subject: PhotoSubject,
@@ -8,45 +42,81 @@ export function calculateScore(
   finalImage: RenderedImageData,
   isColorFilm: boolean
 ): ScoreDetail {
-  const exposureScore = calcExposureScore(subject, params, finalImage);
-  const contrastScore = calcContrastScore(subject, params, finalImage);
-  const colorScore = calcColorScore(subject, params, isColorFilm);
-  const detailScore = calcDetailScore(subject, params, finalImage);
+  const ctx: ScoreContext = {
+    exposureScore: 0,
+    contrastScore: 0,
+    colorScore: 0,
+    detailScore: 0,
+    overall: 0,
+    grade: 'D',
+    keyAreaResults: [],
+    paramDeviations: [],
+    deductions: [],
+    overexposedPct: 0,
+    underexposedPct: 0,
+    dynamicRange: 0,
+    sharpness: 0
+  };
+
+  const exposureResult = calcExposureScore(subject, params, finalImage, ctx);
+  const contrastResult = calcContrastScore(subject, params, finalImage, ctx);
+  const colorResult = calcColorScore(subject, params, isColorFilm, ctx);
+  const detailResult = calcDetailScore(subject, params, finalImage, ctx);
+
+  ctx.exposureScore = exposureResult;
+  ctx.contrastScore = contrastResult;
+  ctx.colorScore = colorResult;
+  ctx.detailScore = detailResult;
 
   const exposureW = 0.35;
   const contrastW = 0.25;
   const colorW = isColorFilm ? 0.2 : 0;
   const detailW = isColorFilm ? 0.2 : 0.4;
 
-  const overall = Math.round(
-    exposureScore * exposureW +
-    contrastScore * contrastW +
-    colorScore * colorW +
-    detailScore * detailW
+  ctx.overall = Math.round(
+    exposureResult * exposureW +
+    contrastResult * contrastW +
+    colorResult * colorW +
+    detailResult * detailW
   );
 
-  const grade = getGrade(overall);
+  ctx.grade = getGrade(ctx.overall);
   const feedback = generateFeedback(subject, params, {
-    exposure: exposureScore,
-    contrast: contrastScore,
-    color: colorScore,
-    detail: detailScore,
-    overall,
-    grade
+    exposure: Math.round(exposureResult),
+    contrast: Math.round(contrastResult),
+    color: Math.round(colorResult),
+    detail: Math.round(detailResult),
+    overall: ctx.overall,
+    grade: ctx.grade
   }, isColorFilm);
 
+  generateParamDeviations(subject, params, isColorFilm, ctx);
+  generateDeductions(ctx, subject, isColorFilm);
+
   return {
-    exposure: Math.round(exposureScore),
-    contrast: Math.round(contrastScore),
-    color: Math.round(colorScore),
-    detail: Math.round(detailScore),
-    overall,
-    grade,
-    feedback
+    exposure: Math.round(exposureResult),
+    contrast: Math.round(contrastResult),
+    color: Math.round(colorResult),
+    detail: Math.round(detailResult),
+    overall: ctx.overall,
+    grade: ctx.grade as 'S' | 'A' | 'B' | 'C' | 'D',
+    feedback,
+    keyAreaResults: ctx.keyAreaResults,
+    paramDeviations: ctx.paramDeviations,
+    deductions: ctx.deductions,
+    overexposedPct: ctx.overexposedPct,
+    underexposedPct: ctx.underexposedPct,
+    dynamicRange: ctx.dynamicRange,
+    sharpness: ctx.sharpness
   };
 }
 
-function calcExposureScore(subject: PhotoSubject, params: DevParams, image: RenderedImageData): number {
+function calcExposureScore(
+  subject: PhotoSubject,
+  params: DevParams,
+  image: RenderedImageData,
+  ctx: ScoreContext
+): number {
   const idealExposure = subject.idealExposure;
   const userExposure = params.exposure;
   const exposureDiff = Math.abs(idealExposure - userExposure) * 100;
@@ -69,15 +139,39 @@ function calcExposureScore(subject: PhotoSubject, params: DevParams, image: Rend
 
   const overPct = overexposed / totalPixels;
   const underPct = underexposed / totalPixels;
+  ctx.overexposedPct = Math.round(overPct * 10000) / 100;
+  ctx.underexposedPct = Math.round(underPct * 10000) / 100;
   const clipPenalty = (overPct + underPct * 0.8) * 500;
 
   let keyAreaBonus = 0;
   let keyAreaCount = 0;
   for (const area of subject.keyAreas) {
     const avgLum = getKeyAreaLuminance(image, area);
-    const diff = Math.abs(avgLum / 255 - area.idealBrightness);
-    keyAreaBonus += clamp(100 - diff * 150, 0, 100);
+    const actualBrightness = avgLum / 255;
+    const diff = Math.abs(actualBrightness - area.idealBrightness);
+    const areaScore = clamp(100 - diff * 150, 0, 100);
+    keyAreaBonus += areaScore;
     keyAreaCount++;
+
+    let hitStatus: 'excellent' | 'good' | 'fair' | 'poor' = 'poor';
+    if (areaScore >= 85) hitStatus = 'excellent';
+    else if (areaScore >= 70) hitStatus = 'good';
+    else if (areaScore >= 50) hitStatus = 'fair';
+
+    ctx.keyAreaResults.push({
+      name: area.name,
+      x: area.x,
+      y: area.y,
+      w: area.w,
+      h: area.h,
+      importance: area.importance,
+      idealBrightness: area.idealBrightness,
+      actualBrightness: Math.round(actualBrightness * 100) / 100,
+      brightnessDiff: Math.round(diff * 100) / 100,
+      score: Math.round(areaScore),
+      isHit: areaScore >= 60,
+      hitStatus
+    });
   }
   const keyAreaAvg = keyAreaCount > 0 ? keyAreaBonus / keyAreaCount : 50;
 
@@ -112,7 +206,12 @@ function getKeyAreaLuminance(image: RenderedImageData, area: KeyArea): number {
   return count > 0 ? sum / count : 128;
 }
 
-function calcContrastScore(subject: PhotoSubject, params: DevParams, image: RenderedImageData): number {
+function calcContrastScore(
+  subject: PhotoSubject,
+  params: DevParams,
+  image: RenderedImageData,
+  ctx: ScoreContext
+): number {
   const idealContrast = subject.idealContrast;
   const effectiveContrast = params.contrast * 0.5 + params.developmentTime * 0.3 + params.temperature * 0.2;
   const contrastDiff = Math.abs(idealContrast - effectiveContrast);
@@ -139,6 +238,7 @@ function calcContrastScore(subject: PhotoSubject, params: DevParams, image: Rend
     if (acc >= total * 0.95) { percentile95 = i; break; }
   }
   const dynamicRange = (percentile95 - percentile5) / 64;
+  ctx.dynamicRange = Math.round(dynamicRange * 100) / 100;
   const drScore = subject.sceneType === 'night' || subject.sceneType === 'landscape'
     ? smoothstep(0.4, 0.75, dynamicRange) * 100
     : smoothstep(0.3, 0.6, dynamicRange) * 100;
@@ -146,7 +246,12 @@ function calcContrastScore(subject: PhotoSubject, params: DevParams, image: Rend
   return clamp(baseScore * 0.6 + drScore * 0.4, 0, 100);
 }
 
-function calcColorScore(subject: PhotoSubject, params: DevParams, isColorFilm: boolean): number {
+function calcColorScore(
+  subject: PhotoSubject,
+  params: DevParams,
+  isColorFilm: boolean,
+  ctx: ScoreContext
+): number {
   if (!isColorFilm) return 0;
 
   const idealSat = subject.idealSaturation;
@@ -164,7 +269,12 @@ function calcColorScore(subject: PhotoSubject, params: DevParams, isColorFilm: b
   return clamp(satScore * 0.5 + tempScore * 0.3 + 50 + sceneSatBonus * 0.2, 0, 100);
 }
 
-function calcDetailScore(subject: PhotoSubject, params: DevParams, image: RenderedImageData): number {
+function calcDetailScore(
+  subject: PhotoSubject,
+  params: DevParams,
+  image: RenderedImageData,
+  ctx: ScoreContext
+): number {
   const { width, height } = image;
   const dilLoss = Math.abs(params.dilution - 0.5) * 40;
   const agiLoss = Math.abs(params.agitation - 0.5) * 35;
@@ -188,6 +298,7 @@ function calcDetailScore(subject: PhotoSubject, params: DevParams, image: Render
   }
 
   const avgEdge = edgeCount > 0 ? edgeSum / edgeCount : 0;
+  ctx.sharpness = Math.round(avgEdge * 10) / 10;
   const sharpnessScore = subject.sceneType === 'night' || subject.sceneType === 'portrait'
     ? smoothstep(5, 20, avgEdge) * 100
     : smoothstep(8, 30, avgEdge) * 100;
@@ -277,4 +388,247 @@ function generateFeedback(
     return messages.slice(0, 5);
   }
   return messages;
+}
+
+function generateParamDeviations(
+  subject: PhotoSubject,
+  params: DevParams,
+  isColorFilm: boolean,
+  ctx: ScoreContext
+): void {
+  const paramMap: Array<{ key: string; ideal: number; actual: number; suggestion: (dir: 'high' | 'low') => string }> = [
+    {
+      key: 'exposure',
+      ideal: subject.idealExposure,
+      actual: params.exposure,
+      suggestion: (dir) => dir === 'high'
+        ? '适当降低曝光值，避免高光溢出'
+        : '适当增加曝光值，保留暗部细节'
+    },
+    {
+      key: 'contrast',
+      ideal: subject.idealContrast,
+      actual: params.contrast,
+      suggestion: (dir) => dir === 'high'
+        ? '降低反差参数，使画面更柔和'
+        : '提高反差参数，增强画面层次'
+    },
+    {
+      key: 'developmentTime',
+      ideal: 0.5,
+      actual: params.developmentTime,
+      suggestion: (dir) => dir === 'high'
+        ? '缩短显影时间，避免反差过高'
+        : '延长显影时间，增加画面密度'
+    },
+    {
+      key: 'temperature',
+      ideal: 0.5,
+      actual: params.temperature,
+      suggestion: (dir) => dir === 'high'
+        ? '降低显影温度，控制化学反应速度'
+        : '提高显影温度，加快显影速度'
+    },
+    {
+      key: 'agitation',
+      ideal: 0.5,
+      actual: params.agitation,
+      suggestion: (dir) => dir === 'high'
+        ? '减少搅动频率，避免画面不均'
+        : '增加搅动频率，确保显影均匀'
+    },
+    {
+      key: 'dilution',
+      ideal: 0.5,
+      actual: params.dilution,
+      suggestion: (dir) => dir === 'high'
+        ? '降低药液稀释比例，增加药液浓度'
+        : '提高药液稀释比例，柔化画面效果'
+    }
+  ];
+
+  if (isColorFilm) {
+    paramMap.push({
+      key: 'saturation',
+      ideal: subject.idealSaturation,
+      actual: params.saturation,
+      suggestion: (dir) => dir === 'high'
+        ? '降低饱和度，使色彩更自然'
+        : '提高饱和度，使色彩更鲜明'
+    });
+  }
+
+  for (const item of paramMap) {
+    const deviation = item.actual - item.ideal;
+    const absDeviation = Math.abs(deviation);
+    const deviationPercent = Math.round(absDeviation * 100);
+    const scoreImpact = Math.round(absDeviation * 100 * 1.2);
+
+    let direction: 'high' | 'low' | 'optimal' = 'optimal';
+    if (deviation > 0.02) direction = 'high';
+    else if (deviation < -0.02) direction = 'low';
+
+    if (absDeviation > 0.02) {
+      ctx.paramDeviations.push({
+        param: item.key,
+        label: PARAM_LABELS[item.key],
+        idealValue: Math.round(item.ideal * 100) / 100,
+        actualValue: Math.round(item.actual * 100) / 100,
+        deviation: Math.round(deviation * 100) / 100,
+        deviationPercent,
+        direction,
+        scoreImpact,
+        suggestion: item.suggestion(direction === 'optimal' ? 'high' : direction)
+      });
+    }
+  }
+
+  ctx.paramDeviations.sort((a, b) => b.scoreImpact - a.scoreImpact);
+}
+
+function generateDeductions(
+  ctx: ScoreContext,
+  subject: PhotoSubject,
+  isColorFilm: boolean
+): void {
+  const deductions: DeductionItem[] = [];
+
+  if (ctx.overexposedPct > 1) {
+    const severity = getSeverity(ctx.overexposedPct, 1, 5, 10);
+    deductions.push({
+      category: 'exposure',
+      categoryLabel: '曝光控制',
+      reason: `高光溢出区域占 ${ctx.overexposedPct}%，细节丢失`,
+      pointsLost: Math.round(ctx.overexposedPct * 2),
+      severity,
+      suggestion: '降低曝光值，或使用渐晕滤镜压暗天空'
+    });
+  }
+
+  if (ctx.underexposedPct > 2) {
+    const severity = getSeverity(ctx.underexposedPct, 2, 8, 15);
+    deductions.push({
+      category: 'exposure',
+      categoryLabel: '曝光控制',
+      reason: `暗部死黑区域占 ${ctx.underexposedPct}%，没有层次`,
+      pointsLost: Math.round(ctx.underexposedPct * 1.5),
+      severity,
+      suggestion: '增加曝光值，或在后期提亮暗部'
+    });
+  }
+
+  const missedKeyAreas = ctx.keyAreaResults.filter(a => !a.isHit);
+  if (missedKeyAreas.length > 0) {
+    const totalLost = missedKeyAreas.reduce((sum, a) => sum + (100 - a.score) * a.importance, 0);
+    const severity = getSeverity(totalLost, 5, 15, 30);
+    deductions.push({
+      category: 'exposure',
+      categoryLabel: '曝光控制',
+      reason: `${missedKeyAreas.length} 个关键区域亮度偏离理想值`,
+      pointsLost: Math.round(totalLost / 5),
+      severity,
+      suggestion: '针对关键区域进行分区曝光，或使用曝光补偿'
+    });
+  }
+
+  if (ctx.dynamicRange < 0.3) {
+    const severity = getSeverity(0.3 - ctx.dynamicRange, 0.05, 0.15, 0.25);
+    deductions.push({
+      category: 'contrast',
+      categoryLabel: '层次反差',
+      reason: `动态范围不足（${Math.round(ctx.dynamicRange * 100)}%），画面层次感弱`,
+      pointsLost: Math.round((0.3 - ctx.dynamicRange) * 100),
+      severity,
+      suggestion: '增加显影时间，或选择高反差胶片'
+    });
+  }
+
+  const contrastParams = ctx.paramDeviations.find(p => p.param === 'contrast' || p.param === 'developmentTime');
+  if (contrastParams && Math.abs(contrastParams.deviation) > 0.15) {
+    const severity = getSeverity(Math.abs(contrastParams.deviation), 0.15, 0.25, 0.35);
+    deductions.push({
+      category: 'contrast',
+      categoryLabel: '层次反差',
+      reason: `${contrastParams.label}${contrastParams.direction === 'high' ? '偏高' : '偏低'}，偏离理想值 ${Math.round(Math.abs(contrastParams.deviation) * 100)}%`,
+      pointsLost: contrastParams.scoreImpact,
+      severity,
+      suggestion: contrastParams.suggestion
+    });
+  }
+
+  if (isColorFilm) {
+    const satDev = ctx.paramDeviations.find(p => p.param === 'saturation');
+    if (satDev && Math.abs(satDev.deviation) > 0.15) {
+      const severity = getSeverity(Math.abs(satDev.deviation), 0.15, 0.25, 0.35);
+      deductions.push({
+        category: 'color',
+        categoryLabel: '色彩还原',
+        reason: `饱和度${satDev.direction === 'high' ? '偏高' : '偏低'}，色彩${satDev.direction === 'high' ? '过于艳丽' : '不够鲜明'}`,
+        pointsLost: satDev.scoreImpact,
+        severity,
+        suggestion: satDev.suggestion
+      });
+    }
+
+    const tempDev = ctx.paramDeviations.find(p => p.param === 'temperature');
+    if (tempDev && Math.abs(tempDev.deviation) > 0.2) {
+      const severity = getSeverity(Math.abs(tempDev.deviation), 0.2, 0.3, 0.4);
+      deductions.push({
+        category: 'color',
+        categoryLabel: '色彩还原',
+        reason: `显影温度${tempDev.direction === 'high' ? '偏高' : '偏低'}，画面${tempDev.direction === 'high' ? '偏暖' : '偏冷'}`,
+        pointsLost: Math.round(Math.abs(tempDev.deviation) * 80),
+        severity,
+        suggestion: tempDev.suggestion
+      });
+    }
+  }
+
+  if (ctx.sharpness < 8) {
+    const severity = getSeverity(8 - ctx.sharpness, 2, 4, 6);
+    deductions.push({
+      category: 'detail',
+      categoryLabel: '细节质感',
+      reason: `锐度不足（${ctx.sharpness}），画面细节模糊`,
+      pointsLost: Math.round((8 - ctx.sharpness) * 5),
+      severity,
+      suggestion: '增加搅动频率，或选择细颗粒胶片'
+    });
+  }
+
+  const agiDev = ctx.paramDeviations.find(p => p.param === 'agitation');
+  const dilDev = ctx.paramDeviations.find(p => p.param === 'dilution');
+  if (agiDev && Math.abs(agiDev.deviation) > 0.25) {
+    const severity = getSeverity(Math.abs(agiDev.deviation), 0.25, 0.35, 0.45);
+    deductions.push({
+      category: 'detail',
+      categoryLabel: '细节质感',
+      reason: `搅动方式${agiDev.direction === 'high' ? '过于频繁' : '不足'}，影响均匀度`,
+      pointsLost: agiDev.scoreImpact,
+      severity,
+      suggestion: agiDev.suggestion
+    });
+  }
+
+  if (dilDev && Math.abs(dilDev.deviation) > 0.25) {
+    const severity = getSeverity(Math.abs(dilDev.deviation), 0.25, 0.35, 0.45);
+    deductions.push({
+      category: 'detail',
+      categoryLabel: '细节质感',
+      reason: `药液稀释${dilDev.direction === 'high' ? '过度' : '不足'}，影响颗粒质感`,
+      pointsLost: dilDev.scoreImpact,
+      severity,
+      suggestion: dilDev.suggestion
+    });
+  }
+
+  deductions.sort((a, b) => b.pointsLost - a.pointsLost);
+  ctx.deductions = deductions;
+}
+
+function getSeverity(value: number, minor: number, moderate: number, major: number): 'minor' | 'moderate' | 'major' | 'critical' {
+  if (value >= major) return 'critical';
+  if (value >= moderate) return 'major';
+  if (value >= minor) return 'moderate';
+  return 'minor';
 }

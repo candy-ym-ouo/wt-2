@@ -24,6 +24,7 @@
   const dispatch = createEventDispatcher<{
     close: void;
     delete: string;
+    viewDetail: ProcessedPhoto;
   }>();
 
   let selectedPhoto: ProcessedPhoto | null = null;
@@ -500,6 +501,7 @@
             photo={selectedPhoto}
             mode="view"
             on:close={() => selectedPhoto = null}
+            on:viewDetail={() => { if (selectedPhoto) dispatch('viewDetail', selectedPhoto); }}
           />
         </div>
       </div>

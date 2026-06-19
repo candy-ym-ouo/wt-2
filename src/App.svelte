@@ -16,6 +16,7 @@
   import ScorePanel from './components/ScorePanel.svelte';
   import PhotoAlbum from './components/PhotoAlbum.svelte';
   import TutorialGuide from './components/TutorialGuide.svelte';
+  import ScoreDetailPanel from './components/ScoreDetailPanel.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -23,6 +24,8 @@
   let developAnimFrame: number | null = null;
   let renderCanvas: HTMLCanvasElement;
   let renderCtx: CanvasRenderingContext2D;
+  let showScoreDetail = false;
+  let scoreDetailPhoto: ProcessedPhoto | null = null;
 
   let unsubscribe: () => void;
   let currentState: GameState;
@@ -225,6 +228,39 @@
   function handleAlbumClose() {
     gameStore.goToSelect();
   }
+
+  function handleViewScoreDetail(photo: ProcessedPhoto | null) {
+    if (!photo) return;
+    scoreDetailPhoto = photo;
+    showScoreDetail = true;
+  }
+
+  function handleCloseScoreDetail() {
+    showScoreDetail = false;
+    scoreDetailPhoto = null;
+  }
+
+  function handleApplySuggestions() {
+    const photo = scoreDetailPhoto;
+    if (!photo) return;
+
+    const subject = PHOTO_SUBJECTS.find(s => s.id === photo.subjectId);
+    if (subject) {
+      const idealParams = {
+        exposure: subject.idealExposure,
+        contrast: subject.idealContrast,
+        saturation: subject.idealSaturation,
+        developmentTime: 0.5,
+        temperature: 0.5,
+        agitation: 0.5,
+        dilution: 0.5
+      };
+      gameStore.updateParams(idealParams);
+    }
+
+    handleCloseScoreDetail();
+    handleNewPhoto();
+  }
 </script>
 
 <div class="app-root">
@@ -327,6 +363,7 @@
             mode="result"
             on:newPhoto={handleScoreNewPhoto}
             on:openAlbum={handleScoreOpenAlbum}
+            on:viewDetail={() => handleViewScoreDetail(lastProcessedPhoto ?? null)}
           />
         </div>
       </div>
@@ -339,6 +376,7 @@
       statistics={$statistics}
       on:close={handleAlbumClose}
       on:delete={handlePhotoDelete}
+      on:viewDetail={(e) => handleViewScoreDetail(e.detail)}
     />
   {/if}
 
@@ -349,6 +387,14 @@
       on:prev={handleTutorialPrev}
       on:skip={handleTutorialSkip}
       on:goTo={handleGoTo}
+    />
+  {/if}
+
+  {#if showScoreDetail && scoreDetailPhoto}
+    <ScoreDetailPanel
+      photo={scoreDetailPhoto}
+      on:close={handleCloseScoreDetail}
+      on:applySuggestions={handleApplySuggestions}
     />
   {/if}
 

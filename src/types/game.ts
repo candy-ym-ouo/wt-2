@@ -90,6 +90,42 @@ export interface AlbumFilter {
   sortBy: SortOption;
 }
 
+export interface KeyAreaResult {
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  importance: number;
+  idealBrightness: number;
+  actualBrightness: number;
+  brightnessDiff: number;
+  score: number;
+  isHit: boolean;
+  hitStatus: 'excellent' | 'good' | 'fair' | 'poor';
+}
+
+export interface ParamDeviation {
+  param: string;
+  label: string;
+  idealValue: number;
+  actualValue: number;
+  deviation: number;
+  deviationPercent: number;
+  direction: 'high' | 'low' | 'optimal';
+  scoreImpact: number;
+  suggestion: string;
+}
+
+export interface DeductionItem {
+  category: 'exposure' | 'contrast' | 'color' | 'detail';
+  categoryLabel: string;
+  reason: string;
+  pointsLost: number;
+  severity: 'minor' | 'moderate' | 'major' | 'critical';
+  suggestion: string;
+}
+
 export interface ScoreDetail {
   exposure: number;
   contrast: number;
@@ -98,6 +134,13 @@ export interface ScoreDetail {
   overall: number;
   feedback: string[];
   grade: 'S' | 'A' | 'B' | 'C' | 'D';
+  keyAreaResults: KeyAreaResult[];
+  paramDeviations: ParamDeviation[];
+  deductions: DeductionItem[];
+  overexposedPct: number;
+  underexposedPct: number;
+  dynamicRange: number;
+  sharpness: number;
 }
 
 export type GamePhase = 'tutorial' | 'select' | 'expose' | 'develop' | 'fix' | 'wash' | 'result' | 'album';
