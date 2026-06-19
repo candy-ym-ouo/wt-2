@@ -21,6 +21,7 @@
   import StorageStatusBar from './components/StorageStatusBar.svelte';
   import AchievementPanel from './components/AchievementPanel.svelte';
   import OrderManagement from './components/OrderManagement.svelte';
+  import FilmLab from './components/FilmLab.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -36,6 +37,7 @@
   let showOrders = false;
   let ordersInitialOrderId: string | null = null;
   let ordersInitialTab: string | null = null;
+  let showFilmLab = false;
 
   function goToOrderScoring() {
     if (currentOrder) {
@@ -512,6 +514,13 @@
         {/if}
       </button>
       <button
+        class="header-btn filmlab"
+        on:click={() => { showFilmLab = true; }}
+        title="胶片配方实验室"
+      >
+        <span>🔬</span>
+      </button>
+      <button
         class="header-btn help"
         on:click={() => { gameStore.resetTutorial(); }}
         title="重新开始教程"
@@ -686,6 +695,10 @@
         </div>
       {/each}
     </div>
+  {/if}
+
+  {#if showFilmLab}
+    <FilmLab onClose={() => { showFilmLab = false; }} />
   {/if}
 
   <footer class="app-footer">

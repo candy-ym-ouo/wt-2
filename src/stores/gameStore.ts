@@ -1,7 +1,8 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo } from '../types/game';
-import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS } from '../data/gameData';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent } from '../types/game';
+import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES } from '../data/gameData';
 import { generateId } from '../utils/math';
+import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
 import {
   loadWithFallback,
   saveWithBackup,
@@ -316,6 +317,20 @@ function generateDefaultScheduleSlots(): ScheduleSlot[] {
   return slots;
 }
 
+function createInitialFilmLabState(): FilmLabState {
+  return {
+    recipes: [...DEFAULT_RECIPES],
+    solutions: [...DEFAULT_SOLUTIONS],
+    chemicals: [...DEFAULT_CHEMICALS],
+    trialHistory: [],
+    compareHistory: [],
+    activeTab: 'recipes',
+    selectedRecipeId: null,
+    selectedSolutionId: null,
+    selectedChemicalId: null
+  };
+}
+
 function matchFilmsForOrder(requirements: OrderRequirements): FilmMatch[] {
   const matches: FilmMatch[] = [];
   
@@ -605,7 +620,8 @@ function createInitialGameState(): GameState {
       searchKeyword: '',
       sortBy: 'created_desc'
     },
-    orderScheduleSlots: scheduleSlots
+    orderScheduleSlots: scheduleSlots,
+    filmLab: createInitialFilmLabState()
   };
 }
 
@@ -2268,7 +2284,317 @@ function createGameStore() {
           lastSaveError: saveSuccess ? undefined : '添加照片到订单失败'
         }
       };
-    })
+    }),
+
+    setFilmLabTab: (tab: FilmLabTab) => update(state => ({
+      ...state,
+      filmLab: { ...state.filmLab, activeTab: tab }
+    })),
+
+    selectRecipe: (recipeId: string | null) => update(state => ({
+      ...state,
+      filmLab: { ...state.filmLab, selectedRecipeId: recipeId }
+    })),
+
+    selectSolution: (solutionId: string | null) => update(state => ({
+      ...state,
+      filmLab: { ...state.filmLab, selectedSolutionId: solutionId }
+    })),
+
+    selectChemical: (chemicalId: string | null) => update(state => ({
+      ...state,
+      filmLab: { ...state.filmLab, selectedChemicalId: chemicalId }
+    })),
+
+    createRecipe: (data: {
+      name: string;
+      processType: FilmProcessType;
+      description: string;
+      developerId?: string;
+      stopBathId?: string;
+      fixerId?: string;
+      washingAidId?: string;
+      wettingAgentId?: string;
+      developmentParams: { temperature: number; timeMultiplier: number; agitation: number; dilution: number };
+      suitableFilmIds: string[];
+      suitableSceneTypes: string[];
+      tags: string[];
+    }): string | null => {
+      let newRecipeId: string | null = null;
+      const updateFn = (state: GameState): GameState => {
+        const now = Date.now();
+        const id = generateId();
+        newRecipeId = id;
+        const newRecipe: DeveloperRecipe = {
+          id,
+          name: data.name,
+          processType: data.processType,
+          description: data.description,
+          developerId: data.developerId,
+          stopBathId: data.stopBathId,
+          fixerId: data.fixerId,
+          washingAidId: data.washingAidId,
+          wettingAgentId: data.wettingAgentId,
+          developmentParams: { ...data.developmentParams },
+          suitableFilmIds: [...data.suitableFilmIds],
+          suitableSceneTypes: [...data.suitableSceneTypes],
+          tags: [...data.tags],
+          versionHistory: [{
+            version: 1,
+            timestamp: now,
+            name: data.name,
+            developerId: data.developerId,
+            stopBathId: data.stopBathId,
+            fixerId: data.fixerId,
+            washingAidId: data.washingAidId,
+            wettingAgentId: data.wettingAgentId,
+            developmentParams: { ...data.developmentParams },
+            changeNote: '初始版本'
+          }],
+          createdAt: now,
+          updatedAt: now,
+          version: 1
+        };
+        return {
+          ...state,
+          filmLab: {
+            ...state.filmLab,
+            recipes: [...state.filmLab.recipes, newRecipe],
+            selectedRecipeId: id
+          }
+        };
+      };
+      update(updateFn);
+      return newRecipeId;
+    },
+
+    updateRecipe: (recipeId: string, updates: Partial<Omit<DeveloperRecipe, 'id' | 'createdAt' | 'versionHistory' | 'version'>>, changeNote?: string) => update(state => {
+      const now = Date.now();
+      const existing = state.filmLab.recipes.find(r => r.id === recipeId);
+      if (!existing) return state;
+
+      const historyEntry: RecipeVersion = {
+        version: existing.version,
+        timestamp: existing.updatedAt,
+        name: existing.name,
+        developerId: existing.developerId,
+        stopBathId: existing.stopBathId,
+        fixerId: existing.fixerId,
+        washingAidId: existing.washingAidId,
+        wettingAgentId: existing.wettingAgentId,
+        developmentParams: { ...existing.developmentParams },
+        changeNote
+      };
+
+      const newRecipes = state.filmLab.recipes.map(r => {
+        if (r.id !== recipeId) return r;
+        return {
+          ...r,
+          ...updates,
+          versionHistory: [historyEntry, ...r.versionHistory].slice(0, 20),
+          updatedAt: now,
+          version: r.version + 1
+        };
+      });
+
+      return {
+        ...state,
+        filmLab: {
+          ...state.filmLab,
+          recipes: newRecipes
+        }
+      };
+    }),
+
+    deleteRecipe: (recipeId: string) => update(state => {
+      const newRecipes = state.filmLab.recipes.filter(r => r.id !== recipeId);
+      return {
+        ...state,
+        filmLab: {
+          ...state.filmLab,
+          recipes: newRecipes,
+          selectedRecipeId: state.filmLab.selectedRecipeId === recipeId ? null : state.filmLab.selectedRecipeId
+        }
+      };
+    }),
+
+    revertRecipeToVersion: (recipeId: string, versionNumber: number) => update(state => {
+      const recipe = state.filmLab.recipes.find(r => r.id === recipeId);
+      if (!recipe) return state;
+
+      const targetVersion = recipe.versionHistory.find(v => v.version === versionNumber);
+      if (!targetVersion) return state;
+
+      const now = Date.now();
+      const historyEntry: RecipeVersion = {
+        version: recipe.version,
+        timestamp: recipe.updatedAt,
+        name: recipe.name,
+        developerId: recipe.developerId,
+        stopBathId: recipe.stopBathId,
+        fixerId: recipe.fixerId,
+        washingAidId: recipe.washingAidId,
+        wettingAgentId: recipe.wettingAgentId,
+        developmentParams: { ...recipe.developmentParams },
+        changeNote: `回退到版本 ${versionNumber}`
+      };
+
+      const newRecipes = state.filmLab.recipes.map(r => {
+        if (r.id !== recipeId) return r;
+        return {
+          ...r,
+          name: targetVersion.name,
+          developerId: targetVersion.developerId,
+          stopBathId: targetVersion.stopBathId,
+          fixerId: targetVersion.fixerId,
+          washingAidId: targetVersion.washingAidId,
+          wettingAgentId: targetVersion.wettingAgentId,
+          developmentParams: { ...targetVersion.developmentParams },
+          versionHistory: [historyEntry, ...r.versionHistory].slice(0, 20),
+          updatedAt: now,
+          version: r.version + 1
+        };
+      });
+
+      return {
+        ...state,
+        filmLab: {
+          ...state.filmLab,
+          recipes: newRecipes
+        }
+      };
+    }),
+
+    createSolution: (data: {
+      name: string;
+      type: SolutionType;
+      components: SolutionComponent[];
+      totalVolume: number;
+      volumeUnit: 'ml' | 'l';
+      ph?: number;
+      notes?: string;
+    }): string | null => {
+      let newSolutionId: string | null = null;
+      const updateFn = (state: GameState): GameState => {
+        const now = Date.now();
+        const id = generateId();
+        newSolutionId = id;
+        const newSolution: ChemicalSolution = {
+          id,
+          name: data.name,
+          type: data.type,
+          components: data.components.map(c => ({ ...c })),
+          totalVolume: data.totalVolume,
+          volumeUnit: data.volumeUnit,
+          ph: data.ph,
+          notes: data.notes,
+          createdAt: now,
+          updatedAt: now,
+          version: 1
+        };
+        return {
+          ...state,
+          filmLab: {
+            ...state.filmLab,
+            solutions: [...state.filmLab.solutions, newSolution],
+            selectedSolutionId: id
+          }
+        };
+      };
+      update(updateFn);
+      return newSolutionId;
+    },
+
+    updateSolution: (solutionId: string, updates: Partial<Omit<ChemicalSolution, 'id' | 'createdAt' | 'version'>>) => update(state => {
+      const now = Date.now();
+      const newSolutions = state.filmLab.solutions.map(s => {
+        if (s.id !== solutionId) return s;
+        return {
+          ...s,
+          ...updates,
+          updatedAt: now,
+          version: s.version + 1
+        };
+      });
+      return {
+        ...state,
+        filmLab: {
+          ...state.filmLab,
+          solutions: newSolutions
+        }
+      };
+    }),
+
+    deleteSolution: (solutionId: string) => update(state => {
+      const newSolutions = state.filmLab.solutions.filter(s => s.id !== solutionId);
+      return {
+        ...state,
+        filmLab: {
+          ...state.filmLab,
+          solutions: newSolutions,
+          selectedSolutionId: state.filmLab.selectedSolutionId === solutionId ? null : state.filmLab.selectedSolutionId
+        }
+      };
+    }),
+
+    applyRecipeToParams: (recipeId: string) => update(state => {
+      const recipe = state.filmLab.recipes.find(r => r.id === recipeId);
+      if (!recipe) return state;
+      const params = {
+        exposure: state.currentParams.exposure,
+        developmentTime: recipe.developmentParams.timeMultiplier,
+        temperature: recipe.developmentParams.temperature,
+        agitation: recipe.developmentParams.agitation,
+        contrast: state.currentParams.contrast,
+        saturation: state.currentParams.saturation,
+        dilution: recipe.developmentParams.dilution
+      };
+      return {
+        ...state,
+        currentParams: params
+      };
+    }),
+
+    runTrial: (recipeId: string, filmId: string, subjectId?: string) => update(state => {
+      const recipe = state.filmLab.recipes.find(r => r.id === recipeId);
+      if (!recipe) return state;
+      const trial = createTrialResult(recipe, filmId, subjectId);
+      return {
+        ...state,
+        filmLab: {
+          ...state.filmLab,
+          trialHistory: [trial, ...state.filmLab.trialHistory].slice(0, 50)
+        }
+      };
+    }),
+
+    clearTrialHistory: () => update(state => ({
+      ...state,
+      filmLab: {
+        ...state.filmLab,
+        trialHistory: []
+      }
+    })),
+
+    runCompare: (recipeIds: string[], filmId: string, subjectId?: string) => update(state => {
+      if (recipeIds.length < 2) return state;
+      const result = compareRecipes(recipeIds, state.filmLab.recipes, filmId, subjectId);
+      return {
+        ...state,
+        filmLab: {
+          ...state.filmLab,
+          compareHistory: [result, ...state.filmLab.compareHistory].slice(0, 20)
+        }
+      };
+    }),
+
+    clearCompareHistory: () => update(state => ({
+      ...state,
+      filmLab: {
+        ...state.filmLab,
+        compareHistory: []
+      }
+    }))
   };
 }
 

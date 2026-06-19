@@ -270,6 +270,7 @@ export interface GameState {
   currentOrderId: string | null;
   orderFilter: OrderFilter;
   orderScheduleSlots: ScheduleSlot[];
+  filmLab: FilmLabState;
 }
 
 export type TutorialUnlockCondition = 
@@ -593,4 +594,151 @@ export interface OrderStatistics {
   archived: number;
   avgTurnaroundTime: number;
   avgCustomerRating: number;
+}
+
+export type ChemicalType = 'developer' | 'accelerator' | 'preservative' | 'restrainer' | 'fixer' | 'hardener' | 'wetting_agent' | 'other';
+
+export interface Chemical {
+  id: string;
+  name: string;
+  type: ChemicalType;
+  formula?: string;
+  description: string;
+}
+
+export interface SolutionComponent {
+  chemicalId: string;
+  chemicalName: string;
+  amount: number;
+  unit: 'g' | 'ml' | 'mg' | 'drop';
+}
+
+export type SolutionType = 'developer' | 'stop_bath' | 'fixer' | 'washing_aid' | 'wetting_agent';
+
+export interface ChemicalSolution {
+  id: string;
+  name: string;
+  type: SolutionType;
+  components: SolutionComponent[];
+  totalVolume: number;
+  volumeUnit: 'ml' | 'l';
+  ph?: number;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+  version: number;
+  isDefault?: boolean;
+}
+
+export interface RecipeVersion {
+  version: number;
+  timestamp: number;
+  name: string;
+  developerId?: string;
+  stopBathId?: string;
+  fixerId?: string;
+  washingAidId?: string;
+  wettingAgentId?: string;
+  developmentParams: {
+    temperature: number;
+    timeMultiplier: number;
+    agitation: number;
+    dilution: number;
+  };
+  changeNote?: string;
+}
+
+export type FilmProcessType = 'bw' | 'c41' | 'e6' | 'custom';
+
+export interface DeveloperRecipe {
+  id: string;
+  name: string;
+  processType: FilmProcessType;
+  description: string;
+  developerId?: string;
+  stopBathId?: string;
+  fixerId?: string;
+  washingAidId?: string;
+  wettingAgentId?: string;
+  developmentParams: {
+    temperature: number;
+    timeMultiplier: number;
+    agitation: number;
+    dilution: number;
+  };
+  suitableFilmIds: string[];
+  suitableSceneTypes: string[];
+  tags: string[];
+  versionHistory: RecipeVersion[];
+  createdAt: number;
+  updatedAt: number;
+  version: number;
+  isDefault?: boolean;
+}
+
+export interface TrialResult {
+  id: string;
+  recipeId: string;
+  recipeName: string;
+  filmId: string;
+  subjectId?: string;
+  params: DevParams;
+  predictedScore: number;
+  predictedGrade: 'S' | 'A' | 'B' | 'C' | 'D';
+  predictedContrast: number;
+  predictedSaturation: number;
+  predictedDetail: number;
+  predictedExposure: number;
+  timings: {
+    presoak: number;
+    develop: number;
+    stop: number;
+    fix: number;
+    wash: number;
+    total: number;
+  };
+  warnings: string[];
+  suggestions: string[];
+  createdAt: number;
+}
+
+export interface RecipeCompareResult {
+  recipeIds: string[];
+  filmId: string;
+  subjectId?: string;
+  bestRecipeId: string;
+  comparison: {
+    recipeId: string;
+    recipeName: string;
+    params: DevParams;
+    score: number;
+    grade: 'S' | 'A' | 'B' | 'C' | 'D';
+    contrast: number;
+    saturation: number;
+    detail: number;
+    exposure: number;
+    totalTime: number;
+    tags: string[];
+  }[];
+  paramDifferences: {
+    param: keyof DevParams;
+    label: string;
+    values: { recipeId: string; value: number }[];
+    bestRecipeId: string;
+  }[];
+  createdAt: number;
+}
+
+export type FilmLabTab = 'recipes' | 'solutions' | 'trial' | 'compare' | 'history';
+
+export interface FilmLabState {
+  recipes: DeveloperRecipe[];
+  solutions: ChemicalSolution[];
+  chemicals: Chemical[];
+  trialHistory: TrialResult[];
+  compareHistory: RecipeCompareResult[];
+  activeTab: FilmLabTab;
+  selectedRecipeId: string | null;
+  selectedSolutionId: string | null;
+  selectedChemicalId: string | null;
 }

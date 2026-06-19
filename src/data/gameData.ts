@@ -637,3 +637,432 @@ export const ACHIEVEMENT_LINE_META: Record<AchievementLine, { label: string; ico
   film_mastery: { label: '胶片熟练度', icon: '🎞', color: '#c9a87c' },
   streak: { label: '连续练习', icon: '📅', color: '#7ec8a0' }
 };
+
+import type { Chemical, ChemicalSolution, DeveloperRecipe, SolutionType, ChemicalType, FilmProcessType } from '../types/game';
+
+export const CHEMICAL_TYPE_LABELS: Record<ChemicalType, string> = {
+  developer: '显影剂',
+  accelerator: '促进剂',
+  preservative: '保护剂',
+  restrainer: '抑制剂',
+  fixer: '定影剂',
+  hardener: '坚膜剂',
+  wetting_agent: '润湿剂',
+  other: '其他'
+};
+
+export const SOLUTION_TYPE_LABELS: Record<SolutionType, string> = {
+  developer: '显影液',
+  stop_bath: '停显液',
+  fixer: '定影液',
+  washing_aid: '助洗液',
+  wetting_agent: '润湿液'
+};
+
+export const PROCESS_TYPE_LABELS: Record<FilmProcessType, string> = {
+  bw: '黑白',
+  c41: 'C-41彩色',
+  e6: 'E-6反转',
+  custom: '自定义'
+};
+
+export const DEFAULT_CHEMICALS: Chemical[] = [
+  { id: 'metol', name: '米吐尔 (Metol)', type: 'developer', formula: 'C7H10NO2', description: '常用的显影主剂，反差柔和，细节丰富' },
+  { id: 'hydroquinone', name: '对苯二酚 (HQ)', type: 'developer', formula: 'C6H6O2', description: '高反差显影剂，配合米吐尔使用效果更佳' },
+  { id: 'phenidone', name: '菲尼酮 (Phenidone)', type: 'developer', formula: 'C9H10N2O', description: '现代显影剂，与HQ组合形成PQ显影液' },
+  { id: 'sodium_carbonate', name: '碳酸钠', type: 'accelerator', formula: 'Na2CO3', description: '碱类促进剂，加速显影反应' },
+  { id: 'sodium_sulfite', name: '亚硫酸钠', type: 'preservative', formula: 'Na2SO3', description: '防止显影剂氧化，延长药液寿命' },
+  { id: 'potassium_bromide', name: '溴化钾', type: 'restrainer', formula: 'KBr', description: '抑制灰雾产生，调节显影速度' },
+  { id: 'sodium_thiosulfate', name: '硫代硫酸钠 (海波)', type: 'fixer', formula: 'Na2S2O3', description: '经典定影剂，溶解未曝光的卤化银' },
+  { id: 'ammonium_thiosulfate', name: '硫代硫酸铵', type: 'fixer', formula: '(NH4)2S2O3', description: '快速定影剂，定影速度比海波快' },
+  { id: 'potassium_alum', name: '钾矾', type: 'hardener', formula: 'KAl(SO4)2', description: '坚膜剂，防止乳剂层膨胀脱落' },
+  { id: 'kodak_photo_flo', name: 'Kodak Photo-Flo', type: 'wetting_agent', description: '润湿剂，防止水渍产生' },
+  { id: 'acetic_acid', name: '醋酸', type: 'other', formula: 'CH3COOH', description: '用于配制停显液，中和显影液碱性' },
+  { id: 'boric_acid', name: '硼酸', type: 'other', formula: 'H3BO3', description: '缓冲剂，稳定药液pH值' }
+];
+
+export const DEFAULT_SOLUTIONS: ChemicalSolution[] = [
+  {
+    id: 'sol_d76',
+    name: 'D-76 显影液',
+    type: 'developer',
+    components: [
+      { chemicalId: 'metol', chemicalName: '米吐尔 (Metol)', amount: 2, unit: 'g' },
+      { chemicalId: 'sodium_sulfite', chemicalName: '亚硫酸钠', amount: 100, unit: 'g' },
+      { chemicalId: 'hydroquinone', chemicalName: '对苯二酚 (HQ)', amount: 5, unit: 'g' },
+      { chemicalId: 'sodium_carbonate', chemicalName: '碳酸钠', amount: 0, unit: 'g' },
+      { chemicalId: 'boric_acid', chemicalName: '硼酸', amount: 2, unit: 'g' },
+      { chemicalId: 'potassium_bromide', chemicalName: '溴化钾', amount: 1, unit: 'g' }
+    ],
+    totalVolume: 1000,
+    volumeUnit: 'ml',
+    ph: 8.5,
+    notes: '柯达经典黑白显影液，颗粒细腻，层次丰富。建议1:1稀释使用',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'sol_id11',
+    name: 'ID-11 显影液',
+    type: 'developer',
+    components: [
+      { chemicalId: 'metol', chemicalName: '米吐尔 (Metol)', amount: 2, unit: 'g' },
+      { chemicalId: 'sodium_sulfite', chemicalName: '亚硫酸钠', amount: 100, unit: 'g' },
+      { chemicalId: 'hydroquinone', chemicalName: '对苯二酚 (HQ)', amount: 5, unit: 'g' },
+      { chemicalId: 'sodium_carbonate', chemicalName: '碳酸钠', amount: 0, unit: 'g' },
+      { chemicalId: 'boric_acid', chemicalName: '硼酸', amount: 2, unit: 'g' },
+      { chemicalId: 'potassium_bromide', chemicalName: '溴化钾', amount: 1, unit: 'g' }
+    ],
+    totalVolume: 1000,
+    volumeUnit: 'ml',
+    ph: 8.4,
+    notes: '伊尔福版本的D-76，性能接近，适合伊尔福胶片',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'sol_xtol',
+    name: 'Xtol 显影液',
+    type: 'developer',
+    components: [
+      { chemicalId: 'phenidone', chemicalName: '菲尼酮 (Phenidone)', amount: 0.5, unit: 'g' },
+      { chemicalId: 'sodium_sulfite', chemicalName: '亚硫酸钠', amount: 80, unit: 'g' },
+      { chemicalId: 'hydroquinone', chemicalName: '对苯二酚 (HQ)', amount: 0, unit: 'g' },
+      { chemicalId: 'sodium_carbonate', chemicalName: '碳酸钠', amount: 22, unit: 'g' },
+      { chemicalId: 'potassium_bromide', chemicalName: '溴化钾', amount: 1, unit: 'g' }
+    ],
+    totalVolume: 1000,
+    volumeUnit: 'ml',
+    ph: 8.8,
+    notes: '柯达现代环保显影液，颗粒极细，锐度高',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'sol_stop',
+    name: '醋酸停显液',
+    type: 'stop_bath',
+    components: [
+      { chemicalId: 'acetic_acid', chemicalName: '醋酸', amount: 28, unit: 'ml' }
+    ],
+    totalVolume: 1000,
+    volumeUnit: 'ml',
+    ph: 4.5,
+    notes: '28%冰醋酸稀释液，快速终止显影反应',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'sol_fixer',
+    name: '酸性坚膜定影液 (F-5)',
+    type: 'fixer',
+    components: [
+      { chemicalId: 'sodium_thiosulfate', chemicalName: '硫代硫酸钠 (海波)', amount: 240, unit: 'g' },
+      { chemicalId: 'sodium_sulfite', chemicalName: '亚硫酸钠', amount: 15, unit: 'g' },
+      { chemicalId: 'acetic_acid', chemicalName: '醋酸', amount: 45, unit: 'ml' },
+      { chemicalId: 'boric_acid', chemicalName: '硼酸', amount: 7.5, unit: 'g' },
+      { chemicalId: 'potassium_alum', chemicalName: '钾矾', amount: 15, unit: 'g' }
+    ],
+    totalVolume: 1000,
+    volumeUnit: 'ml',
+    ph: 4.3,
+    notes: '柯达F-5经典定影液，含坚膜剂，延长胶片寿命',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'sol_fixer_rapid',
+    name: '快速定影液',
+    type: 'fixer',
+    components: [
+      { chemicalId: 'ammonium_thiosulfate', chemicalName: '硫代硫酸铵', amount: 180, unit: 'g' },
+      { chemicalId: 'sodium_sulfite', chemicalName: '亚硫酸钠', amount: 10, unit: 'g' },
+      { chemicalId: 'acetic_acid', chemicalName: '醋酸', amount: 20, unit: 'ml' },
+      { chemicalId: 'potassium_alum', chemicalName: '钾矾', amount: 12, unit: 'g' }
+    ],
+    totalVolume: 1000,
+    volumeUnit: 'ml',
+    ph: 4.5,
+    notes: '硫代硫酸铵配方，定影速度是普通定影液的2倍',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'sol_photoflo',
+    name: 'Photo-Flo 润湿液',
+    type: 'wetting_agent',
+    components: [
+      { chemicalId: 'kodak_photo_flo', chemicalName: 'Kodak Photo-Flo', amount: 1, unit: 'ml' }
+    ],
+    totalVolume: 500,
+    volumeUnit: 'ml',
+    notes: '防止水渍，使胶片干燥更均匀。建议1:200稀释',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  }
+];
+
+export const DEFAULT_RECIPES: DeveloperRecipe[] = [
+  {
+    id: 'recipe_d76_standard',
+    name: 'D-76 标准显影配方',
+    processType: 'bw',
+    description: '柯达经典黑白显影液标准配方，颗粒细腻，层次丰富，适合大多数黑白胶片',
+    developerId: 'sol_d76',
+    stopBathId: 'sol_stop',
+    fixerId: 'sol_fixer',
+    washingAidId: undefined,
+    wettingAgentId: 'sol_photoflo',
+    developmentParams: {
+      temperature: 0.5,
+      timeMultiplier: 1.0,
+      agitation: 0.4,
+      dilution: 0.5
+    },
+    suitableFilmIds: ['hp5', 'delta3200', 'tri-x'],
+    suitableSceneTypes: ['portrait', 'landscape', 'street', 'still_life', 'night'],
+    tags: ['经典', '通用', '颗粒细腻', '层次丰富'],
+    versionHistory: [
+      {
+        version: 1,
+        timestamp: Date.now(),
+        name: 'D-76 标准显影配方',
+        developerId: 'sol_d76',
+        stopBathId: 'sol_stop',
+        fixerId: 'sol_fixer',
+        wettingAgentId: 'sol_photoflo',
+        developmentParams: {
+          temperature: 0.5,
+          timeMultiplier: 1.0,
+          agitation: 0.4,
+          dilution: 0.5
+        },
+        changeNote: '初始版本'
+      }
+    ],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'recipe_d76_contrast',
+    name: 'D-76 高反差显影配方',
+    processType: 'bw',
+    description: '基于D-76的高反差变体，提高显影时间和温度，适合需要强烈对比的场景',
+    developerId: 'sol_d76',
+    stopBathId: 'sol_stop',
+    fixerId: 'sol_fixer',
+    washingAidId: undefined,
+    wettingAgentId: 'sol_photoflo',
+    developmentParams: {
+      temperature: 0.65,
+      timeMultiplier: 1.4,
+      agitation: 0.7,
+      dilution: 0.3
+    },
+    suitableFilmIds: ['hp5', 'tri-x'],
+    suitableSceneTypes: ['street', 'night', 'landscape'],
+    tags: ['高反差', '街头', '夜景', '戏剧感'],
+    versionHistory: [
+      {
+        version: 1,
+        timestamp: Date.now(),
+        name: 'D-76 高反差显影配方',
+        developerId: 'sol_d76',
+        stopBathId: 'sol_stop',
+        fixerId: 'sol_fixer',
+        wettingAgentId: 'sol_photoflo',
+        developmentParams: {
+          temperature: 0.65,
+          timeMultiplier: 1.4,
+          agitation: 0.7,
+          dilution: 0.3
+        },
+        changeNote: '初始版本，高反差设置'
+      }
+    ],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'recipe_id11_finegrain',
+    name: 'ID-11 细颗粒配方',
+    processType: 'bw',
+    description: '伊尔福ID-11细颗粒显影，低稀释度，适合伊尔福HP5和Delta系列胶片',
+    developerId: 'sol_id11',
+    stopBathId: 'sol_stop',
+    fixerId: 'sol_fixer',
+    washingAidId: undefined,
+    wettingAgentId: 'sol_photoflo',
+    developmentParams: {
+      temperature: 0.45,
+      timeMultiplier: 0.9,
+      agitation: 0.3,
+      dilution: 0.6
+    },
+    suitableFilmIds: ['hp5', 'delta3200'],
+    suitableSceneTypes: ['portrait', 'still_life'],
+    tags: ['细颗粒', '人像', '静物', '伊尔福'],
+    versionHistory: [
+      {
+        version: 1,
+        timestamp: Date.now(),
+        name: 'ID-11 细颗粒配方',
+        developerId: 'sol_id11',
+        stopBathId: 'sol_stop',
+        fixerId: 'sol_fixer',
+        wettingAgentId: 'sol_photoflo',
+        developmentParams: {
+          temperature: 0.45,
+          timeMultiplier: 0.9,
+          agitation: 0.3,
+          dilution: 0.6
+        },
+        changeNote: '初始版本'
+      }
+    ],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'recipe_xtol_sharp',
+    name: 'Xtol 高锐度配方',
+    processType: 'bw',
+    description: '柯达Xtol现代显影液，颗粒极细锐度极高，适合追求细节的风光和商业摄影',
+    developerId: 'sol_xtol',
+    stopBathId: 'sol_stop',
+    fixerId: 'sol_fixer_rapid',
+    washingAidId: undefined,
+    wettingAgentId: 'sol_photoflo',
+    developmentParams: {
+      temperature: 0.55,
+      timeMultiplier: 1.0,
+      agitation: 0.5,
+      dilution: 0.4
+    },
+    suitableFilmIds: ['hp5', 'delta3200', 'tri-x'],
+    suitableSceneTypes: ['landscape', 'still_life', 'portrait'],
+    tags: ['高锐度', '细颗粒', '现代', '环保'],
+    versionHistory: [
+      {
+        version: 1,
+        timestamp: Date.now(),
+        name: 'Xtol 高锐度配方',
+        developerId: 'sol_xtol',
+        stopBathId: 'sol_stop',
+        fixerId: 'sol_fixer_rapid',
+        wettingAgentId: 'sol_photoflo',
+        developmentParams: {
+          temperature: 0.55,
+          timeMultiplier: 1.0,
+          agitation: 0.5,
+          dilution: 0.4
+        },
+        changeNote: '初始版本'
+      }
+    ],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'recipe_c41_color',
+    name: 'C-41 彩色负片标准配方',
+    processType: 'c41',
+    description: '标准C-41彩色负片冲洗工艺，适合柯达Portra、Ektar等彩色胶片',
+    developerId: undefined,
+    stopBathId: undefined,
+    fixerId: 'sol_fixer',
+    washingAidId: undefined,
+    wettingAgentId: 'sol_photoflo',
+    developmentParams: {
+      temperature: 0.6,
+      timeMultiplier: 1.0,
+      agitation: 0.5,
+      dilution: 0.5
+    },
+    suitableFilmIds: ['portra400', 'ektar100'],
+    suitableSceneTypes: ['portrait', 'landscape', 'still_life'],
+    tags: ['彩色', 'C-41', '标准工艺'],
+    versionHistory: [
+      {
+        version: 1,
+        timestamp: Date.now(),
+        name: 'C-41 彩色负片标准配方',
+        fixerId: 'sol_fixer',
+        wettingAgentId: 'sol_photoflo',
+        developmentParams: {
+          temperature: 0.6,
+          timeMultiplier: 1.0,
+          agitation: 0.5,
+          dilution: 0.5
+        },
+        changeNote: '初始版本'
+      }
+    ],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  },
+  {
+    id: 'recipe_e6_reversal',
+    name: 'E-6 反转片标准配方',
+    processType: 'e6',
+    description: '标准E-6彩色反转片冲洗工艺，适合富士Velvia等专业反转片',
+    developerId: undefined,
+    stopBathId: undefined,
+    fixerId: 'sol_fixer',
+    washingAidId: undefined,
+    wettingAgentId: 'sol_photoflo',
+    developmentParams: {
+      temperature: 0.65,
+      timeMultiplier: 1.0,
+      agitation: 0.6,
+      dilution: 0.5
+    },
+    suitableFilmIds: ['velvia50'],
+    suitableSceneTypes: ['landscape', 'still_life'],
+    tags: ['反转片', 'E-6', '专业', '高饱和'],
+    versionHistory: [
+      {
+        version: 1,
+        timestamp: Date.now(),
+        name: 'E-6 反转片标准配方',
+        fixerId: 'sol_fixer',
+        wettingAgentId: 'sol_photoflo',
+        developmentParams: {
+          temperature: 0.65,
+          timeMultiplier: 1.0,
+          agitation: 0.6,
+          dilution: 0.5
+        },
+        changeNote: '初始版本'
+      }
+    ],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+    isDefault: true
+  }
+];
