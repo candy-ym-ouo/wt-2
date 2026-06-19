@@ -273,6 +273,7 @@ export interface GameState {
   filmLab: FilmLabState;
   questSystem: QuestSystemState;
   reviewSystem: ReviewSystemState;
+  inventorySystem: InventorySystemState;
 }
 
 export type TutorialUnlockCondition = 
@@ -340,6 +341,7 @@ export interface StorageStatus {
   ordersLoaded: number;
   questSystemLoaded?: boolean;
   reviewSystemLoaded?: boolean;
+  inventorySystemLoaded?: boolean;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -353,6 +355,7 @@ export interface StorageStatus {
     collections: number;
     orders: number;
     reviewSystem?: number;
+    inventorySystem?: number;
   };
 }
 
@@ -1061,3 +1064,110 @@ export interface ReviewSystemState {
 }
 
 export type ReviewSystemTab = 'submit' | 'review' | 'leaderboard' | 'my_submissions' | 'disputes';
+
+export type StockInSource = 'purchase' | 'gift' | 'refund' | 'other';
+export type StockConsumeType = 'develop' | 'test' | 'practice' | 'other';
+export type StockScrapReason = 'expired' | 'damaged' | 'fogged' | 'defective' | 'other';
+export type InventoryTab = 'stock' | 'inbound' | 'consume' | 'scrap' | 'records';
+export type AlertLevel = 'normal' | 'warning' | 'critical';
+
+export interface FilmInventoryItem {
+  filmId: string;
+  quantity: number;
+  minWarning: number;
+  criticalWarning: number;
+  unitPrice?: number;
+  totalCost?: number;
+  lastStockInAt?: number;
+  lastConsumeAt?: number;
+}
+
+export interface StockInRecord {
+  id: string;
+  filmId: string;
+  quantity: number;
+  source: StockInSource;
+  unitPrice?: number;
+  totalPrice?: number;
+  supplier?: string;
+  batchNumber?: string;
+  expireDate?: number;
+  notes?: string;
+  createdAt: number;
+  operator?: string;
+}
+
+export interface StockConsumeRecord {
+  id: string;
+  filmId: string;
+  quantity: number;
+  type: StockConsumeType;
+  relatedPhotoId?: string;
+  relatedOrderId?: string;
+  subjectId?: string;
+  notes?: string;
+  createdAt: number;
+  operator?: string;
+}
+
+export interface StockScrapRecord {
+  id: string;
+  filmId: string;
+  quantity: number;
+  reason: StockScrapReason;
+  description?: string;
+  notes?: string;
+  createdAt: number;
+  operator?: string;
+}
+
+export interface InventoryAlert {
+  id: string;
+  filmId: string;
+  level: AlertLevel;
+  message: string;
+  currentQuantity: number;
+  threshold: number;
+  createdAt: number;
+  dismissed: boolean;
+}
+
+export interface InventoryStatistics {
+  totalFilmTypes: number;
+  totalQuantity: number;
+  totalValue: number;
+  lowStockCount: number;
+  criticalStockCount: number;
+  monthlyConsumption: Record<string, number>;
+  monthlyScrap: Record<string, number>;
+}
+
+export interface InventoryFilter {
+  filmIds: string[];
+  dateFrom?: number;
+  dateTo?: number;
+  sourceTypes: StockInSource[];
+  consumeTypes: StockConsumeType[];
+  scrapReasons: StockScrapReason[];
+  searchKeyword: string;
+  sortBy: 'date_desc' | 'date_asc' | 'quantity_desc' | 'quantity_asc';
+}
+
+export interface InventorySystemState {
+  inventory: FilmInventoryItem[];
+  stockInRecords: StockInRecord[];
+  consumeRecords: StockConsumeRecord[];
+  scrapRecords: StockScrapRecord[];
+  alerts: InventoryAlert[];
+  activeTab: InventoryTab;
+  filter: InventoryFilter;
+  selectedFilmId: string | null;
+  showAlertBadge: boolean;
+}
+
+export type InventoryRecordUnion = StockInRecord | StockConsumeRecord | StockScrapRecord;
+
+export interface InventoryRecordWithType {
+  type: 'stock_in' | 'consume' | 'scrap';
+  record: InventoryRecordUnion;
+}

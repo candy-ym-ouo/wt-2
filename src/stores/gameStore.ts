@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
@@ -29,7 +29,9 @@ import {
   loadSavedQuestSystem,
   saveQuestSystem,
   loadSavedReviewSystem,
-  saveReviewSystem
+  saveReviewSystem,
+  loadSavedInventorySystem,
+  saveInventorySystem
 } from '../utils/storage';
 import {
   createInitialQuestSystemState,
@@ -73,6 +75,22 @@ import {
   REVIEW_DIMENSIONS,
   REVIEWERS
 } from '../utils/reviewSystem';
+import {
+  createInitialInventorySystemState,
+  stockIn,
+  consumeStock,
+  scrapStock,
+  dismissAlert,
+  dismissAllAlerts,
+  getActiveAlerts,
+  setWarningThresholds,
+  getInventoryStatistics,
+  getFilmInventoryWithAlerts,
+  checkStockAvailability,
+  getAllRecordsCombined,
+  filterRecords,
+  getFilmRecords
+} from '../utils/inventorySystem';
 
 function createInitialStageState(): StageState {
   return {
@@ -540,6 +558,7 @@ function createInitialGameState(): GameState {
   const ordersResult = loadSavedOrders();
   const questSystemResult = loadSavedQuestSystem();
   const reviewSystemResult = loadSavedReviewSystem();
+  const inventorySystemResult = loadSavedInventorySystem();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -553,6 +572,7 @@ function createInitialGameState(): GameState {
   storageStatus.ordersLoaded = ordersResult.status.ordersLoaded || 0;
   storageStatus.questSystemLoaded = questSystemResult.status.questSystemLoaded || false;
   storageStatus.reviewSystemLoaded = reviewSystemResult.status.reviewSystemLoaded || false;
+  storageStatus.inventorySystemLoaded = inventorySystemResult.status.inventorySystemLoaded || false;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
@@ -561,7 +581,8 @@ function createInitialGameState(): GameState {
     collectionsResult.status.migrationPerformed ||
     ordersResult.status.migrationPerformed ||
     questSystemResult.status.migrationPerformed ||
-    reviewSystemResult.status.migrationPerformed);
+    reviewSystemResult.status.migrationPerformed ||
+    inventorySystemResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
     tutorialResult.status.recoveryPerformed ||
@@ -569,7 +590,8 @@ function createInitialGameState(): GameState {
     collectionsResult.status.recoveryPerformed ||
     ordersResult.status.recoveryPerformed ||
     questSystemResult.status.recoveryPerformed ||
-    reviewSystemResult.status.recoveryPerformed);
+    reviewSystemResult.status.recoveryPerformed ||
+    inventorySystemResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
@@ -611,13 +633,14 @@ function createInitialGameState(): GameState {
     storageStatus.corruptedItems.favorites + 
     storageStatus.corruptedItems.collections +
     storageStatus.corruptedItems.orders +
-    (storageStatus.corruptedItems.reviewSystem || 0);
+    (storageStatus.corruptedItems.reviewSystem || 0) +
+    (storageStatus.corruptedItems.inventorySystem || 0);
   if (corruptedCount > 0) {
     warnings.push({
       type: 'corrupted',
       message: `发现 ${corruptedCount} 个损坏数据项，已自动清理`,
       timestamp: now,
-      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个, 订单: ${storageStatus.corruptedItems.orders} 个, 评审: ${storageStatus.corruptedItems.reviewSystem || 0} 个`
+      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个, 订单: ${storageStatus.corruptedItems.orders} 个, 评审: ${storageStatus.corruptedItems.reviewSystem || 0} 个, 库存: ${storageStatus.corruptedItems.inventorySystem || 0} 个`
     });
   }
   
@@ -678,7 +701,8 @@ function createInitialGameState(): GameState {
     orderScheduleSlots: scheduleSlots,
     filmLab: createInitialFilmLabState(),
     questSystem: questSystemResult.state,
-    reviewSystem: reviewSystemResult.state
+    reviewSystem: reviewSystemResult.state,
+    inventorySystem: inventorySystemResult.state
   };
 }
 
@@ -1068,6 +1092,24 @@ function createGameStore() {
         saveQuestSystem(updatedQuestSystem);
       }
       
+      let updatedInventorySystem = state.inventorySystem;
+      const consumeResult = consumeStock(
+        state.inventorySystem,
+        photo.filmId,
+        1,
+        'develop',
+        {
+          relatedPhotoId: photo.id,
+          subjectId: photo.subjectId,
+          relatedOrderId: state.currentOrderId || undefined,
+          notes: '冲洗创作自动扣减'
+        }
+      );
+      if (consumeResult.success) {
+        updatedInventorySystem = consumeResult.state;
+        saveInventorySystem(updatedInventorySystem);
+      }
+      
       return {
         ...state,
         isDeveloping: false,
@@ -1080,6 +1122,7 @@ function createGameStore() {
         orders: updatedOrders,
         currentOrderId: updatedCurrentOrderId,
         questSystem: updatedQuestSystem,
+        inventorySystem: updatedInventorySystem,
         stageState: {
           ...state.stageState,
           currentStage: 'complete',
@@ -2813,6 +2856,93 @@ function createGameStore() {
       }
       saveReviewSystem(newReviewSystem);
       return { ...state, reviewSystem: newReviewSystem };
+    }),
+
+    setInventoryTab: (tab: InventorySystemState['activeTab']) => update(state => {
+      const newInventorySystem = { ...state.inventorySystem, activeTab: tab };
+      saveInventorySystem(newInventorySystem);
+      return { ...state, inventorySystem: newInventorySystem };
+    }),
+
+    setInventorySelectedFilm: (filmId: string | null) => update(state => {
+      const newInventorySystem = { ...state.inventorySystem, selectedFilmId: filmId };
+      saveInventorySystem(newInventorySystem);
+      return { ...state, inventorySystem: newInventorySystem };
+    }),
+
+    setInventoryFilter: (filter: Partial<InventoryFilter>) => update(state => {
+      const newInventorySystem = {
+        ...state.inventorySystem,
+        filter: { ...state.inventorySystem.filter, ...filter }
+      };
+      saveInventorySystem(newInventorySystem);
+      return { ...state, inventorySystem: newInventorySystem };
+    }),
+
+    stockInFilm: (filmId: string, quantity: number, source: StockInSource, options?: {
+      unitPrice?: number;
+      totalPrice?: number;
+      supplier?: string;
+      batchNumber?: string;
+      expireDate?: number;
+      notes?: string;
+      operator?: string;
+    }) => update(state => {
+      const { state: newInventoryState } = stockIn(state.inventorySystem, filmId, quantity, source, options);
+      saveInventorySystem(newInventoryState);
+      return { ...state, inventorySystem: newInventoryState };
+    }),
+
+    consumeFilm: (filmId: string, quantity: number, type: StockConsumeType, options?: {
+      relatedPhotoId?: string;
+      relatedOrderId?: string;
+      subjectId?: string;
+      notes?: string;
+      operator?: string;
+    }) => update(state => {
+      const { state: newInventoryState, success, error } = consumeStock(state.inventorySystem, filmId, quantity, type, options);
+      if (success) {
+        saveInventorySystem(newInventoryState);
+        return { ...state, inventorySystem: newInventoryState };
+      }
+      return state;
+    }),
+
+    scrapFilm: (filmId: string, quantity: number, reason: StockScrapReason, options?: {
+      description?: string;
+      notes?: string;
+      operator?: string;
+    }) => update(state => {
+      const { state: newInventoryState, success } = scrapStock(state.inventorySystem, filmId, quantity, reason, options);
+      if (success) {
+        saveInventorySystem(newInventoryState);
+        return { ...state, inventorySystem: newInventoryState };
+      }
+      return state;
+    }),
+
+    dismissInventoryAlert: (alertId: string) => update(state => {
+      const newInventoryState = dismissAlert(state.inventorySystem, alertId);
+      saveInventorySystem(newInventoryState);
+      return { ...state, inventorySystem: newInventoryState };
+    }),
+
+    dismissAllInventoryAlerts: () => update(state => {
+      const newInventoryState = dismissAllAlerts(state.inventorySystem);
+      saveInventorySystem(newInventoryState);
+      return { ...state, inventorySystem: newInventoryState };
+    }),
+
+    setFilmWarningThresholds: (filmId: string, minWarning: number, criticalWarning: number) => update(state => {
+      const newInventoryState = setWarningThresholds(state.inventorySystem, filmId, minWarning, criticalWarning);
+      saveInventorySystem(newInventoryState);
+      return { ...state, inventorySystem: newInventoryState };
+    }),
+
+    hideInventoryAlertBadge: () => update(state => {
+      const newInventorySystem = { ...state.inventorySystem, showAlertBadge: false };
+      saveInventorySystem(newInventorySystem);
+      return { ...state, inventorySystem: newInventorySystem };
     })
   };
 }

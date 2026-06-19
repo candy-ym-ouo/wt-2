@@ -1,7 +1,8 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 import { createInitialQuestSystemState } from './questSystem';
 import { createInitialReviewSystemState } from './reviewSystem';
+import { createInitialInventorySystemState } from './inventorySystem';
 
 export const CURRENT_STORAGE_VERSION = 3;
 export const MAX_PHOTOS = 100;
@@ -9,6 +10,7 @@ export const MAX_PRESETS = 50;
 export const MAX_COLLECTIONS = 20;
 export const MAX_ORDERS = 50;
 export const MAX_REVIEW_SUBMISSIONS = 50;
+export const MAX_INVENTORY_RECORDS = 200;
 export const STORAGE_QUOTA_WARNING = 0.8;
 export const BACKUP_COUNT = 3;
 
@@ -33,7 +35,7 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
@@ -44,7 +46,8 @@ const KEY_MAP: Record<StorageKey, string> = {
   achievements: 'darkroom_achievements',
   orders: 'darkroom_orders',
   quest_system: 'darkroom_quest_system',
-  review_system: 'darkroom_review_system'
+  review_system: 'darkroom_review_system',
+  inventory_system: 'darkroom_inventory'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -781,4 +784,48 @@ export function loadSavedReviewSystem(): { state: ReviewSystemState; status: Par
 export function saveReviewSystem(state: ReviewSystemState): boolean {
   const limited = enforceLimits('review_system', state) as ReviewSystemState;
   return saveWithBackup('review_system', limited, limited.submissions.length);
+}
+
+function repairInventorySystem(state: InventorySystemState): InventorySystemState {
+  const initial = createInitialInventorySystemState();
+  if (!state) return initial;
+  
+  const repaired: InventorySystemState = {
+    inventory: Array.isArray(state.inventory) ? state.inventory : [],
+    stockInRecords: Array.isArray(state.stockInRecords) ? state.stockInRecords : [],
+    consumeRecords: Array.isArray(state.consumeRecords) ? state.consumeRecords : [],
+    scrapRecords: Array.isArray(state.scrapRecords) ? state.scrapRecords : [],
+    alerts: Array.isArray(state.alerts) ? state.alerts : [],
+    activeTab: typeof state.activeTab === 'string' ? state.activeTab : initial.activeTab,
+    filter: state.filter || initial.filter,
+    selectedFilmId: state.selectedFilmId || null,
+    showAlertBadge: typeof state.showAlertBadge === 'boolean' ? state.showAlertBadge : true
+  };
+  
+  return repaired;
+}
+
+export function loadSavedInventorySystem(): { state: InventorySystemState; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<InventorySystemState>('inventory_system', createInitialInventorySystemState());
+  const status: Partial<StorageStatus> = {
+    inventorySystemLoaded: result.success
+  };
+
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+
+  let state = result.data || createInitialInventorySystemState();
+  state = repairInventorySystem(state);
+
+  return { state, status };
+}
+
+export function saveInventorySystem(state: InventorySystemState): boolean {
+  const limited = enforceLimits('inventory_system', state) as InventorySystemState;
+  const totalRecords = limited.stockInRecords.length + limited.consumeRecords.length + limited.scrapRecords.length;
+  return saveWithBackup('inventory_system', limited, totalRecords);
 }
