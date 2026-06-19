@@ -116,7 +116,7 @@
   function revertToHistory(history: PresetHistory) {
     if (!selectedPresetForHistory) return;
     if (confirm(`确定要将「${selectedPresetForHistory.name}」回退到 ${formatDate(history.timestamp)} 的版本吗？`)) {
-      gameStore.revertPreset(history.presetId);
+      gameStore.revertPreset(history.presetId, history.timestamp);
       showHistory = false;
       selectedPresetForHistory = null;
     }

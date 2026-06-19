@@ -179,8 +179,10 @@ function createGameStore() {
         lastAppliedPresetId: state.lastAppliedPresetId === presetId ? null : state.lastAppliedPresetId
       };
     }),
-    revertPreset: (presetId: string) => update(state => {
-      const historyEntry = state.presetHistory.find(h => h.presetId === presetId);
+    revertPreset: (presetId: string, historyTimestamp: number) => update(state => {
+      const historyEntry = state.presetHistory.find(h => 
+        h.presetId === presetId && h.timestamp === historyTimestamp
+      );
       if (!historyEntry) return state;
       
       const presetIndex = state.presets.findIndex(p => p.id === presetId);
