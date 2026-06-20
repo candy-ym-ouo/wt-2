@@ -25,6 +25,7 @@
   import ReviewPanel from './components/ReviewPanel.svelte';
   import FilmInventory from './components/FilmInventory.svelte';
   import PublicationDesk from './components/PublicationDesk.svelte';
+  import SubjectWorkshop from './components/SubjectWorkshop.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -44,6 +45,7 @@
   let showReview = false;
   let showInventory = false;
   let showPublication = false;
+  let showWorkshop = false;
 
   function goToOrderScoring() {
     if (currentOrder) {
@@ -557,6 +559,13 @@
         {/if}
       </button>
       <button
+        class="header-btn workshop"
+        on:click={() => { showWorkshop = true; }}
+        title="题材生成工坊"
+      >
+        <span>🎨</span>
+      </button>
+      <button
         class="header-btn help"
         on:click={() => { gameStore.resetTutorial(); }}
         title="重新开始教程"
@@ -747,6 +756,10 @@
 
   {#if showPublication}
     <PublicationDesk onClose={() => { showPublication = false; }} />
+  {/if}
+
+  {#if showWorkshop}
+    <SubjectWorkshop onClose={() => { showWorkshop = false; }} />
   {/if}
 
   <footer class="app-footer">

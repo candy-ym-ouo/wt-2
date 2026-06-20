@@ -1493,3 +1493,248 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
 
 export const INITIAL_UNLOCKED_SUBJECTS = ['portrait_01'];
 export const INITIAL_UNLOCKED_FILMS = ['hp5'];
+
+import type { SceneTemplate, ScoreRuleSet, ScoreRule, ScenePalette, KeyAreaDraft } from '../types/game';
+
+export const SCENE_CATEGORY_LABELS: Record<string, string> = {
+  portrait: '人像',
+  landscape: '风光',
+  street: '街头',
+  still_life: '静物',
+  night: '夜景',
+  custom: '自定义'
+};
+
+export const KEY_AREA_COLORS = [
+  '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7',
+  '#dfe6e9', '#a29bfe', '#fd79a8', '#00b894', '#e17055'
+];
+
+function rgbToHex(r: number, g: number, b: number): string {
+  return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+function paletteWithHex(p: { sky: [number, number, number]; mid: [number, number, number]; dark: [number, number, number]; accent: [number, number, number]; warm: [number, number, number] }): ScenePalette {
+  return {
+    ...p,
+    primary: rgbToHex(...p.warm),
+    secondary: rgbToHex(...p.mid),
+    neutral: rgbToHex(...p.dark),
+    background: rgbToHex(...p.sky)
+  };
+}
+
+export const DEFAULT_PALETTES: Record<string, ScenePalette[]> = {
+  portrait: [
+    paletteWithHex({ sky: [245, 230, 210], mid: [180, 140, 110], dark: [60, 40, 30], accent: [220, 180, 150], warm: [255, 200, 160] }),
+    paletteWithHex({ sky: [230, 200, 180], mid: [160, 120, 90], dark: [50, 35, 28], accent: [200, 160, 130], warm: [240, 180, 140] })
+  ],
+  landscape: [
+    paletteWithHex({ sky: [180, 210, 240], mid: [100, 150, 120], dark: [30, 60, 40], accent: [200, 180, 140], warm: [230, 190, 130] }),
+    paletteWithHex({ sky: [255, 200, 150], mid: [120, 140, 80], dark: [40, 55, 25], accent: [255, 160, 100], warm: [255, 180, 100] })
+  ],
+  street: [
+    paletteWithHex({ sky: [80, 90, 110], mid: [100, 95, 90], dark: [30, 28, 35], accent: [220, 80, 60], warm: [255, 140, 80] }),
+    paletteWithHex({ sky: [60, 70, 90], mid: [90, 85, 80], dark: [25, 22, 28], accent: [200, 70, 50], warm: [255, 160, 60] })
+  ],
+  still_life: [
+    paletteWithHex({ sky: [230, 210, 180], mid: [170, 130, 80], dark: [70, 45, 25], accent: [210, 170, 120], warm: [250, 200, 150] }),
+    paletteWithHex({ sky: [220, 200, 170], mid: [150, 110, 70], dark: [60, 38, 20], accent: [190, 150, 100], warm: [240, 180, 130] })
+  ],
+  night: [
+    paletteWithHex({ sky: [15, 18, 45], mid: [40, 30, 60], dark: [8, 8, 18], accent: [255, 200, 80], warm: [255, 120, 50] }),
+    paletteWithHex({ sky: [10, 12, 35], mid: [30, 25, 50], dark: [5, 5, 12], accent: [255, 220, 100], warm: [255, 150, 70] })
+  ]
+};
+
+function createDefaultRuleSet(): ScoreRuleSet {
+  const now = Date.now();
+  return {
+    id: 'ruleset_default',
+    name: '标准评分规则',
+    description: '暗房工坊默认的标准评分规则，适用于大多数场景',
+    rules: [],
+    exposureWeight: 0.35,
+    contrastWeight: 0.25,
+    colorWeight: 0.2,
+    detailWeight: 0.2,
+    styleMatchBonus: 5,
+    filmMatchBonus: 5,
+    gradeThresholds: { S: 90, A: 80, B: 70, C: 60 },
+    isDefault: true,
+    isBuiltin: true,
+    toleranceMultiplier: 1,
+    minPassScore: 60,
+    criticalFailurePenalty: 10,
+    tags: ['标准', '通用'],
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function createStrictRuleSet(): ScoreRuleSet {
+  const now = Date.now();
+  return {
+    id: 'ruleset_strict',
+    name: '严格评分规则',
+    description: '对参数偏差更敏感，适合专业级场景',
+    rules: [],
+    exposureWeight: 0.4,
+    contrastWeight: 0.25,
+    colorWeight: 0.2,
+    detailWeight: 0.15,
+    styleMatchBonus: 8,
+    filmMatchBonus: 3,
+    gradeThresholds: { S: 93, A: 83, B: 73, C: 63 },
+    isDefault: false,
+    isBuiltin: true,
+    toleranceMultiplier: 0.7,
+    minPassScore: 63,
+    criticalFailurePenalty: 15,
+    tags: ['严格', '专业'],
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function createCreativeRuleSet(): ScoreRuleSet {
+  const now = Date.now();
+  return {
+    id: 'ruleset_creative',
+    name: '创意评分规则',
+    description: '更注重风格表达和视觉效果，适合艺术创作',
+    rules: [],
+    exposureWeight: 0.25,
+    contrastWeight: 0.25,
+    colorWeight: 0.3,
+    detailWeight: 0.2,
+    styleMatchBonus: 12,
+    filmMatchBonus: 4,
+    gradeThresholds: { S: 88, A: 78, B: 68, C: 58 },
+    isDefault: false,
+    isBuiltin: true,
+    toleranceMultiplier: 1.3,
+    minPassScore: 58,
+    criticalFailurePenalty: 5,
+    tags: ['创意', '艺术'],
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+export const DEFAULT_SCORE_RULE_SETS: ScoreRuleSet[] = [
+  createDefaultRuleSet(),
+  createStrictRuleSet(),
+  createCreativeRuleSet()
+];
+
+export function createBlankTemplate(category: string = 'portrait'): SceneTemplate {
+  const now = Date.now();
+  const palettes = DEFAULT_PALETTES[category] || DEFAULT_PALETTES.portrait;
+  return {
+    id: `template_${now}`,
+    name: '新场景模板',
+    description: '请填写场景描述，说明拍摄意图和理想效果',
+    category: category as SceneTemplate['category'],
+    seed: Math.floor(Math.random() * 10000),
+    baseBrightness: 0.4,
+    idealExposure: 0.5,
+    idealContrast: 0.55,
+    idealSaturation: 0.55,
+    targetStyle: 'clean',
+    difficulty: 2,
+    scoreMultiplier: 1.0,
+    tags: [],
+    recommendedFilms: [],
+    palette: palettes[0],
+    layers: [],
+    keyAreas: [],
+    scoringRuleSetId: 'ruleset_default',
+    previewParams: {
+      exposure: 0.5,
+      developmentTime: 0.5,
+      temperature: 0.5,
+      agitation: 0.5,
+      contrast: 0.5,
+      saturation: 0.5,
+      dilution: 0.5
+    },
+    isBuiltin: false,
+    isPublished: false,
+    version: 1,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function createTemplateFromSubject(subject: typeof PHOTO_SUBJECTS[number]): SceneTemplate {
+  const now = Date.now();
+  const palettes = DEFAULT_PALETTES[subject.sceneType] || DEFAULT_PALETTES.portrait;
+  return {
+    id: `template_builtin_${subject.id}`,
+    name: subject.name,
+    description: subject.description,
+    category: subject.sceneType as SceneTemplate['category'],
+    seed: subject.seed,
+    baseBrightness: subject.baseBrightness,
+    idealExposure: subject.idealExposure,
+    idealContrast: subject.idealContrast,
+    idealSaturation: subject.idealSaturation,
+    targetStyle: subject.targetStyle,
+    difficulty: subject.difficulty,
+    scoreMultiplier: subject.scoreMultiplier,
+    tags: [...subject.tags],
+    recommendedFilms: [...subject.recommendedFilms],
+    palette: palettes[0],
+    layers: [],
+    keyAreas: subject.keyAreas.map(ka => ({ ...ka })),
+    scoringRuleSetId: 'ruleset_default',
+    previewParams: {
+      exposure: subject.idealExposure,
+      developmentTime: 0.5,
+      temperature: 0.5,
+      agitation: 0.5,
+      contrast: subject.idealContrast,
+      saturation: subject.idealSaturation,
+      dilution: 0.5
+    },
+    isBuiltin: true,
+    isPublished: true,
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+    author: '系统内置'
+  };
+}
+
+export const BUILTIN_SCENE_TEMPLATES: SceneTemplate[] = PHOTO_SUBJECTS.map(createTemplateFromSubject);
+
+export const DEFAULT_WORKSHOP_STATE = {
+  activeTab: 'templates' as const,
+  editorMode: 'basic' as const,
+  selectedTemplateId: null,
+  draftTemplate: null,
+  draftKeyAreas: [] as KeyAreaDraft[],
+  selectedKeyAreaId: null,
+  templates: BUILTIN_SCENE_TEMPLATES,
+  ruleSets: DEFAULT_SCORE_RULE_SETS,
+  selectedRuleSetId: 'ruleset_default',
+  previewParams: {
+    exposure: 0.5,
+    developmentTime: 0.5,
+    temperature: 0.5,
+    agitation: 0.5,
+    contrast: 0.5,
+    saturation: 0.5,
+    dilution: 0.5
+  },
+  showPreviewOverlay: false,
+  showKeyAreasInPreview: true,
+  undoStack: [] as SceneTemplate[],
+  redoStack: [] as SceneTemplate[],
+  filterCategory: 'all' as const,
+  searchKeyword: '',
+  sortBy: 'date_desc' as const
+};
+
+export { createTemplateFromSubject };

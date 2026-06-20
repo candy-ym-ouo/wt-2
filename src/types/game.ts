@@ -12,7 +12,7 @@ export interface FilmStock {
 
 export type DifficultyLevel = 1 | 2 | 3 | 4 | 5;
 
-export type TargetStyle = 'soft' | 'vivid' | 'dramatic' | 'retro' | 'moody' | 'clean' | 'warm' | 'cool';
+export type TargetStyle = 'soft' | 'vivid' | 'dramatic' | 'retro' | 'moody' | 'clean' | 'warm' | 'cool' | 'classic' | 'high_contrast' | 'low_key' | 'high_key' | 'dreamy' | 'grainy';
 
 export interface PhotoSubject {
   id: string;
@@ -275,6 +275,7 @@ export interface GameState {
   reviewSystem: ReviewSystemState;
   inventorySystem: InventorySystemState;
   publicationSystem: PublicationState;
+  subjectWorkshop: SubjectWorkshopState;
 }
 
 export type TutorialUnlockCondition = 
@@ -1240,3 +1241,134 @@ export interface PublicationSelectFilter {
   maxScore: number;
   sortBy: 'date_desc' | 'date_asc' | 'score_desc' | 'score_asc';
 }
+
+export type SceneTemplateCategory = 'portrait' | 'landscape' | 'street' | 'still_life' | 'night' | 'custom' | 'architecture' | 'documentary' | 'abstract';
+
+export interface ScenePalette {
+  sky: [number, number, number];
+  mid: [number, number, number];
+  dark: [number, number, number];
+  accent: [number, number, number];
+  warm: [number, number, number];
+  primary: string;
+  secondary: string;
+  neutral: string;
+  background: string;
+}
+
+export interface SceneLayer {
+  id: string;
+  type: 'background' | 'sky' | 'ground' | 'object' | 'character' | 'light_source' | 'atmosphere';
+  name: string;
+  visible: boolean;
+  config: Record<string, number | string | boolean>;
+}
+
+export interface ScoreRule {
+  id: string;
+  name: string;
+  category: 'exposure' | 'contrast' | 'color' | 'detail' | 'key_area' | 'style';
+  weight: number;
+  enabled: boolean;
+  idealValue?: number;
+  tolerance: number;
+  description: string;
+  customFormula?: string;
+  critical?: boolean;
+  param?: string;
+  targetValue?: number;
+}
+
+export interface ScoreRuleSet {
+  id: string;
+  name: string;
+  description: string;
+  rules: ScoreRule[];
+  exposureWeight: number;
+  contrastWeight: number;
+  colorWeight: number;
+  detailWeight: number;
+  styleMatchBonus: number;
+  filmMatchBonus: number;
+  gradeThresholds: {
+    S: number;
+    A: number;
+    B: number;
+    C: number;
+  };
+  isDefault?: boolean;
+  isBuiltin?: boolean;
+  toleranceMultiplier?: number;
+  minPassScore?: number;
+  criticalFailurePenalty?: number;
+  tags?: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SceneTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: SceneTemplateCategory;
+  customCategory?: string;
+  seed: number;
+  baseBrightness: number;
+  idealExposure: number;
+  idealContrast: number;
+  idealSaturation: number;
+  targetStyle: TargetStyle;
+  difficulty: DifficultyLevel;
+  scoreMultiplier: number;
+  tags: string[];
+  recommendedFilms: string[];
+  palette: ScenePalette;
+  layers: SceneLayer[];
+  keyAreas: KeyArea[];
+  scoringRuleSetId: string;
+  previewParams: DevParams;
+  isBuiltin: boolean;
+  isPublished: boolean;
+  version: number;
+  createdAt: number;
+  updatedAt: number;
+  author?: string;
+}
+
+export type WorkshopTab = 'templates' | 'editor' | 'scoring' | 'preview';
+export type EditorMode = 'basic' | 'advanced' | 'visual';
+
+export interface KeyAreaDraft {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  importance: number;
+  tolerance: number;
+  idealBrightness: number;
+  color: string;
+}
+
+export interface SubjectWorkshopState {
+  activeTab: WorkshopTab;
+  editorMode: EditorMode;
+  selectedTemplateId: string | null;
+  draftTemplate: SceneTemplate | null;
+  draftKeyAreas: KeyAreaDraft[];
+  selectedKeyAreaId: string | null;
+  templates: SceneTemplate[];
+  ruleSets: ScoreRuleSet[];
+  selectedRuleSetId: string | null;
+  previewParams: DevParams;
+  showPreviewOverlay: boolean;
+  showKeyAreasInPreview: boolean;
+  undoStack: SceneTemplate[];
+  redoStack: SceneTemplate[];
+  filterCategory: SceneTemplateCategory | 'all';
+  searchKeyword: string;
+  sortBy: 'name_asc' | 'name_desc' | 'date_desc' | 'date_asc' | 'difficulty_asc' | 'difficulty_desc';
+}
+
+

@@ -1,6 +1,6 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter } from '../types/game';
-import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES } from '../data/gameData';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule } from '../types/game';
+import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES, DEFAULT_WORKSHOP_STATE, createBlankTemplate } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
 import {
@@ -93,6 +93,18 @@ import {
   filterRecords,
   getFilmRecords
 } from '../utils/inventorySystem';
+import {
+  validateTemplate,
+  validateRuleSet,
+  convertDraftsToKeyAreas,
+  convertKeyAreasToDrafts,
+  createNewKeyAreaDraft,
+  cloneTemplate,
+  updateTemplateField,
+  normalizeKeyAreaImportance,
+  getNewTemplate,
+  filterAndSortTemplates
+} from '../utils/subjectWorkshop';
 
 function createInitialStageState(): StageState {
   return {
@@ -409,6 +421,28 @@ function createInitialPublicationState(): PublicationState {
       maxScore: 100,
       sortBy: 'date_desc'
     }
+  };
+}
+
+function createInitialSubjectWorkshopState(): SubjectWorkshopState {
+  return {
+    activeTab: DEFAULT_WORKSHOP_STATE.activeTab,
+    editorMode: DEFAULT_WORKSHOP_STATE.editorMode,
+    selectedTemplateId: DEFAULT_WORKSHOP_STATE.selectedTemplateId,
+    draftTemplate: DEFAULT_WORKSHOP_STATE.draftTemplate,
+    draftKeyAreas: [...DEFAULT_WORKSHOP_STATE.draftKeyAreas],
+    selectedKeyAreaId: DEFAULT_WORKSHOP_STATE.selectedKeyAreaId,
+    templates: [...DEFAULT_WORKSHOP_STATE.templates],
+    ruleSets: [...DEFAULT_WORKSHOP_STATE.ruleSets],
+    selectedRuleSetId: DEFAULT_WORKSHOP_STATE.selectedRuleSetId,
+    previewParams: { ...DEFAULT_WORKSHOP_STATE.previewParams },
+    showPreviewOverlay: DEFAULT_WORKSHOP_STATE.showPreviewOverlay,
+    showKeyAreasInPreview: DEFAULT_WORKSHOP_STATE.showKeyAreasInPreview,
+    undoStack: [...DEFAULT_WORKSHOP_STATE.undoStack],
+    redoStack: [...DEFAULT_WORKSHOP_STATE.redoStack],
+    filterCategory: DEFAULT_WORKSHOP_STATE.filterCategory,
+    searchKeyword: DEFAULT_WORKSHOP_STATE.searchKeyword,
+    sortBy: DEFAULT_WORKSHOP_STATE.sortBy
   };
 }
 
@@ -729,7 +763,8 @@ function createInitialGameState(): GameState {
     questSystem: questSystemResult.state,
     reviewSystem: reviewSystemResult.state,
     inventorySystem: inventorySystemResult.state,
-    publicationSystem: publicationSystemResult.state
+    publicationSystem: publicationSystemResult.state,
+    subjectWorkshop: createInitialSubjectWorkshopState()
   };
 }
 
@@ -3206,7 +3241,311 @@ function createGameStore() {
       };
       savePublicationSystem(newPubSystem);
       return { ...state, publicationSystem: newPubSystem };
-    })
+    }),
+
+    setWorkshopTab: (tab: WorkshopTab) => update(state => ({
+      ...state,
+      subjectWorkshop: { ...state.subjectWorkshop, activeTab: tab }
+    })),
+
+    setWorkshopEditorMode: (mode: EditorMode) => update(state => ({
+      ...state,
+      subjectWorkshop: { ...state.subjectWorkshop, editorMode: mode }
+    })),
+
+    setWorkshopFilterCategory: (cat: SceneTemplateCategory | 'all') => update(state => ({
+      ...state,
+      subjectWorkshop: { ...state.subjectWorkshop, filterCategory: cat }
+    })),
+
+    setWorkshopSearchKeyword: (kw: string) => update(state => ({
+      ...state,
+      subjectWorkshop: { ...state.subjectWorkshop, searchKeyword: kw }
+    })),
+
+    setWorkshopSortBy: (sortBy: SubjectWorkshopState['sortBy']) => update(state => ({
+      ...state,
+      subjectWorkshop: { ...state.subjectWorkshop, sortBy }
+    })),
+
+    selectTemplate: (templateId: string | null) => update(state => ({
+      ...state,
+      subjectWorkshop: {
+        ...state.subjectWorkshop,
+        selectedTemplateId: templateId
+      }
+    })),
+
+    createNewTemplate: () => update(state => {
+      const newTpl = createBlankTemplate();
+      return {
+        ...state,
+        subjectWorkshop: {
+          ...state.subjectWorkshop,
+          selectedTemplateId: newTpl.id,
+          draftTemplate: cloneTemplate(newTpl),
+          draftKeyAreas: convertKeyAreasToDrafts(newTpl.keyAreas),
+          selectedKeyAreaId: null,
+          selectedRuleSetId: newTpl.scoringRuleSetId,
+          previewParams: { ...newTpl.previewParams },
+          undoStack: [],
+          redoStack: [],
+          activeTab: 'editor'
+        }
+      };
+    }),
+
+    editTemplate: (templateId: string) => update(state => {
+      const tpl = state.subjectWorkshop.templates.find(t => t.id === templateId);
+      if (!tpl) return state;
+      const cloned = cloneTemplate(tpl);
+      return {
+        ...state,
+        subjectWorkshop: {
+          ...state.subjectWorkshop,
+          selectedTemplateId: templateId,
+          draftTemplate: cloned,
+          draftKeyAreas: convertKeyAreasToDrafts(cloned.keyAreas),
+          selectedKeyAreaId: null,
+          selectedRuleSetId: cloned.scoringRuleSetId,
+          previewParams: { ...cloned.previewParams },
+          undoStack: [],
+          redoStack: [],
+          activeTab: 'editor'
+        }
+      };
+    }),
+
+    saveDraftToHistory: () => update(state => {
+      if (!state.subjectWorkshop.draftTemplate) return state;
+      const cloned = cloneTemplate(state.subjectWorkshop.draftTemplate);
+      const newUndo = [...state.subjectWorkshop.undoStack, cloned].slice(-20);
+      return {
+        ...state,
+        subjectWorkshop: {
+          ...state.subjectWorkshop,
+          undoStack: newUndo,
+          redoStack: []
+        }
+      };
+    }),
+
+    undoWorkshop: () => update(state => {
+      if (state.subjectWorkshop.undoStack.length === 0 || !state.subjectWorkshop.draftTemplate) return state;
+      const current = cloneTemplate(state.subjectWorkshop.draftTemplate);
+      const undoStack = [...state.subjectWorkshop.undoStack];
+      const previous = undoStack.pop()!;
+      return {
+        ...state,
+        subjectWorkshop: {
+          ...state.subjectWorkshop,
+          draftTemplate: previous,
+          draftKeyAreas: convertKeyAreasToDrafts(previous.keyAreas),
+          undoStack,
+          redoStack: [...state.subjectWorkshop.redoStack, current]
+        }
+      };
+    }),
+
+    redoWorkshop: () => update(state => {
+      if (state.subjectWorkshop.redoStack.length === 0 || !state.subjectWorkshop.draftTemplate) return state;
+      const current = cloneTemplate(state.subjectWorkshop.draftTemplate);
+      const redoStack = [...state.subjectWorkshop.redoStack];
+      const next = redoStack.pop()!;
+      return {
+        ...state,
+        subjectWorkshop: {
+          ...state.subjectWorkshop,
+          draftTemplate: next,
+          draftKeyAreas: convertKeyAreasToDrafts(next.keyAreas),
+          redoStack,
+          undoStack: [...state.subjectWorkshop.undoStack, current]
+        }
+      };
+    }),
+
+    updateDraftField: <K extends keyof SceneTemplate>(key: K, value: SceneTemplate[K]) => update(state => {
+      if (!state.subjectWorkshop.draftTemplate) return state;
+      return {
+        ...state,
+        subjectWorkshop: {
+          ...state.subjectWorkshop,
+          draftTemplate: updateTemplateField(state.subjectWorkshop.draftTemplate, key, value)
+        }
+      };
+    }),
+
+    setSelectedRuleSetId: (ruleSetId: string) => update(state => ({
+      ...state,
+      subjectWorkshop: {
+        ...state.subjectWorkshop,
+        selectedRuleSetId: ruleSetId,
+        draftTemplate: state.subjectWorkshop.draftTemplate
+          ? { ...state.subjectWorkshop.draftTemplate, scoringRuleSetId: ruleSetId }
+          : null
+      }
+    })),
+
+    setShowPreviewOverlay: (show: boolean) => update(state => ({
+      ...state,
+      subjectWorkshop: { ...state.subjectWorkshop, showPreviewOverlay: show }
+    })),
+
+    setShowKeyAreasInPreview: (show: boolean) => update(state => ({
+      ...state,
+      subjectWorkshop: { ...state.subjectWorkshop, showKeyAreasInPreview: show }
+    })),
+
+    setPreviewParams: (params: Partial<DevParams>) => update(state => ({
+      ...state,
+      subjectWorkshop: {
+        ...state.subjectWorkshop,
+        previewParams: { ...state.subjectWorkshop.previewParams, ...params }
+      }
+    })),
+
+    addKeyArea: () => update(state => {
+      if (!state.subjectWorkshop.draftTemplate) return state;
+      const newArea = createNewKeyAreaDraft(state.subjectWorkshop.draftKeyAreas);
+      return {
+        ...state,
+        subjectWorkshop: {
+          ...state.subjectWorkshop,
+          draftKeyAreas: [...state.subjectWorkshop.draftKeyAreas, newArea],
+          selectedKeyAreaId: newArea.id
+        }
+      };
+    }),
+
+    selectKeyArea: (areaId: string | null) => update(state => ({
+      ...state,
+      subjectWorkshop: { ...state.subjectWorkshop, selectedKeyAreaId: areaId }
+    })),
+
+    updateKeyArea: (areaId: string, updates: Partial<KeyAreaDraft>) => update(state => ({
+      ...state,
+      subjectWorkshop: {
+        ...state.subjectWorkshop,
+        draftKeyAreas: state.subjectWorkshop.draftKeyAreas.map(a =>
+          a.id === areaId ? { ...a, ...updates } : a
+        )
+      }
+    })),
+
+    deleteKeyArea: (areaId: string) => update(state => {
+      const areas = state.subjectWorkshop.draftKeyAreas.filter(a => a.id !== areaId);
+      return {
+        ...state,
+        subjectWorkshop: {
+          ...state.subjectWorkshop,
+          draftKeyAreas: areas,
+          selectedKeyAreaId: state.subjectWorkshop.selectedKeyAreaId === areaId ? null : state.subjectWorkshop.selectedKeyAreaId
+        }
+      };
+    }),
+
+    normalizeKeyAreas: () => update(state => ({
+      ...state,
+      subjectWorkshop: {
+        ...state.subjectWorkshop,
+        draftKeyAreas: normalizeKeyAreaImportance(state.subjectWorkshop.draftKeyAreas)
+      }
+    })),
+
+    saveTemplate: () => update(state => {
+      if (!state.subjectWorkshop.draftTemplate) return state;
+
+      const normalizedKeyAreas = normalizeKeyAreaImportance(state.subjectWorkshop.draftKeyAreas);
+      const finalKeyAreas = convertDraftsToKeyAreas(normalizedKeyAreas);
+
+      const finalTemplate: SceneTemplate = {
+        ...state.subjectWorkshop.draftTemplate,
+        keyAreas: finalKeyAreas,
+        updatedAt: Date.now(),
+        version: state.subjectWorkshop.draftTemplate.version + 1
+      };
+
+      const validation = validateTemplate(finalTemplate);
+      if (!validation.valid) {
+        console.warn('模板验证失败:', validation.errors);
+        return state;
+      }
+
+      const existingIdx = state.subjectWorkshop.templates.findIndex(t => t.id === finalTemplate.id);
+      let newTemplates: SceneTemplate[];
+      if (existingIdx >= 0) {
+        newTemplates = state.subjectWorkshop.templates.map((t, i) => i === existingIdx ? finalTemplate : t);
+      } else {
+        newTemplates = [...state.subjectWorkshop.templates, finalTemplate];
+      }
+
+      return {
+        ...state,
+        subjectWorkshop: {
+          ...state.subjectWorkshop,
+          templates: newTemplates,
+          undoStack: [],
+          redoStack: []
+        }
+      };
+    }),
+
+    deleteTemplate: (templateId: string) => update(state => {
+      const tpl = state.subjectWorkshop.templates.find(t => t.id === templateId);
+      if (!tpl || tpl.isBuiltin) return state;
+      return {
+        ...state,
+        subjectWorkshop: {
+          ...state.subjectWorkshop,
+          templates: state.subjectWorkshop.templates.filter(t => t.id !== templateId),
+          selectedTemplateId: state.subjectWorkshop.selectedTemplateId === templateId ? null : state.subjectWorkshop.selectedTemplateId,
+          draftTemplate: state.subjectWorkshop.draftTemplate?.id === templateId ? null : state.subjectWorkshop.draftTemplate
+        }
+      };
+    }),
+
+    duplicateTemplate: (templateId: string) => update(state => {
+      const original = state.subjectWorkshop.templates.find(t => t.id === templateId);
+      if (!original) return state;
+      const now = Date.now();
+      const copy: SceneTemplate = {
+        ...cloneTemplate(original),
+        id: generateId(),
+        name: original.name + ' (副本)',
+        isBuiltin: false,
+        isPublished: false,
+        version: 1,
+        createdAt: now,
+        updatedAt: now
+      };
+      return {
+        ...state,
+        subjectWorkshop: {
+          ...state.subjectWorkshop,
+          templates: [...state.subjectWorkshop.templates, copy],
+          selectedTemplateId: copy.id
+        }
+      };
+    }),
+
+    validateWorkshopDraft: (): { valid: boolean; errors: string[]; warnings: string[] } => {
+      let result = { valid: false, errors: [] as string[], warnings: [] as string[] };
+      const unsubscribe = subscribe(state => {
+        if (!state.subjectWorkshop.draftTemplate) {
+          result = { valid: false, errors: ['没有正在编辑的模板'], warnings: [] };
+          return;
+        }
+        const normalizedKeyAreas = normalizeKeyAreaImportance(state.subjectWorkshop.draftKeyAreas);
+        const finalKeyAreas = convertDraftsToKeyAreas(normalizedKeyAreas);
+        const finalTemplate: SceneTemplate = {
+          ...state.subjectWorkshop.draftTemplate,
+          keyAreas: finalKeyAreas
+        };
+        result = validateTemplate(finalTemplate);
+      });
+      unsubscribe();
+      return result;
+    }
   };
 }
 
