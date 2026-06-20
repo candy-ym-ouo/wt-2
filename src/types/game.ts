@@ -356,6 +356,7 @@ export interface StorageStatus {
   exhibitionSystemLoaded?: boolean;
   darkroomCalibrationLoaded?: boolean;
   challengeSystemLoaded?: boolean;
+  shopManagementLoaded?: boolean;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -2375,6 +2376,255 @@ export interface FilmGuideState {
   filterColor: 'all' | 'bw' | 'color';
   filterSceneType: string;
   viewedFilmIds: string[];
+}
+
+export type EmployeeRole = 'developer' | 'assistant' | 'receptionist' | 'manager';
+export type EmployeeStatus = 'idle' | 'working' | 'rest' | 'training';
+
+export interface EmployeeSkill {
+  id: string;
+  name: string;
+  level: number;
+  maxLevel: number;
+  experience: number;
+  description: string;
+  effect: {
+      type: 'score_bonus' | 'speed_bonus' | 'cost_reduction' | 'reputation_bonus' | 'capacity_bonus' | 'quality_bonus';
+      value: number;
+    };
+}
+
+export interface Employee {
+  id: string;
+  name: string;
+  avatar: string;
+  role: EmployeeRole;
+  status: EmployeeStatus;
+  level: number;
+  experience: number;
+  skills: EmployeeSkill[];
+  salary: number;
+  hireDate: number;
+  satisfaction: number;
+  trainingProgress: number;
+  assignedOrderIds: string[];
+  skillBonuses: Record<string, number>;
+}
+
+export interface SupplyItem {
+  id: string;
+  name: string;
+  type: 'film' | 'chemical' | 'paper' | 'equipment' | 'other';
+  quantity: number;
+  unit: string;
+  unitCost: number;
+  minStock: number;
+  currentStock: number;
+  expireDate?: number;
+  supplier: string;
+}
+
+export type SupplyUsageType = 'consume' | 'purchase' | 'scrap' | 'restock' | 'use';
+
+export interface SupplyUsageRecord {
+  id: string;
+  itemId?: string;
+  itemName?: string;
+  supplyId?: string;
+  supplyName?: string;
+  quantity: number;
+  orderId?: string;
+  relatedOrderId?: string;
+  photoId?: string;
+  type: SupplyUsageType;
+  cost: number;
+  timestamp: number;
+  notes?: string;
+  operator?: string;
+}
+
+export interface Facility {
+  id: string;
+  name: string;
+  type: 'enlarger' | 'processor' | 'dryer' | 'temperature_control' | 'display' | 'storage' | 'lounge';
+  level: number;
+  maxLevel: number;
+  description: string;
+  baseCost: number;
+  upgradeCost: number;
+  effect: {
+    type: 'score_bonus' | 'speed_bonus' | 'capacity_bonus' | 'reputation_bonus' | 'cost_reduction' | 'quality_bonus';
+    value: number;
+  };
+  condition: number;
+  maintenanceCost: number;
+  isUnlocked: boolean;
+  icon: string;
+}
+
+export type FinanceCategory = 'order' | 'salary' | 'supply' | 'upgrade' | 'maintenance' | 'marketing' | 'training' | 'other';
+
+export interface FinanceRecord {
+  id: string;
+  type: 'income' | 'expense';
+  category: FinanceCategory;
+  amount: number;
+  description: string;
+  relatedId?: string;
+  relatedEmployeeId?: string;
+  relatedSupplyId?: string;
+  relatedFacilityId?: string;
+  relatedOrderId?: string;
+  timestamp: number;
+}
+
+export interface ReputationReview {
+  id: string;
+  customerName: string;
+  rating: number;
+  comment: string;
+  orderId?: string;
+  photoId?: string;
+  timestamp: number;
+  tags: string[];
+  qualityScore: number;
+}
+
+export interface ShopStatistics {
+  totalOrders: number;
+  completedOrders: number;
+  totalRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
+  avgCustomerRating: number;
+  avgTurnaroundTime: number;
+  repeatCustomerRate: number;
+}
+
+export type ShopManagementTab = 'overview' | 'orders' | 'employees' | 'supplies' | 'facilities' | 'finance' | 'reputation';
+
+export interface ShopManagementState {
+  isOpen: boolean;
+  activeTab: ShopManagementTab;
+  shopName: string;
+  shopLevel: number;
+  shopExperience: number;
+  shopReputation: number;
+  maxReputation: number;
+  dailyStartTime: number;
+  dayNumber: number;
+  isPaused: boolean;
+  employees: Employee[];
+  supplies: SupplyItem[];
+  supplyRecords: SupplyUsageRecord[];
+  facilities: Facility[];
+  financeRecords: FinanceRecord[];
+  reputationReviews: ReputationReview[];
+  finances: {
+    cash: number;
+    bank: number;
+  };
+  statistics: ShopStatistics;
+  gameSpeed: number;
+  selectedEmployeeId: string | null;
+  selectedFacilityId: string | null;
+  selectedSupplyId: string | null;
+  autoManageOrders: ShopOrder[];
+  pendingOrders: string[];
+  marketingBudget: number;
+  priceMultiplier: number;
+  lastOrderGeneratedAt: number;
+}
+
+export type ShopOrderStatus = 'pending' | 'in_progress' | 'completed';
+export type ShopOrderPriority = 'low' | 'normal' | 'urgent';
+export type ShopOrderType = 'develop' | 'scan' | 'print' | 'develop_scan' | 'develop_print' | 'full_service' | 'combo';
+
+export interface UsedSupply {
+  supplyId: string;
+  supplyName: string;
+  quantity: number;
+  cost: number;
+}
+
+export interface ShopOrder {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  orderType: ShopOrderType;
+  orderTypeLabel: string;
+  filmType: string;
+  quantity: number;
+  priority: ShopOrderPriority;
+  status: ShopOrderStatus;
+  totalPrice: number;
+  basePrice: number;
+  finalPrice: number;
+  cost: number;
+  profit: number;
+  supplyCost: number;
+  createdAt: number;
+  startedAt?: number;
+  completedAt?: number;
+  estimatedDuration: number;
+  assignedEmployeeId: string | null;
+  employeeId?: string;
+  facilityIds: string[];
+  notes: string;
+  qualityTarget: number;
+  finalQuality?: number;
+  usedSupplies: UsedSupply[];
+  customerRating?: number;
+  customerComment?: string;
+}
+
+export interface GameState {
+  currentSubject: PhotoSubject | null;
+  currentFilm: FilmStock;
+  currentParams: DevParams;
+  developmentProgress: number;
+  isDeveloping: boolean;
+  phase: GamePhase;
+  processedPhotos: ProcessedPhoto[];
+  tutorial: TutorialState;
+  tutorialStep: number;
+  selectedAlbumPhoto: ProcessedPhoto | null;
+  presets: ParamPreset[];
+  presetHistory: PresetHistory[];
+  lastAppliedPresetId: string | null;
+  adjustedParams: (keyof DevParams)[];
+  subjectSelectedAt: number | null;
+  filmSelectedAt: number | null;
+  paramAdjustTimestamps: Partial<Record<keyof DevParams, number>>;
+  developStartedAt: number | null;
+  stageState: StageState;
+  compareSelection: string[];
+  compareSubjectId: string | null;
+  favorites: FavoriteInfo[];
+  collections: PhotoCollection[];
+  collectionFilter: CollectionFilter;
+  quickBrowseIndex: number;
+  quickBrowsePhotoIds: string[];
+  storageStatus: StorageStatus;
+  attemptHistory: AttemptRecord[];
+  achievements: AchievementState;
+  orders: DarkroomOrder[];
+  currentOrderId: string | null;
+  orderFilter: OrderFilter;
+  orderScheduleSlots: ScheduleSlot[];
+  filmLab: FilmLabState;
+  questSystem: QuestSystemState;
+  reviewSystem: ReviewSystemState;
+  inventorySystem: InventorySystemState;
+  publicationSystem: PublicationState;
+  subjectWorkshop: SubjectWorkshopState;
+  curriculumSystem: CurriculumSystemState;
+  consignmentMarket: ConsignmentMarketState;
+  exhibitionSystem: ExhibitionState;
+  darkroomCalibration: DarkroomCalibrationState;
+  challengeSystem: ChallengeState;
+  filmGuide: FilmGuideState;
+  shopManagement: ShopManagementState;
 }
 
 

@@ -31,6 +31,7 @@
   import DarkroomCalibration from './components/DarkroomCalibration.svelte';
   import PhotoChallenge from './components/PhotoChallenge.svelte';
   import FilmGuide from './components/FilmGuide.svelte';
+  import ShopManagement from './components/ShopManagement.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -56,6 +57,7 @@
   let showDarkroomCalibration = false;
   let showChallenge = false;
   let showFilmGuide = false;
+  let showShopManagement = false;
 
   function goToOrderScoring() {
     if (currentOrder) {
@@ -620,6 +622,13 @@
         <span>📖</span>
       </button>
       <button
+        class="header-btn shop"
+        on:click={() => { showShopManagement = true; }}
+        title="门店经营模拟"
+      >
+        <span>🏪</span>
+      </button>
+      <button
         class="header-btn help"
         on:click={() => { gameStore.resetTutorial(); }}
         title="重新开始教程"
@@ -834,6 +843,10 @@
 
   {#if showFilmGuide}
     <FilmGuide on:close={() => { showFilmGuide = false; }} />
+  {/if}
+
+  {#if showShopManagement}
+    <ShopManagement on:close={() => { showShopManagement = false; }} />
   {/if}
 
   <footer class="app-footer">

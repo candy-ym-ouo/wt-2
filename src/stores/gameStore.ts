@@ -1,6 +1,6 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus, ExhibitionState, Exhibition, ExhibitionWorkGroup, ExhibitionWall, ExhibitionWorkPlacement, ExhibitionTheme, ExhibitionRouteStop, VisitorFeedback, ExhibitionCuratorTab, ExhibitionStatus, DarkroomCalibrationState, EnlargerProfile, TempZone, TimerProgram, TimerStep, EnlargerCalibrationRecord, TempCalibrationRecord, TimerCalibrationRecord, DeviationRecord, CalibrationTab, CalibrationStatistics, ChallengeState, ChallengeDefinition, ChallengeTab, ChallengeFilter, ChallengeTeam, ChallengeSubmission, ChallengeSeason, ChallengeParticipationResult, ChallengeReview, ReviewResult, ChallengeTheme, ChallengeStatus, ChallengeRegistration, TeamRole, ChallengeLeaderboardEntry, ChallengeTeamLeaderboardEntry, ChallengeAwardResult, FilmGuideState, FilmGuideTab } from '../types/game';
-import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES, DEFAULT_WORKSHOP_STATE, createBlankTemplate, DEFAULT_FILM_GUIDE_STATE } from '../data/gameData';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus, ExhibitionState, Exhibition, ExhibitionWorkGroup, ExhibitionWall, ExhibitionWorkPlacement, ExhibitionTheme, ExhibitionRouteStop, VisitorFeedback, ExhibitionCuratorTab, ExhibitionStatus, DarkroomCalibrationState, EnlargerProfile, TempZone, TimerProgram, TimerStep, EnlargerCalibrationRecord, TempCalibrationRecord, TimerCalibrationRecord, DeviationRecord, CalibrationTab, CalibrationStatistics, ChallengeState, ChallengeDefinition, ChallengeTab, ChallengeFilter, ChallengeTeam, ChallengeSubmission, ChallengeSeason, ChallengeParticipationResult, ChallengeReview, ReviewResult, ChallengeTheme, ChallengeStatus, ChallengeRegistration, TeamRole, ChallengeLeaderboardEntry, ChallengeTeamLeaderboardEntry, ChallengeAwardResult, FilmGuideState, FilmGuideTab, ShopManagementState, ShopManagementTab, Employee, SupplyItem, Facility, FinanceRecord, ReputationReview, ShopOrder, ShopStatistics, SupplyUsageRecord } from '../types/game';
+import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES, DEFAULT_WORKSHOP_STATE, createBlankTemplate, DEFAULT_FILM_GUIDE_STATE, createInitialShopManagementState } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
 import {
@@ -43,7 +43,9 @@ import {
   loadSavedDarkroomCalibration,
   saveDarkroomCalibration,
   loadSavedChallengeSystem,
-  saveChallengeSystem
+  saveChallengeSystem,
+  loadSavedShopManagement,
+  saveShopManagement
 } from '../utils/storage';
 import {
   createInitialQuestSystemState,
@@ -724,6 +726,7 @@ function createInitialGameState(): GameState {
   const exhibitionSystemResult = loadSavedExhibitionSystem();
   const darkroomCalibrationResult = loadSavedDarkroomCalibration();
   const challengeSystemResult = loadSavedChallengeSystem();
+  const shopManagementResult = loadSavedShopManagement();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -744,6 +747,7 @@ function createInitialGameState(): GameState {
   storageStatus.exhibitionSystemLoaded = exhibitionSystemResult.status.exhibitionSystemLoaded || false;
   storageStatus.darkroomCalibrationLoaded = darkroomCalibrationResult.status.darkroomCalibrationLoaded || false;
   storageStatus.challengeSystemLoaded = challengeSystemResult.status.challengeSystemLoaded || false;
+  storageStatus.shopManagementLoaded = shopManagementResult.status.shopManagementLoaded || false;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
@@ -759,7 +763,8 @@ function createInitialGameState(): GameState {
     consignmentMarketResult.status.migrationPerformed ||
     exhibitionSystemResult.status.migrationPerformed ||
     darkroomCalibrationResult.status.migrationPerformed ||
-    challengeSystemResult.status.migrationPerformed);
+    challengeSystemResult.status.migrationPerformed ||
+    shopManagementResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
     tutorialResult.status.recoveryPerformed ||
@@ -774,7 +779,8 @@ function createInitialGameState(): GameState {
     consignmentMarketResult.status.recoveryPerformed ||
     exhibitionSystemResult.status.recoveryPerformed ||
     darkroomCalibrationResult.status.recoveryPerformed ||
-    challengeSystemResult.status.recoveryPerformed);
+    challengeSystemResult.status.recoveryPerformed ||
+    shopManagementResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
@@ -896,7 +902,8 @@ function createInitialGameState(): GameState {
     exhibitionSystem: exhibitionSystemResult.state,
     darkroomCalibration: darkroomCalibrationResult.state,
     challengeSystem: challengeSystemResult.state,
-    filmGuide: { ...DEFAULT_FILM_GUIDE_STATE }
+    filmGuide: { ...DEFAULT_FILM_GUIDE_STATE },
+    shopManagement: shopManagementResult.state
   };
 }
 
@@ -5532,7 +5539,798 @@ function createGameStore() {
       }
       const filmEvent = new CustomEvent('selectFilm', { detail: filmId });
       document.dispatchEvent(filmEvent);
-    }
+    },
+
+    setShopTab: (tab: ShopManagementTab) => update(state => {
+      const newShop = { ...state.shopManagement, activeTab: tab };
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    toggleShopOpen: () => update(state => {
+      const newShop = { ...state.shopManagement, isOpen: !state.shopManagement.isOpen };
+      if (newShop.isOpen) {
+        newShop.dailyStartTime = Date.now();
+        newShop.isPaused = false;
+      } else {
+        newShop.isPaused = true;
+      }
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    toggleShopPause: () => update(state => {
+      const newShop = { ...state.shopManagement, isPaused: !state.shopManagement.isPaused };
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    setGameSpeed: (speed: number) => update(state => {
+      const newShop = { ...state.shopManagement, gameSpeed: Math.max(1, Math.min(3, speed)) };
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    setPriceMultiplier: (multiplier: number) => update(state => {
+      const newShop = { ...state.shopManagement, priceMultiplier: Math.max(0.5, Math.min(2, multiplier)) };
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    setMarketingBudget: (budget: number) => update(state => {
+      const newShop = { ...state.shopManagement, marketingBudget: Math.max(0, budget) };
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    selectEmployee: (employeeId: string | null) => update(state => {
+      const newShop = { ...state.shopManagement, selectedEmployeeId: employeeId };
+      return { ...state, shopManagement: newShop };
+    }),
+
+    trainEmployee: (employeeId: string, skillId: string) => update(state => {
+      const now = Date.now();
+      const employee = state.shopManagement.employees.find(e => e.id === employeeId);
+      if (!employee) return state;
+
+      const trainingCost = 500;
+      if (state.shopManagement.finances.cash < trainingCost) return state;
+
+      const newEmployees = state.shopManagement.employees.map(e => {
+        if (e.id !== employeeId) return e;
+        const newSkills = e.skills.map(s => {
+          if (s.id !== skillId || s.level >= s.maxLevel) return s;
+          return { ...s, level: s.level + 1, experience: 0 };
+        });
+        return { ...e, skills: newSkills, status: 'training' as const, trainingProgress: 100 };
+      });
+
+      const newFinanceRecord: FinanceRecord = {
+        id: generateId(),
+        type: 'expense',
+        category: 'training',
+        amount: trainingCost,
+        description: `员工培训: ${employee.name}`,
+        timestamp: now,
+        relatedEmployeeId: employeeId
+      };
+
+      const newShop = {
+        ...state.shopManagement,
+        employees: newEmployees,
+        finances: {
+          ...state.shopManagement.finances,
+          cash: state.shopManagement.finances.cash - trainingCost
+        },
+        financeRecords: [newFinanceRecord, ...state.shopManagement.financeRecords],
+        statistics: {
+          ...state.shopManagement.statistics,
+          totalExpenses: state.shopManagement.statistics.totalExpenses + trainingCost,
+          netProfit: state.shopManagement.statistics.netProfit - trainingCost
+        }
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    hireEmployee: (role: Employee['role'], name: string) => update(state => {
+      const now = Date.now();
+      const hireCost = 1000;
+      if (state.shopManagement.finances.cash < hireCost) return state;
+      if (state.shopManagement.employees.length >= 8) return state;
+
+      const salaryBase: Record<string, number> = {
+        developer: 3000,
+        assistant: 1800,
+        receptionist: 2000,
+        manager: 5000
+      };
+
+      type SkillEffect = Employee['skills'][0]['effect'];
+      const avatars = ['👨‍🔬', '👩‍🔬', '👨‍🎨', '👩‍🎨', '🧑‍💼', '👨‍🏭', '👩‍🏭', '🧑‍🍳'];
+      const roleSkills: Record<string, Array<{ name: string; desc: string; effect: SkillEffect }>> = {
+        developer: [
+          { name: '显影精通', desc: '提高显影评分', effect: { type: 'score_bonus', value: 2 } as SkillEffect },
+          { name: '效率专家', desc: '加快处理速度', effect: { type: 'speed_bonus', value: 0.1 } as SkillEffect },
+          { name: '成本控制', desc: '降低耗材消耗', effect: { type: 'cost_reduction', value: 0.05 } as SkillEffect }
+        ],
+        assistant: [
+          { name: '快速学习', desc: '经验获取更快', effect: { type: 'score_bonus', value: 1 } as SkillEffect },
+          { name: '多面手', desc: '可协助各种工作', effect: { type: 'speed_bonus', value: 0.05 } as SkillEffect },
+          { name: '细心谨慎', desc: '减少操作失误', effect: { type: 'quality_bonus', value: 0.03 } as SkillEffect }
+        ],
+        receptionist: [
+          { name: '沟通达人', desc: '提高顾客满意度', effect: { type: 'reputation_bonus', value: 0.02 } as SkillEffect },
+          { name: '快速接单', desc: '增加订单容量', effect: { type: 'capacity_bonus', value: 1 } as SkillEffect },
+          { name: '销售技巧', desc: '提高订单价格', effect: { type: 'score_bonus', value: 3 } as SkillEffect }
+        ],
+        manager: [
+          { name: '团队管理', desc: '全体员工效率提升', effect: { type: 'speed_bonus', value: 0.15 } as SkillEffect },
+          { name: '品质把控', desc: '整体评分提升', effect: { type: 'score_bonus', value: 5 } as SkillEffect },
+          { name: '成本优化', desc: '整体运营成本降低', effect: { type: 'cost_reduction', value: 0.1 } as SkillEffect }
+        ]
+      };
+
+      const newId = generateId();
+      const skills = roleSkills[role].map((s, idx) => ({
+        id: `${newId}_skill_${idx}`,
+        name: s.name,
+        level: 1,
+        maxLevel: 5,
+        experience: 0,
+        description: s.desc,
+        effect: s.effect
+      }));
+
+      const newEmployee: Employee = {
+        id: newId,
+        name,
+        avatar: avatars[Math.floor(Math.random() * avatars.length)],
+        role,
+        status: 'idle',
+        level: 1,
+        experience: 0,
+        skills,
+        salary: salaryBase[role] + 300,
+        hireDate: now,
+        satisfaction: 80 + Math.floor(Math.random() * 20),
+        trainingProgress: 0,
+        assignedOrderIds: [],
+        skillBonuses: {}
+      };
+
+      const newFinanceRecord: FinanceRecord = {
+        id: generateId(),
+        type: 'expense',
+        category: 'other',
+        amount: hireCost,
+        description: `招聘员工: ${name}`,
+        timestamp: now,
+        relatedEmployeeId: newId
+      };
+
+      const newShop = {
+        ...state.shopManagement,
+        employees: [...state.shopManagement.employees, newEmployee],
+        finances: {
+          ...state.shopManagement.finances,
+          cash: state.shopManagement.finances.cash - hireCost
+        },
+        financeRecords: [newFinanceRecord, ...state.shopManagement.financeRecords],
+        statistics: {
+          ...state.shopManagement.statistics,
+          totalExpenses: state.shopManagement.statistics.totalExpenses + hireCost,
+          netProfit: state.shopManagement.statistics.netProfit - hireCost
+        }
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    fireEmployee: (employeeId: string) => update(state => {
+      const now = Date.now();
+      const employee = state.shopManagement.employees.find(e => e.id === employeeId);
+      if (!employee) return state;
+      if (state.shopManagement.employees.length <= 1) return state;
+
+      const severance = employee.salary * 0.5;
+      if (state.shopManagement.finances.cash < severance) return state;
+
+      const newFinanceRecord: FinanceRecord = {
+        id: generateId(),
+        type: 'expense',
+        category: 'other',
+        amount: severance,
+        description: `遣散费: ${employee.name}`,
+        timestamp: now,
+        relatedEmployeeId: employeeId
+      };
+
+      const newShop = {
+        ...state.shopManagement,
+        employees: state.shopManagement.employees.filter(e => e.id !== employeeId),
+        selectedEmployeeId: state.shopManagement.selectedEmployeeId === employeeId ? null : state.shopManagement.selectedEmployeeId,
+        finances: {
+          ...state.shopManagement.finances,
+          cash: state.shopManagement.finances.cash - severance
+        },
+        financeRecords: [newFinanceRecord, ...state.shopManagement.financeRecords],
+        statistics: {
+          ...state.shopManagement.statistics,
+          totalExpenses: state.shopManagement.statistics.totalExpenses + severance,
+          netProfit: state.shopManagement.statistics.netProfit - severance
+        }
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    selectSupply: (supplyId: string | null) => update(state => {
+      const newShop = { ...state.shopManagement, selectedSupplyId: supplyId };
+      return { ...state, shopManagement: newShop };
+    }),
+
+    purchaseSupply: (supplyId: string, quantity: number) => update(state => {
+      const now = Date.now();
+      const supply = state.shopManagement.supplies.find(s => s.id === supplyId);
+      if (!supply) return state;
+
+      const totalCost = supply.unitCost * quantity;
+      if (state.shopManagement.finances.cash < totalCost) return state;
+
+      const newSupplies = state.shopManagement.supplies.map(s => {
+        if (s.id !== supplyId) return s;
+        return {
+          ...s,
+          currentStock: s.currentStock + quantity,
+          quantity: s.quantity + quantity
+        };
+      });
+
+      const usageRecord: SupplyUsageRecord = {
+        id: generateId(),
+        supplyId,
+        type: 'purchase',
+        quantity,
+        timestamp: now,
+        cost: totalCost,
+        operator: '系统'
+      };
+
+      const newFinanceRecord: FinanceRecord = {
+        id: generateId(),
+        type: 'expense',
+        category: 'supply',
+        amount: totalCost,
+        description: `采购耗材: ${supply.name} x${quantity}`,
+        timestamp: now,
+        relatedSupplyId: supplyId
+      };
+
+      const newShop = {
+        ...state.shopManagement,
+        supplies: newSupplies,
+        supplyRecords: [usageRecord, ...state.shopManagement.supplyRecords],
+        finances: {
+          ...state.shopManagement.finances,
+          cash: state.shopManagement.finances.cash - totalCost
+        },
+        financeRecords: [newFinanceRecord, ...state.shopManagement.financeRecords],
+        statistics: {
+          ...state.shopManagement.statistics,
+          totalExpenses: state.shopManagement.statistics.totalExpenses + totalCost,
+          netProfit: state.shopManagement.statistics.netProfit - totalCost
+        }
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    selectFacility: (facilityId: string | null) => update(state => {
+      const newShop = { ...state.shopManagement, selectedFacilityId: facilityId };
+      return { ...state, shopManagement: newShop };
+    }),
+
+    upgradeFacility: (facilityId: string) => update(state => {
+      const now = Date.now();
+      const facility = state.shopManagement.facilities.find(f => f.id === facilityId);
+      if (!facility || !facility.isUnlocked) return state;
+      if (facility.level >= facility.maxLevel) return state;
+
+      const upgradeCost = facility.upgradeCost * facility.level;
+      if (state.shopManagement.finances.cash < upgradeCost) return state;
+
+      const newFacilities = state.shopManagement.facilities.map(f => {
+        if (f.id !== facilityId) return f;
+        return {
+          ...f,
+          level: f.level + 1,
+          condition: Math.min(100, f.condition + 5),
+          effect: {
+            ...f.effect,
+            value: f.effect.value * 1.2
+          }
+        };
+      });
+
+      const newFinanceRecord: FinanceRecord = {
+        id: generateId(),
+        type: 'expense',
+        category: 'upgrade',
+        amount: upgradeCost,
+        description: `升级设施: ${facility.name} 到 Lv.${facility.level + 1}`,
+        timestamp: now,
+        relatedFacilityId: facilityId
+      };
+
+      const newShop = {
+        ...state.shopManagement,
+        facilities: newFacilities,
+        finances: {
+          ...state.shopManagement.finances,
+          cash: state.shopManagement.finances.cash - upgradeCost
+        },
+        financeRecords: [newFinanceRecord, ...state.shopManagement.financeRecords],
+        statistics: {
+          ...state.shopManagement.statistics,
+          totalExpenses: state.shopManagement.statistics.totalExpenses + upgradeCost,
+          netProfit: state.shopManagement.statistics.netProfit - upgradeCost
+        }
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    maintainFacility: (facilityId: string) => update(state => {
+      const now = Date.now();
+      const facility = state.shopManagement.facilities.find(f => f.id === facilityId);
+      if (!facility || !facility.isUnlocked) return state;
+
+      const maintenanceCost = facility.maintenanceCost;
+      if (state.shopManagement.finances.cash < maintenanceCost) return state;
+
+      const newFacilities = state.shopManagement.facilities.map(f => {
+        if (f.id !== facilityId) return f;
+        return { ...f, condition: 100 };
+      });
+
+      const newFinanceRecord: FinanceRecord = {
+        id: generateId(),
+        type: 'expense',
+        category: 'maintenance',
+        amount: maintenanceCost,
+        description: `维护设施: ${facility.name}`,
+        timestamp: now,
+        relatedFacilityId: facilityId
+      };
+
+      const newShop = {
+        ...state.shopManagement,
+        facilities: newFacilities,
+        finances: {
+          ...state.shopManagement.finances,
+          cash: state.shopManagement.finances.cash - maintenanceCost
+        },
+        financeRecords: [newFinanceRecord, ...state.shopManagement.financeRecords],
+        statistics: {
+          ...state.shopManagement.statistics,
+          totalExpenses: state.shopManagement.statistics.totalExpenses + maintenanceCost,
+          netProfit: state.shopManagement.statistics.netProfit - maintenanceCost
+        }
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    unlockFacility: (facilityId: string) => update(state => {
+      const now = Date.now();
+      const facility = state.shopManagement.facilities.find(f => f.id === facilityId);
+      if (!facility || facility.isUnlocked) return state;
+
+      const unlockCost = facility.baseCost;
+      if (state.shopManagement.finances.cash < unlockCost) return state;
+
+      const newFacilities = state.shopManagement.facilities.map(f => {
+        if (f.id !== facilityId) return f;
+        return { ...f, isUnlocked: true };
+      });
+
+      const newFinanceRecord: FinanceRecord = {
+        id: generateId(),
+        type: 'expense',
+        category: 'upgrade',
+        amount: unlockCost,
+        description: `解锁设施: ${facility.name}`,
+        timestamp: now,
+        relatedFacilityId: facilityId
+      };
+
+      const newShop = {
+        ...state.shopManagement,
+        facilities: newFacilities,
+        finances: {
+          ...state.shopManagement.finances,
+          cash: state.shopManagement.finances.cash - unlockCost
+        },
+        financeRecords: [newFinanceRecord, ...state.shopManagement.financeRecords],
+        statistics: {
+          ...state.shopManagement.statistics,
+          totalExpenses: state.shopManagement.statistics.totalExpenses + unlockCost,
+          netProfit: state.shopManagement.statistics.netProfit - unlockCost
+        }
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    generateShopOrder: () => update(state => {
+      const now = Date.now();
+      const shop = state.shopManagement;
+      if (!shop.isOpen || shop.isPaused) return state;
+
+      const maxPendingOrders = 5 + shop.shopLevel;
+      if (shop.pendingOrders.length >= maxPendingOrders) return state;
+
+      const customerNames = ['王先生', '李女士', '张同学', '刘老师', '陈医生', '赵律师', '孙经理', '周摄影师', '吴设计师', '郑艺术家', '黄小姐', '朱先生', '胡女士', '林先生', '何小姐'];
+      const orderTypes: Array<'develop' | 'scan' | 'print' | 'combo'> = ['develop', 'develop', 'scan', 'print', 'combo'];
+      const filmTypes = ['黑白胶片', '彩色胶片', '专业胶片', '特殊胶片'];
+      const quantities = [1, 1, 2, 2, 3, 5];
+      const priorities: Array<'low' | 'normal' | 'urgent'> = ['low', 'normal', 'normal', 'normal', 'urgent'];
+
+      const orderType = orderTypes[Math.floor(Math.random() * orderTypes.length)];
+      const quantity = quantities[Math.floor(Math.random() * quantities.length)];
+      const filmType = filmTypes[Math.floor(Math.random() * filmTypes.length)];
+      const priority = priorities[Math.floor(Math.random() * priorities.length)];
+      const customerName = customerNames[Math.floor(Math.random() * customerNames.length)];
+
+      const basePrice: Record<string, number> = {
+        develop: 80,
+        scan: 50,
+        print: 120,
+        combo: 200
+      };
+
+      const priorityMultiplier: Record<string, number> = {
+        low: 0.9,
+        normal: 1.0,
+        urgent: 1.5
+      };
+
+      const totalPrice = Math.round(basePrice[orderType] * quantity * priorityMultiplier[priority] * shop.priceMultiplier);
+
+      const reputationBonus = shop.shopReputation / 100;
+      const orderChance = 0.3 + reputationBonus * 0.4 + (shop.marketingBudget / 2000) * 0.2;
+
+      if (Math.random() > orderChance) return state;
+
+      const typeLabels: Record<string, string> = {
+        develop: '胶片冲洗',
+        scan: '底片扫描',
+        print: '照片打印',
+        combo: '全套服务'
+      };
+
+      const newOrder: ShopOrder = {
+        id: generateId(),
+        orderNumber: `SO${String(shop.statistics.totalOrders + 1).padStart(6, '0')}`,
+        customerName,
+        orderType,
+        orderTypeLabel: typeLabels[orderType],
+        filmType,
+        quantity,
+        priority,
+        totalPrice,
+        basePrice: basePrice[orderType] * quantity,
+        finalPrice: totalPrice,
+        cost: Math.round(totalPrice * 0.3),
+        profit: Math.round(totalPrice * 0.7),
+        supplyCost: Math.round(totalPrice * 0.2),
+        status: 'pending',
+        createdAt: now,
+        estimatedDuration: 24 * 60 * 60 * 1000,
+        assignedEmployeeId: null,
+        notes: `顾客要求${filmType}${quantity}卷${typeLabels[orderType]}服务`,
+        qualityTarget: 70 + Math.floor(Math.random() * 20),
+        usedSupplies: [],
+        facilityIds: []
+      };
+
+      const newShop = {
+        ...state.shopManagement,
+        autoManageOrders: [...shop.autoManageOrders, newOrder],
+        pendingOrders: [...shop.pendingOrders, newOrder.id],
+        lastOrderGeneratedAt: now,
+        statistics: {
+          ...shop.statistics,
+          totalOrders: shop.statistics.totalOrders + 1
+        }
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    completeShopOrder: (orderId: string) => update(state => {
+      const now = Date.now();
+      const order = state.shopManagement.autoManageOrders.find(o => o.id === orderId);
+      if (!order || order.status !== 'in_progress') return state;
+
+      const qualityScore = 60 + Math.floor(Math.random() * 35);
+      const customerSatisfaction = Math.min(5, Math.max(1, Math.round(qualityScore / 20)));
+      const reputationChange = (customerSatisfaction - 3) * 2;
+
+      const newOrders = state.shopManagement.autoManageOrders.map(o => {
+        if (o.id !== orderId) return o;
+        return { ...o, status: 'completed' as const, completedAt: now, finalQuality: qualityScore };
+      });
+
+      const reviewTags = ['品质优秀', '速度快', '服务好', '价格合理', '专业建议', '包装精美', '沟通顺畅', '值得推荐', '细节处理好', '创意十足'];
+      const selectedTags = reviewTags.sort(() => Math.random() - 0.5).slice(0, Math.floor(Math.random() * 3) + 1);
+
+      const reviewComments: Record<number, string[]> = {
+        5: ['非常满意，超出预期！', '品质一流，下次还来！', '专业水准，值得信赖！'],
+        4: ['很满意，服务很好！', '效果不错，推荐！', '整体体验很好'],
+        3: ['还可以，符合预期', '一般般吧', '还行'],
+        2: ['不太满意，有些问题', '效果一般', '速度慢了点'],
+        1: ['很不满意，需要改进', '质量差，不推荐', '服务态度不好']
+      };
+
+      const comment = reviewComments[customerSatisfaction][Math.floor(Math.random() * reviewComments[customerSatisfaction].length)];
+
+      const newReview: ReputationReview = {
+        id: generateId(),
+        orderId,
+        customerName: order.customerName,
+        rating: customerSatisfaction,
+        comment,
+        tags: selectedTags,
+        timestamp: now,
+        qualityScore
+      };
+
+      const newReputation = Math.max(0, Math.min(state.shopManagement.maxReputation, state.shopManagement.shopReputation + reputationChange));
+
+      const expGain = order.totalPrice / 10;
+      const newExp = state.shopManagement.shopExperience + expGain;
+      const expNeeded = state.shopManagement.shopLevel * 1000;
+      let newLevel = state.shopManagement.shopLevel;
+      let remainingExp = newExp;
+
+      while (remainingExp >= newLevel * 1000) {
+        remainingExp -= newLevel * 1000;
+        newLevel++;
+      }
+
+      const newFinanceRecord: FinanceRecord = {
+        id: generateId(),
+        type: 'income',
+        category: 'order',
+        amount: order.totalPrice,
+        description: `订单完成: ${order.orderTypeLabel} x${order.quantity}`,
+        timestamp: now,
+        relatedOrderId: orderId
+      };
+
+      const employeeId = order.assignedEmployeeId;
+      let newEmployees = state.shopManagement.employees;
+      if (employeeId) {
+        newEmployees = state.shopManagement.employees.map(e => {
+          if (e.id !== employeeId) return e;
+          const expGain = Math.floor(order.totalPrice / 20);
+          let newExp = e.experience + expGain;
+          let newLevel = e.level;
+          while (newExp >= newLevel * 100) {
+            newExp -= newLevel * 100;
+            newLevel++;
+          }
+          return {
+            ...e,
+            status: 'idle' as const,
+            experience: newExp,
+            level: newLevel,
+            assignedOrderIds: e.assignedOrderIds.filter(id => id !== orderId)
+          };
+        });
+      }
+
+      const newShop = {
+        ...state.shopManagement,
+        autoManageOrders: newOrders,
+        pendingOrders: state.shopManagement.pendingOrders.filter(id => id !== orderId),
+        reputationReviews: [newReview, ...state.shopManagement.reputationReviews].slice(0, 100),
+        shopReputation: newReputation,
+        shopExperience: remainingExp,
+        shopLevel: newLevel,
+        employees: newEmployees,
+        finances: {
+          ...state.shopManagement.finances,
+          cash: state.shopManagement.finances.cash + order.totalPrice
+        },
+        financeRecords: [newFinanceRecord, ...state.shopManagement.financeRecords],
+        statistics: {
+          ...state.shopManagement.statistics,
+          completedOrders: state.shopManagement.statistics.completedOrders + 1,
+          totalRevenue: state.shopManagement.statistics.totalRevenue + order.totalPrice,
+          netProfit: state.shopManagement.statistics.netProfit + order.totalPrice,
+          avgCustomerRating: (state.shopManagement.statistics.avgCustomerRating * state.shopManagement.statistics.completedOrders + customerSatisfaction) / (state.shopManagement.statistics.completedOrders + 1)
+        }
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    assignOrderToEmployee: (orderId: string, employeeId: string) => update(state => {
+      const now = Date.now();
+      const order = state.shopManagement.autoManageOrders.find(o => o.id === orderId);
+      const employee = state.shopManagement.employees.find(e => e.id === employeeId);
+      if (!order || !employee) return state;
+      if (employee.status !== 'idle') return state;
+
+      const speedBonus = employee.skills.reduce((bonus, skill) => {
+        if (skill.effect.type === 'speed_bonus') {
+          return bonus + skill.effect.value * skill.level;
+        }
+        return bonus;
+      }, 0);
+
+      const estimatedDuration = order.estimatedDuration * (1 - Math.min(speedBonus, 0.5));
+
+      const newOrders = state.shopManagement.autoManageOrders.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          status: 'in_progress' as const,
+          assignedEmployeeId: employeeId,
+          startedAt: now,
+          estimatedDuration
+        };
+      });
+
+      const newEmployees = state.shopManagement.employees.map(e => {
+        if (e.id !== employeeId) return e;
+        return {
+          ...e,
+          status: 'working' as const,
+          assignedOrderIds: [...e.assignedOrderIds, orderId]
+        };
+      });
+
+      const supplyCosts: Array<{ supplyId: string; quantity: number }> = [];
+      if (order.orderType === 'develop' || order.orderType === 'combo') {
+        supplyCosts.push({ supplyId: 'supply_chemical_developer', quantity: 0.5 });
+        supplyCosts.push({ supplyId: 'supply_chemical_fixer', quantity: 0.3 });
+      }
+      if (order.orderType === 'print' || order.orderType === 'combo') {
+        supplyCosts.push({ supplyId: 'supply_paper_rc', quantity: order.quantity });
+      }
+
+      let newSupplies = state.shopManagement.supplies;
+      const newSupplyRecords: SupplyUsageRecord[] = [];
+      supplyCosts.forEach(sc => {
+        const supply = state.shopManagement.supplies.find(s => s.id === sc.supplyId);
+        if (supply) {
+          newSupplies = newSupplies.map(s => {
+            if (s.id !== sc.supplyId) return s;
+            return { ...s, currentStock: Math.max(0, s.currentStock - sc.quantity) };
+          });
+          newSupplyRecords.push({
+            id: generateId(),
+            supplyId: sc.supplyId,
+            type: 'consume',
+            quantity: sc.quantity,
+            timestamp: now,
+            cost: supply.unitCost * sc.quantity,
+            orderId: orderId,
+            operator: employee.name
+          });
+        }
+      });
+
+      const newShop = {
+        ...state.shopManagement,
+        autoManageOrders: newOrders,
+        employees: newEmployees,
+        supplies: newSupplies,
+        supplyRecords: [...newSupplyRecords, ...state.shopManagement.supplyRecords]
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    paySalaries: () => update(state => {
+      const now = Date.now();
+      const totalSalary = state.shopManagement.employees.reduce((sum, e) => sum + e.salary, 0);
+
+      if (state.shopManagement.finances.cash < totalSalary) return state;
+
+      const newFinanceRecord: FinanceRecord = {
+        id: generateId(),
+        type: 'expense',
+        category: 'salary',
+        amount: totalSalary,
+        description: `发放员工薪资 - 第${state.shopManagement.dayNumber}天`,
+        timestamp: now
+      };
+
+      const newEmployees = state.shopManagement.employees.map(e => ({
+        ...e,
+        satisfaction: Math.min(100, e.satisfaction + 2)
+      }));
+
+      const newShop = {
+        ...state.shopManagement,
+        employees: newEmployees,
+        finances: {
+          ...state.shopManagement.finances,
+          cash: state.shopManagement.finances.cash - totalSalary
+        },
+        financeRecords: [newFinanceRecord, ...state.shopManagement.financeRecords],
+        statistics: {
+          ...state.shopManagement.statistics,
+          totalExpenses: state.shopManagement.statistics.totalExpenses + totalSalary,
+          netProfit: state.shopManagement.statistics.netProfit - totalSalary
+        }
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    newDay: () => update(state => {
+      const now = Date.now();
+      const marketingCost = state.shopManagement.marketingBudget;
+
+      const newFinanceRecord: FinanceRecord = {
+        id: generateId(),
+        type: 'expense',
+        category: 'marketing',
+        amount: marketingCost,
+        description: `营销费用 - 第${state.shopManagement.dayNumber}天`,
+        timestamp: now
+      };
+
+      const newEmployees = state.shopManagement.employees.map(e => {
+        if (e.status === 'training') {
+          return { ...e, status: 'idle' as const, trainingProgress: 0 };
+        }
+        return e;
+      });
+
+      const newShop = {
+        ...state.shopManagement,
+        dayNumber: state.shopManagement.dayNumber + 1,
+        dailyStartTime: now,
+        employees: newEmployees,
+        finances: {
+          ...state.shopManagement.finances,
+          cash: state.shopManagement.finances.cash - marketingCost
+        },
+        financeRecords: [newFinanceRecord, ...state.shopManagement.financeRecords],
+        statistics: {
+          ...state.shopManagement.statistics,
+          totalExpenses: state.shopManagement.statistics.totalExpenses + marketingCost,
+          netProfit: state.shopManagement.statistics.netProfit - marketingCost
+        }
+      };
+
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    }),
+
+    resetShopManagement: () => update(state => {
+      const newShop = createInitialShopManagementState();
+      saveShopManagement(newShop);
+      return { ...state, shopManagement: newShop };
+    })
   };
 }
 

@@ -1,4 +1,4 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState, CurriculumSystemState, ConsignmentMarketState, ExhibitionState, DarkroomCalibrationState, ChallengeState } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState, CurriculumSystemState, ConsignmentMarketState, ExhibitionState, DarkroomCalibrationState, ChallengeState, ShopManagementState } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 import { createInitialQuestSystemState } from './questSystem';
 import { createInitialReviewSystemState } from './reviewSystem';
@@ -45,7 +45,10 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system' | 'curriculum_system' | 'consignment_market' | 'exhibition_system' | 'darkroom_calibration' | 'challenge_system';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system' | 'curriculum_system' | 'consignment_market' | 'exhibition_system' | 'darkroom_calibration' | 'challenge_system' | 'shop_management';
+export const MAX_SHOP_FINANCE_RECORDS = 500;
+export const MAX_SHOP_REVIEWS = 200;
+export const MAX_SHOP_SUPPLY_RECORDS = 300;
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
@@ -63,7 +66,8 @@ const KEY_MAP: Record<StorageKey, string> = {
   consignment_market: 'darkroom_consignment_market',
   exhibition_system: 'darkroom_exhibition_system',
   darkroom_calibration: 'darkroom_calibration',
-  challenge_system: 'darkroom_challenge_system'
+  challenge_system: 'darkroom_challenge_system',
+  shop_management: 'darkroom_shop_management'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -1473,4 +1477,78 @@ export function saveChallengeSystem(state: ChallengeState): boolean {
   const limited = enforceLimits('challenge_system', state) as ChallengeState;
   const itemCount = limited.challenges.length + limited.teams.length + limited.submissions.length + limited.registrations.length;
   return saveWithBackup('challenge_system', limited, itemCount);
+}
+
+import { createInitialShopManagementState } from '../data/gameData';
+
+function validateShopManagementState(data: unknown): data is ShopManagementState {
+  if (typeof data !== 'object' || data === null) return false;
+  const s = data as Record<string, unknown>;
+  return (
+    typeof s.shopName === 'string' &&
+    Array.isArray(s.employees) &&
+    Array.isArray(s.supplies) &&
+    Array.isArray(s.facilities) &&
+    Array.isArray(s.financeRecords)
+  );
+}
+
+export function repairShopManagement(state: ShopManagementState): ShopManagementState {
+  const initial = createInitialShopManagementState();
+  if (!state) return initial;
+
+  return {
+    ...initial,
+    isOpen: typeof state.isOpen === 'boolean' ? state.isOpen : initial.isOpen,
+    activeTab: typeof state.activeTab === 'string' ? state.activeTab : initial.activeTab,
+    shopName: typeof state.shopName === 'string' ? state.shopName : initial.shopName,
+    shopLevel: typeof state.shopLevel === 'number' ? state.shopLevel : initial.shopLevel,
+    shopExperience: typeof state.shopExperience === 'number' ? state.shopExperience : initial.shopExperience,
+    shopReputation: typeof state.shopReputation === 'number' ? state.shopReputation : initial.shopReputation,
+    maxReputation: typeof state.maxReputation === 'number' ? state.maxReputation : initial.maxReputation,
+    dayNumber: typeof state.dayNumber === 'number' ? state.dayNumber : initial.dayNumber,
+    isPaused: typeof state.isPaused === 'boolean' ? state.isPaused : initial.isPaused,
+    employees: Array.isArray(state.employees) ? state.employees : initial.employees,
+    supplies: Array.isArray(state.supplies) ? state.supplies : initial.supplies,
+    supplyRecords: Array.isArray(state.supplyRecords) ? state.supplyRecords.slice(0, MAX_SHOP_SUPPLY_RECORDS) : initial.supplyRecords,
+    facilities: Array.isArray(state.facilities) ? state.facilities : initial.facilities,
+    financeRecords: Array.isArray(state.financeRecords) ? state.financeRecords.slice(0, MAX_SHOP_FINANCE_RECORDS) : initial.financeRecords,
+    reputationReviews: Array.isArray(state.reputationReviews) ? state.reputationReviews.slice(0, MAX_SHOP_REVIEWS) : initial.reputationReviews,
+    finances: state.finances || initial.finances,
+    statistics: state.statistics || initial.statistics,
+    gameSpeed: typeof state.gameSpeed === 'number' ? state.gameSpeed : initial.gameSpeed,
+    selectedEmployeeId: state.selectedEmployeeId || null,
+    selectedFacilityId: state.selectedFacilityId || null,
+    selectedSupplyId: state.selectedSupplyId || null,
+    autoManageOrders: Array.isArray(state.autoManageOrders) ? state.autoManageOrders : initial.autoManageOrders,
+    pendingOrders: Array.isArray(state.pendingOrders) ? state.pendingOrders : initial.pendingOrders,
+    marketingBudget: typeof state.marketingBudget === 'number' ? state.marketingBudget : initial.marketingBudget,
+    priceMultiplier: typeof state.priceMultiplier === 'number' ? state.priceMultiplier : initial.priceMultiplier,
+    lastOrderGeneratedAt: typeof state.lastOrderGeneratedAt === 'number' ? state.lastOrderGeneratedAt : initial.lastOrderGeneratedAt
+  };
+}
+
+export function loadSavedShopManagement(): { state: ShopManagementState; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<ShopManagementState>('shop_management', createInitialShopManagementState());
+  const status: Partial<StorageStatus> = {
+    shopManagementLoaded: result.success
+  };
+
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+
+  let state = result.data || createInitialShopManagementState();
+  state = repairShopManagement(state);
+
+  return { state, status };
+}
+
+export function saveShopManagement(state: ShopManagementState): boolean {
+  const itemCount = state.employees.length + state.supplies.length + state.facilities.length + 
+                    state.financeRecords.length + state.reputationReviews.length + state.supplyRecords.length;
+  return saveWithBackup('shop_management', state, itemCount);
 }

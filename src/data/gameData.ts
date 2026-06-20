@@ -3005,3 +3005,410 @@ export const DEFAULT_FILM_GUIDE_STATE: FilmGuideState = {
   filterSceneType: 'all',
   viewedFilmIds: []
 };
+
+import type { Employee, SupplyItem, Facility, ShopManagementState, ShopStatistics } from '../types/game';
+
+const EMPLOYEE_AVATARS = ['👨‍🔬', '👩‍🔬', '👨‍🎨', '👩‍🎨', '🧑‍💼', '👨‍🏭', '👩‍🏭', '🧑‍🍳'];
+
+const EMPLOYEE_NAMES = [
+  '李明', '王芳', '张伟', '刘洋', '陈静', '赵强', '孙丽', '周杰',
+  '吴敏', '郑浩', '黄婷', '朱军', '胡雪', '林峰', '何梅', '高鹏'
+];
+
+function createEmployee(id: string, role: Employee['role'], name: string, level: number): Employee {
+  type SkillEffect = Employee['skills'][0]['effect'];
+  
+  const baseSkills: Record<string, { name: string; desc: string; effect: SkillEffect }> = {
+    developer: { name: '显影精通', desc: '提高显影评分', effect: { type: 'score_bonus', value: 2 } as SkillEffect },
+    assistant: { name: '快速学习', desc: '经验获取更快', effect: { type: 'score_bonus', value: 1 } as SkillEffect },
+    receptionist: { name: '沟通达人', desc: '提高顾客满意度', effect: { type: 'reputation_bonus', value: 0.02 } as SkillEffect },
+    manager: { name: '团队管理', desc: '全体员工效率提升', effect: { type: 'speed_bonus', value: 0.15 } as SkillEffect }
+  };
+
+  const roleSkills: Record<string, Array<{ name: string; desc: string; effect: SkillEffect }>> = {
+    developer: [
+      { name: '显影精通', desc: '提高显影评分', effect: { type: 'score_bonus', value: 2 } as SkillEffect },
+      { name: '效率专家', desc: '加快处理速度', effect: { type: 'speed_bonus', value: 0.1 } as SkillEffect },
+      { name: '成本控制', desc: '降低耗材消耗', effect: { type: 'cost_reduction', value: 0.05 } as SkillEffect }
+    ],
+    assistant: [
+      { name: '快速学习', desc: '经验获取更快', effect: { type: 'score_bonus', value: 1 } as SkillEffect },
+      { name: '多面手', desc: '可协助各种工作', effect: { type: 'speed_bonus', value: 0.05 } as SkillEffect },
+      { name: '细心谨慎', desc: '减少操作失误', effect: { type: 'quality_bonus', value: 0.03 } as SkillEffect }
+    ],
+    receptionist: [
+      { name: '沟通达人', desc: '提高顾客满意度', effect: { type: 'reputation_bonus', value: 0.02 } as SkillEffect },
+      { name: '快速接单', desc: '增加订单容量', effect: { type: 'capacity_bonus', value: 1 } as SkillEffect },
+      { name: '销售技巧', desc: '提高订单价格', effect: { type: 'score_bonus', value: 3 } as SkillEffect }
+    ],
+    manager: [
+      { name: '团队管理', desc: '全体员工效率提升', effect: { type: 'speed_bonus', value: 0.15 } as SkillEffect },
+      { name: '品质把控', desc: '整体评分提升', effect: { type: 'score_bonus', value: 5 } as SkillEffect },
+      { name: '成本优化', desc: '整体运营成本降低', effect: { type: 'cost_reduction', value: 0.1 } as SkillEffect }
+    ]
+  };
+
+  const skills = roleSkills[role].map((s, idx) => ({
+    id: `${id}_skill_${idx}`,
+    name: s.name,
+    level: Math.min(level, 5),
+    maxLevel: 5,
+    experience: 0,
+    description: s.desc,
+    effect: s.effect
+  }));
+
+  const salaryBase: Record<string, number> = {
+    developer: 3000,
+    assistant: 1800,
+    receptionist: 2000,
+    manager: 5000
+  };
+
+  return {
+    id,
+    name,
+    avatar: EMPLOYEE_AVATARS[Math.floor(Math.random() * EMPLOYEE_AVATARS.length)],
+    role,
+    status: 'idle',
+    level,
+    experience: 0,
+    skills,
+    salary: salaryBase[role] + level * 300,
+    hireDate: Date.now(),
+    satisfaction: 80 + Math.floor(Math.random() * 20),
+    trainingProgress: 0,
+    assignedOrderIds: [],
+    skillBonuses: {}
+  };
+}
+
+export const DEFAULT_EMPLOYEES: Employee[] = [
+  createEmployee('emp_01', 'developer', '陈师傅', 3),
+  createEmployee('emp_02', 'assistant', '小周', 1),
+  createEmployee('emp_03', 'receptionist', '林小姐', 2)
+];
+
+export const EMPLOYEE_ROLE_LABELS: Record<string, string> = {
+  developer: '显影技师',
+  assistant: '助理技师',
+  receptionist: '前台接待',
+  manager: '店长'
+};
+
+export const EMPLOYEE_STATUS_LABELS: Record<string, string> = {
+  idle: '空闲',
+  working: '工作中',
+  rest: '休息',
+  training: '培训中'
+};
+
+export const DEFAULT_SUPPLIES: SupplyItem[] = [
+  {
+    id: 'supply_film_hp5',
+    name: '伊尔福 HP5+ 35mm',
+    type: 'film',
+    quantity: 20,
+    unit: '卷',
+    unitCost: 45,
+    minStock: 10,
+    currentStock: 20,
+    supplier: '伊尔福中国代理',
+    expireDate: Date.now() + 365 * 24 * 60 * 60 * 1000
+  },
+  {
+    id: 'supply_film_portra400',
+    name: '柯达 Portra 400 35mm',
+    type: 'film',
+    quantity: 15,
+    unit: '卷',
+    unitCost: 65,
+    minStock: 8,
+    currentStock: 15,
+    supplier: '柯达中国代理',
+    expireDate: Date.now() + 365 * 24 * 60 * 60 * 1000
+  },
+  {
+    id: 'supply_film_ektar100',
+    name: '柯达 Ektar 100 35mm',
+    type: 'film',
+    quantity: 10,
+    unit: '卷',
+    unitCost: 72,
+    minStock: 5,
+    currentStock: 10,
+    supplier: '柯达中国代理',
+    expireDate: Date.now() + 365 * 24 * 60 * 60 * 1000
+  },
+  {
+    id: 'supply_chemical_developer',
+    name: 'D-76 显影液浓缩液',
+    type: 'chemical',
+    quantity: 5,
+    unit: 'L',
+    unitCost: 120,
+    minStock: 3,
+    currentStock: 5,
+    supplier: '柯达授权经销商'
+  },
+  {
+    id: 'supply_chemical_fixer',
+    name: 'F-5 定影液浓缩液',
+    type: 'chemical',
+    quantity: 4,
+    unit: 'L',
+    unitCost: 80,
+    minStock: 2,
+    currentStock: 4,
+    supplier: '柯达授权经销商'
+  },
+  {
+    id: 'supply_paper_rc',
+    name: 'RC高光相纸 5x7',
+    type: 'paper',
+    quantity: 100,
+    unit: '张',
+    unitCost: 2.5,
+    minStock: 50,
+    currentStock: 100,
+    supplier: '富士相纸代理'
+  },
+  {
+    id: 'supply_paper_fiber',
+    name: '纤维纸基相纸 8x10',
+    type: 'paper',
+    quantity: 50,
+    unit: '张',
+    unitCost: 8,
+    minStock: 20,
+    currentStock: 50,
+    supplier: '伊尔福相纸代理'
+  },
+  {
+    id: 'supply_sleeve',
+    name: '无酸底片袋',
+    type: 'other',
+    quantity: 200,
+    unit: '个',
+    unitCost: 0.5,
+    minStock: 100,
+    currentStock: 200,
+    supplier: '专业存储用品店'
+  }
+];
+
+export const SUPPLY_TYPE_LABELS: Record<string, string> = {
+  film: '胶片',
+  chemical: '化学药品',
+  paper: '相纸',
+  equipment: '设备',
+  other: '其他'
+};
+
+export const DEFAULT_FACILITIES: Facility[] = [
+  {
+    id: 'fac_enlarger_01',
+    name: '专业放大机',
+    type: 'enlarger',
+    level: 1,
+    maxLevel: 5,
+    description: '高品质暗房放大机，支持多种画幅',
+    baseCost: 5000,
+    upgradeCost: 3000,
+    effect: { type: 'quality_bonus', value: 0.03 },
+    condition: 95,
+    maintenanceCost: 100,
+    isUnlocked: true,
+    icon: '📽️'
+  },
+  {
+    id: 'fac_processor_01',
+    name: '自动冲洗机',
+    type: 'processor',
+    level: 1,
+    maxLevel: 5,
+    description: '全自动胶片冲洗机，提高效率和一致性',
+    baseCost: 8000,
+    upgradeCost: 5000,
+    effect: { type: 'speed_bonus', value: 0.15 },
+    condition: 90,
+    maintenanceCost: 200,
+    isUnlocked: true,
+    icon: '⚙️'
+  },
+  {
+    id: 'fac_dryer_01',
+    name: '恒温干燥柜',
+    type: 'dryer',
+    level: 1,
+    maxLevel: 3,
+    description: '无尘恒温干燥柜，保护胶片和相纸',
+    baseCost: 3000,
+    upgradeCost: 2000,
+    effect: { type: 'quality_bonus', value: 0.02 },
+    condition: 88,
+    maintenanceCost: 50,
+    isUnlocked: true,
+    icon: '🌡️'
+  },
+  {
+    id: 'fac_temp_01',
+    name: '精密温控系统',
+    type: 'temperature_control',
+    level: 1,
+    maxLevel: 5,
+    description: '精确控制药液温度，保证冲洗一致性',
+    baseCost: 4000,
+    upgradeCost: 2500,
+    effect: { type: 'score_bonus', value: 3 },
+    condition: 92,
+    maintenanceCost: 80,
+    isUnlocked: true,
+    icon: '🌡️'
+  },
+  {
+    id: 'fac_display_01',
+    name: '作品展示区',
+    type: 'display',
+    level: 1,
+    maxLevel: 3,
+    description: '专业展示区，提升门店形象和口碑',
+    baseCost: 6000,
+    upgradeCost: 4000,
+    effect: { type: 'reputation_bonus', value: 0.05 },
+    condition: 100,
+    maintenanceCost: 30,
+    isUnlocked: true,
+    icon: '🖼️'
+  },
+  {
+    id: 'fac_storage_01',
+    name: '恒温恒湿存储',
+    type: 'storage',
+    level: 1,
+    maxLevel: 3,
+    description: '专业存储设备，延长耗材寿命',
+    baseCost: 3500,
+    upgradeCost: 2000,
+    effect: { type: 'cost_reduction', value: 0.08 },
+    condition: 90,
+    maintenanceCost: 60,
+    isUnlocked: false,
+    icon: '📦'
+  },
+  {
+    id: 'fac_lounge_01',
+    name: '顾客休息区',
+    type: 'lounge',
+    level: 1,
+    maxLevel: 3,
+    description: '舒适的休息区，提高顾客体验',
+    baseCost: 4500,
+    upgradeCost: 3000,
+    effect: { type: 'reputation_bonus', value: 0.03 },
+    condition: 100,
+    maintenanceCost: 40,
+    isUnlocked: false,
+    icon: '🛋️'
+  }
+];
+
+export const FACILITY_TYPE_LABELS: Record<string, string> = {
+  enlarger: '放大设备',
+  processor: '冲洗设备',
+  dryer: '干燥设备',
+  temperature_control: '温控设备',
+  display: '展示设施',
+  storage: '存储设施',
+  lounge: '休闲设施'
+};
+
+export const FINANCE_CATEGORY_LABELS: Record<string, string> = {
+  order: '订单收入',
+  salary: '员工薪资',
+  supply: '耗材采购',
+  upgrade: '设施升级',
+  maintenance: '维护费用',
+  marketing: '营销费用',
+  training: '员工培训',
+  other: '其他'
+};
+
+export const SHOP_TAB_LABELS: Record<string, string> = {
+  overview: '经营总览',
+  orders: '订单管理',
+  employees: '员工管理',
+  supplies: '耗材管理',
+  facilities: '设施管理',
+  finance: '财务报表',
+  reputation: '顾客评价'
+};
+
+export const SHOP_TAB_ICONS: Record<string, string> = {
+  overview: '📊',
+  orders: '📋',
+  employees: '👥',
+  supplies: '📦',
+  facilities: '🏭',
+  finance: '💰',
+  reputation: '⭐'
+};
+
+function createDefaultShopStatistics(): ShopStatistics {
+  return {
+    totalOrders: 0,
+    completedOrders: 0,
+    totalRevenue: 0,
+    totalExpenses: 0,
+    netProfit: 0,
+    avgCustomerRating: 4.5,
+    avgTurnaroundTime: 24,
+    repeatCustomerRate: 0.3
+  };
+}
+
+export function createInitialShopManagementState(): ShopManagementState {
+  return {
+    isOpen: false,
+    activeTab: 'overview',
+    shopName: '时光暗房',
+    shopLevel: 1,
+    shopExperience: 0,
+    shopReputation: 50,
+    maxReputation: 100,
+    dailyStartTime: Date.now(),
+    dayNumber: 1,
+    isPaused: true,
+    employees: [...DEFAULT_EMPLOYEES],
+    supplies: [...DEFAULT_SUPPLIES],
+    supplyRecords: [],
+    facilities: [...DEFAULT_FACILITIES],
+    financeRecords: [],
+    reputationReviews: [],
+    finances: {
+      cash: 10000,
+      bank: 50000
+    },
+    statistics: createDefaultShopStatistics(),
+    gameSpeed: 1,
+    selectedEmployeeId: null,
+    selectedFacilityId: null,
+    selectedSupplyId: null,
+    autoManageOrders: [],
+    pendingOrders: [],
+    marketingBudget: 500,
+    priceMultiplier: 1.0,
+    lastOrderGeneratedAt: 0
+  };
+}
+
+export const REPUTATION_REVIEW_TAGS = [
+  '品质优秀', '速度快', '服务好', '价格合理', '专业建议',
+  '包装精美', '沟通顺畅', '值得推荐', '细节处理好', '创意十足'
+];
+
+export const CUSTOMER_NAMES = [
+  '王先生', '李女士', '张同学', '刘老师', '陈医生',
+  '赵律师', '孙经理', '周摄影师', '吴设计师', '郑艺术家',
+  '黄小姐', '朱先生', '胡女士', '林先生', '何小姐'
+];
