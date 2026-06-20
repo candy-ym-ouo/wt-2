@@ -1,9 +1,10 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState, CurriculumSystemState } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState, CurriculumSystemState, ConsignmentMarketState } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 import { createInitialQuestSystemState } from './questSystem';
 import { createInitialReviewSystemState } from './reviewSystem';
 import { createInitialInventorySystemState } from './inventorySystem';
 import { createInitialCurriculumSystemState } from './curriculumSystem';
+import { createInitialConsignmentMarketState } from './consignmentSystem';
 
 export const CURRENT_STORAGE_VERSION = 3;
 export const MAX_PHOTOS = 100;
@@ -12,6 +13,9 @@ export const MAX_COLLECTIONS = 20;
 export const MAX_ORDERS = 50;
 export const MAX_REVIEW_SUBMISSIONS = 50;
 export const MAX_INVENTORY_RECORDS = 200;
+export const MAX_CONSIGNMENT_WORKS = 100;
+export const MAX_CONSIGNMENT_ORDERS = 200;
+export const MAX_CERTIFICATES = 200;
 export const STORAGE_QUOTA_WARNING = 0.8;
 export const BACKUP_COUNT = 3;
 
@@ -36,7 +40,7 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system' | 'curriculum_system';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system' | 'curriculum_system' | 'consignment_market';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
@@ -50,7 +54,8 @@ const KEY_MAP: Record<StorageKey, string> = {
   review_system: 'darkroom_review_system',
   inventory_system: 'darkroom_inventory',
   publication_system: 'darkroom_publication',
-  curriculum_system: 'darkroom_curriculum'
+  curriculum_system: 'darkroom_curriculum',
+  consignment_market: 'darkroom_consignment_market'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -952,4 +957,46 @@ export function loadSavedCurriculumSystem(): { state: CurriculumSystemState; sta
 
 export function saveCurriculumSystem(state: CurriculumSystemState): boolean {
   return saveWithBackup('curriculum_system', state, Object.keys(state.profile.chapterProgress).length);
+}
+
+export function repairConsignmentMarket(state: ConsignmentMarketState): ConsignmentMarketState {
+  const initial = createInitialConsignmentMarketState();
+  if (!state) return initial;
+
+  return {
+    ...initial,
+    works: Array.isArray(state.works) ? state.works.slice(0, MAX_CONSIGNMENT_WORKS) : initial.works,
+    artists: Array.isArray(state.artists) ? state.artists : initial.artists,
+    buyers: Array.isArray(state.buyers) ? state.buyers : initial.buyers,
+    orders: Array.isArray(state.orders) ? state.orders.slice(0, MAX_CONSIGNMENT_ORDERS) : initial.orders,
+    certificates: Array.isArray(state.certificates) ? state.certificates.slice(0, MAX_CERTIFICATES) : initial.certificates,
+    activeTab: state.activeTab || initial.activeTab,
+    filter: { ...initial.filter, ...state.filter },
+    currentUserId: state.currentUserId || initial.currentUserId,
+    currentUserType: state.currentUserType || initial.currentUserType
+  };
+}
+
+export function loadSavedConsignmentMarket(): { state: ConsignmentMarketState; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<ConsignmentMarketState>('consignment_market', createInitialConsignmentMarketState());
+  const status: Partial<StorageStatus> = {
+    consignmentMarketLoaded: result.success
+  };
+
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+
+  let state = result.data || createInitialConsignmentMarketState();
+  state = repairConsignmentMarket(state);
+
+  return { state, status };
+}
+
+export function saveConsignmentMarket(state: ConsignmentMarketState): boolean {
+  const itemCount = state.works.length + state.orders.length + state.certificates.length;
+  return saveWithBackup('consignment_market', state, itemCount);
 }

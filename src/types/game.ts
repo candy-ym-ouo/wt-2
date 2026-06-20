@@ -277,6 +277,7 @@ export interface GameState {
   publicationSystem: PublicationState;
   subjectWorkshop: SubjectWorkshopState;
   curriculumSystem: CurriculumSystemState;
+  consignmentMarket: ConsignmentMarketState;
 }
 
 export type TutorialUnlockCondition = 
@@ -347,6 +348,7 @@ export interface StorageStatus {
   inventorySystemLoaded?: boolean;
   publicationSystemLoaded?: boolean;
   curriculumSystemLoaded?: boolean;
+  consignmentMarketLoaded?: boolean;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -363,6 +365,7 @@ export interface StorageStatus {
     inventorySystem?: number;
     publicationSystem?: number;
     curriculumSystem?: number;
+    consignmentMarket?: number;
   };
 }
 
@@ -1578,5 +1581,175 @@ export interface CurriculumSystemState {
   currentExamAnswers: Record<string, string | string[]>;
   lastGeneratedFeedback: CurriculumFeedback | null;
 }
+
+export type ConsignmentWorkStatus = 'draft' | 'listed' | 'reserved' | 'sold' | 'archived' | 'removed';
+
+export type TradeOrderStatus = 'pending' | 'confirmed' | 'paid' | 'delivered' | 'completed' | 'cancelled' | 'refunded';
+
+export type CertificateType = 'ownership' | 'authenticity' | 'limited_edition' | 'artist_proof';
+
+export interface ArtistInfo {
+  id: string;
+  name: string;
+  avatar?: string;
+  bio: string;
+  contact?: string;
+  style?: string;
+  totalWorks: number;
+  totalSales: number;
+  rating: number;
+  joinedAt: number;
+  verified: boolean;
+  socialLinks?: {
+    website?: string;
+    instagram?: string;
+    weibo?: string;
+  };
+}
+
+export interface ConsignmentWork {
+  id: string;
+  workNumber: string;
+  photoId: string;
+  artistId: string;
+  artistName: string;
+  title: string;
+  description: string;
+  edition: number;
+  totalEditions: number;
+  price: number;
+  currency: string;
+  status: ConsignmentWorkStatus;
+  category?: string;
+  tags: string[];
+  listedAt?: number;
+  soldAt?: number;
+  buyerId?: string;
+  reservedBy?: string;
+  reserveExpiresAt?: number;
+  royalties?: number;
+  frameOption?: boolean;
+  framePrice?: number;
+  shippingPrice?: number;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface BuyerInfo {
+  id: string;
+  name: string;
+  avatar?: string;
+  contact?: string;
+  address?: string;
+  totalPurchases: number;
+  totalSpent: number;
+  joinedAt: number;
+  favoriteWorkIds: string[];
+}
+
+export interface TradeOrder {
+  id: string;
+  orderNumber: string;
+  workId: string;
+  workTitle: string;
+  workNumber: string;
+  sellerId: string;
+  sellerName: string;
+  buyerId: string;
+  buyerName: string;
+  price: number;
+  framePrice: number;
+  shippingPrice: number;
+  totalAmount: number;
+  currency: string;
+  status: TradeOrderStatus;
+  includeFrame: boolean;
+  shippingAddress?: string;
+  specialInstructions?: string;
+  createdAt: number;
+  updatedAt: number;
+  paidAt?: number;
+  deliveredAt?: number;
+  completedAt?: number;
+  cancelledAt?: number;
+  cancelReason?: string;
+  certificateId?: string;
+}
+
+export interface DigitalCertificate {
+  id: string;
+  certificateNumber: string;
+  type: CertificateType;
+  workId: string;
+  workTitle: string;
+  workNumber: string;
+  artistId: string;
+  artistName: string;
+  ownerId: string;
+  ownerName: string;
+  editionNumber: number;
+  totalEditions: number;
+  issueDate: number;
+  expiryDate?: number;
+  verificationCode: string;
+  verified: boolean;
+  previousOwners?: {
+    ownerId: string;
+    ownerName: string;
+    transferredAt: number;
+  }[];
+  notes?: string;
+  imageDataUrl?: string;
+  signature?: string;
+}
+
+export type ConsignmentMarketTab = 'market' | 'my_works' | 'my_orders' | 'certificates' | 'artist_profile';
+
+export interface ConsignmentMarketFilter {
+  searchKeyword: string;
+  artistIds: string[];
+  categories: string[];
+  priceMin?: number;
+  priceMax?: number;
+  statuses: ConsignmentWorkStatus[];
+  sortBy: 'price_asc' | 'price_desc' | 'date_desc' | 'date_asc' | 'popular';
+  onlyAvailable: boolean;
+  onlyVerifiedArtists: boolean;
+}
+
+export interface ConsignmentMarketStatistics {
+  totalListedWorks: number;
+  totalSoldWorks: number;
+  totalSalesAmount: number;
+  myListedWorks: number;
+  mySoldWorks: number;
+  myTotalEarnings: number;
+  myPendingOrders: number;
+  activeBuyers: number;
+  averagePrice: number;
+  topSellingArtists: { artistId: string; artistName: string; sales: number; revenue: number }[];
+}
+
+export interface ConsignmentMarketState {
+  works: ConsignmentWork[];
+  artists: ArtistInfo[];
+  buyers: BuyerInfo[];
+  orders: TradeOrder[];
+  certificates: DigitalCertificate[];
+  activeTab: ConsignmentMarketTab;
+  filter: ConsignmentMarketFilter;
+  selectedWorkId: string | null;
+  selectedOrderId: string | null;
+  selectedCertificateId: string | null;
+  currentUserId: string;
+  currentUserType: 'artist' | 'buyer' | 'both';
+  showWorkDetail: boolean;
+  showOrderDetail: boolean;
+  showCertificateDetail: boolean;
+  showCreateWork: boolean;
+  editingWorkId: string | null;
+}
+
 
 

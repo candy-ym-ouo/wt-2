@@ -26,6 +26,7 @@
   import FilmInventory from './components/FilmInventory.svelte';
   import PublicationDesk from './components/PublicationDesk.svelte';
   import SubjectWorkshop from './components/SubjectWorkshop.svelte';
+  import ConsignmentMarket from './components/ConsignmentMarket.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -46,6 +47,7 @@
   let showInventory = false;
   let showPublication = false;
   let showWorkshop = false;
+  let showConsignmentMarket = false;
 
   function goToOrderScoring() {
     if (currentOrder) {
@@ -566,6 +568,16 @@
         <span>🎨</span>
       </button>
       <button
+        class="header-btn consignment"
+        on:click={() => { showConsignmentMarket = true; }}
+        title="作品交易寄售"
+      >
+        <span>🏪</span>
+        {#if $gameStore.consignmentMarket.works.length > 0}
+          <span class="badge">{$gameStore.consignmentMarket.works.length}</span>
+        {/if}
+      </button>
+      <button
         class="header-btn help"
         on:click={() => { gameStore.resetTutorial(); }}
         title="重新开始教程"
@@ -760,6 +772,10 @@
 
   {#if showWorkshop}
     <SubjectWorkshop onClose={() => { showWorkshop = false; }} />
+  {/if}
+
+  {#if showConsignmentMarket}
+    <ConsignmentMarket onClose={() => { showConsignmentMarket = false; }} />
   {/if}
 
   <footer class="app-footer">

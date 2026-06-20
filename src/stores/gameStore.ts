@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES, DEFAULT_WORKSHOP_STATE, createBlankTemplate } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
@@ -33,7 +33,9 @@ import {
   loadSavedInventorySystem,
   saveInventorySystem,
   loadSavedPublicationSystem,
-  savePublicationSystem
+  savePublicationSystem,
+  loadSavedConsignmentMarket,
+  saveConsignmentMarket
 } from '../utils/storage';
 import {
   createInitialQuestSystemState,
@@ -128,6 +130,29 @@ import {
   loadSavedCurriculumSystem,
   saveCurriculumSystem
 } from '../utils/storage';
+import {
+  createInitialConsignmentMarketState,
+  createConsignmentWork,
+  updateConsignmentWork,
+  listWork,
+  removeWork,
+  createTradeOrder,
+  updateOrderStatus,
+  verifyCertificate,
+  transferCertificate,
+  filterWorks,
+  calculateMarketStatistics,
+  getArtistById,
+  getWorkById,
+  getOrderById,
+  getCertificateById,
+  getMyWorks,
+  getMyOrders,
+  getMyCertificates,
+  setActiveTab,
+  setFilter,
+  toggleFavoriteWork
+} from '../utils/consignmentSystem';
 
 function createInitialStageState(): StageState {
   return {
@@ -640,6 +665,7 @@ function createInitialGameState(): GameState {
   const inventorySystemResult = loadSavedInventorySystem();
   const publicationSystemResult = loadSavedPublicationSystem();
   const curriculumSystemResult = loadSavedCurriculumSystem();
+  const consignmentMarketResult = loadSavedConsignmentMarket();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -656,6 +682,7 @@ function createInitialGameState(): GameState {
   storageStatus.inventorySystemLoaded = inventorySystemResult.status.inventorySystemLoaded || false;
   storageStatus.publicationSystemLoaded = publicationSystemResult.status.publicationSystemLoaded || false;
   storageStatus.curriculumSystemLoaded = curriculumSystemResult.status.curriculumSystemLoaded || false;
+  storageStatus.consignmentMarketLoaded = consignmentMarketResult.status.consignmentMarketLoaded || false;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
@@ -667,7 +694,8 @@ function createInitialGameState(): GameState {
     reviewSystemResult.status.migrationPerformed ||
     inventorySystemResult.status.migrationPerformed ||
     publicationSystemResult.status.migrationPerformed ||
-    curriculumSystemResult.status.migrationPerformed);
+    curriculumSystemResult.status.migrationPerformed ||
+    consignmentMarketResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
     tutorialResult.status.recoveryPerformed ||
@@ -678,7 +706,8 @@ function createInitialGameState(): GameState {
     reviewSystemResult.status.recoveryPerformed ||
     inventorySystemResult.status.recoveryPerformed ||
     publicationSystemResult.status.recoveryPerformed ||
-    curriculumSystemResult.status.recoveryPerformed);
+    curriculumSystemResult.status.recoveryPerformed ||
+    consignmentMarketResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
@@ -792,7 +821,8 @@ function createInitialGameState(): GameState {
     inventorySystem: inventorySystemResult.state,
     publicationSystem: publicationSystemResult.state,
     subjectWorkshop: createInitialSubjectWorkshopState(),
-    curriculumSystem: curriculumSystemResult.state
+    curriculumSystem: curriculumSystemResult.state,
+    consignmentMarket: consignmentMarketResult.state
   };
 }
 
@@ -3851,7 +3881,135 @@ function createGameStore() {
       });
       unsubscribe();
       return result;
-    }
+    },
+
+    setConsignmentTab: (tab: ConsignmentMarketTab) => update(state => {
+      const newState = setActiveTab(state.consignmentMarket, tab);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    setConsignmentFilter: (filter: Partial<ConsignmentMarketFilter>) => update(state => {
+      const newState = setFilter(state.consignmentMarket, filter);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    createConsignmentWork: (data: {
+      photoId: string;
+      title: string;
+      description: string;
+      price: number;
+      totalEditions: number;
+      category?: string;
+      tags: string[];
+      frameOption?: boolean;
+      framePrice?: number;
+      shippingPrice?: number;
+      royalties?: number;
+    }) => update(state => {
+      const newState = createConsignmentWork(state.consignmentMarket, data);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    updateConsignmentWork: (workId: string, updates: Partial<ConsignmentWork>) => update(state => {
+      const newState = updateConsignmentWork(state.consignmentMarket, workId, updates);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    listConsignmentWork: (workId: string) => update(state => {
+      const newState = listWork(state.consignmentMarket, workId);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    removeConsignmentWork: (workId: string) => update(state => {
+      const newState = removeWork(state.consignmentMarket, workId);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    createTradeOrder: (data: {
+      workId: string;
+      buyerId: string;
+      includeFrame?: boolean;
+      shippingAddress?: string;
+      specialInstructions?: string;
+    }) => update(state => {
+      const newState = createTradeOrder(state.consignmentMarket, data);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    updateTradeOrderStatus: (orderId: string, status: TradeOrderStatus, extra?: { cancelReason?: string }) => update(state => {
+      const newState = updateOrderStatus(state.consignmentMarket, orderId, status, extra);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    verifyCertificate: (certificateId: string) => update(state => {
+      const newState = verifyCertificate(state.consignmentMarket, certificateId);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    transferCertificate: (certificateId: string, newOwnerId: string, newOwnerName: string) => update(state => {
+      const newState = transferCertificate(state.consignmentMarket, certificateId, newOwnerId, newOwnerName);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    toggleFavoriteWork: (workId: string) => update(state => {
+      const newState = toggleFavoriteWork(state.consignmentMarket, workId);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    selectConsignmentWork: (workId: string | null) => update(state => ({
+      ...state,
+      consignmentMarket: {
+        ...state.consignmentMarket,
+        selectedWorkId: workId,
+        showWorkDetail: workId !== null
+      }
+    })),
+
+    selectConsignmentOrder: (orderId: string | null) => update(state => ({
+      ...state,
+      consignmentMarket: {
+        ...state.consignmentMarket,
+        selectedOrderId: orderId,
+        showOrderDetail: orderId !== null
+      }
+    })),
+
+    selectConsignmentCertificate: (certificateId: string | null) => update(state => ({
+      ...state,
+      consignmentMarket: {
+        ...state.consignmentMarket,
+        selectedCertificateId: certificateId,
+        showCertificateDetail: certificateId !== null
+      }
+    })),
+
+    setShowCreateWork: (show: boolean) => update(state => ({
+      ...state,
+      consignmentMarket: {
+        ...state.consignmentMarket,
+        showCreateWork: show,
+        editingWorkId: null
+      }
+    })),
+
+    setEditingWork: (workId: string | null) => update(state => ({
+      ...state,
+      consignmentMarket: {
+        ...state.consignmentMarket,
+        editingWorkId: workId,
+        showCreateWork: workId !== null
+      }
+    }))
   };
 }
 
