@@ -278,6 +278,7 @@ export interface GameState {
   subjectWorkshop: SubjectWorkshopState;
   curriculumSystem: CurriculumSystemState;
   consignmentMarket: ConsignmentMarketState;
+  exhibitionSystem: ExhibitionState;
 }
 
 export type TutorialUnlockCondition = 
@@ -349,6 +350,7 @@ export interface StorageStatus {
   publicationSystemLoaded?: boolean;
   curriculumSystemLoaded?: boolean;
   consignmentMarketLoaded?: boolean;
+  exhibitionSystemLoaded?: boolean;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -366,6 +368,7 @@ export interface StorageStatus {
     publicationSystem?: number;
     curriculumSystem?: number;
     consignmentMarket?: number;
+    exhibitionSystem?: number;
   };
 }
 
@@ -1749,6 +1752,156 @@ export interface ConsignmentMarketState {
   showCertificateDetail: boolean;
   showCreateWork: boolean;
   editingWorkId: string | null;
+}
+
+export type ExhibitionStatus = 'draft' | 'planning' | 'published' | 'archived';
+
+export type WallLayoutType = 'grid' | 'masonry' | 'salon' | 'linear' | 'feature';
+
+export interface ExhibitionWorkPlacement {
+  workId: string;
+  photoId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  zIndex: number;
+  frameStyle: 'minimal' | 'classic' | 'vintage' | 'float' | 'none';
+  frameColor: string;
+  matWidth: number;
+  matColor: string;
+  spotLightIntensity: number;
+  spotLightColor: string;
+  caption?: string;
+}
+
+export interface ExhibitionWall {
+  id: string;
+  name: string;
+  description?: string;
+  width: number;
+  height: number;
+  backgroundColor: string;
+  textureType: 'smooth' | 'canvas' | 'brick' | 'concrete' | 'wood';
+  layoutType: WallLayoutType;
+  placements: ExhibitionWorkPlacement[];
+  order: number;
+}
+
+export interface ExhibitionTheme {
+  id: string;
+  name: string;
+  colorPalette: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    background: string;
+    text: string;
+    wall: string;
+    floor: string;
+  };
+  fontStyle: 'serif' | 'sans' | 'display' | 'mono';
+  lightingScheme: 'natural' | 'spotlight' | 'dramatic' | 'warm' | 'cool';
+  ambientSound?: string;
+}
+
+export interface ExhibitionRouteStop {
+  wallId: string;
+  placementId?: string;
+  stopIndex: number;
+  narration?: string;
+  dwellTime: number;
+  focusZoom: number;
+  panDirection?: 'left' | 'right' | 'up' | 'down';
+}
+
+export interface VisitorFeedback {
+  id: string;
+  visitorName: string;
+  visitorAvatar?: string;
+  visitorType: 'casual' | 'enthusiast' | 'critic' | 'collector' | 'student';
+  overallRating: number;
+  curationRating: number;
+  varietyRating: number;
+  flowRating: number;
+  lightingRating: number;
+  favoriteWorkId?: string;
+  comments: string;
+  emotionalResponse?: 'inspired' | 'moved' | 'curious' | 'peaceful' | 'energized' | 'confused';
+  tags: string[];
+  timestamp: number;
+  visitDuration: number;
+  worksViewed: number;
+}
+
+export interface ExhibitionWorkGroup {
+  id: string;
+  name: string;
+  description?: string;
+  colorTag: string;
+  photoIds: string[];
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ExhibitionStatistics {
+  totalVisits: number;
+  avgDuration: number;
+  avgOverallRating: number;
+  avgCurationRating: number;
+  avgVarietyRating: number;
+  avgFlowRating: number;
+  avgLightingRating: number;
+  topRatedWorks: { photoId: string; rating: number; mentions: number }[];
+  mostViewedWorks: { photoId: string; views: number }[];
+  commonEmotions: { emotion: string; count: number }[];
+  visitorTypeDistribution: { type: string; count: number }[];
+  feedbackCount: number;
+}
+
+export type ExhibitionCuratorTab = 'groups' | 'themes' | 'walls' | 'route' | 'feedback' | 'statistics';
+
+export interface ExhibitionState {
+  exhibitions: Exhibition[];
+  activeExhibitionId: string | null;
+  activeTab: ExhibitionCuratorTab;
+  selectedGroupId: string | null;
+  selectedWallId: string | null;
+  selectedPlacementId: string | null;
+  isEditingPlacement: boolean;
+  previewMode: 'edit' | 'walkthrough' | 'immersive';
+  routeAnimationSpeed: number;
+  showWorkCaptions: boolean;
+  showSpotlights: boolean;
+}
+
+export interface Exhibition {
+  id: string;
+  title: string;
+  subtitle: string;
+  curatorName: string;
+  description: string;
+  artistStatement?: string;
+  exhibitionStatement?: string;
+  coverPhotoId?: string;
+  startDate?: number;
+  endDate?: number;
+  venueName?: string;
+  status: ExhibitionStatus;
+  groups: ExhibitionWorkGroup[];
+  walls: ExhibitionWall[];
+  themeId: string;
+  themes: ExhibitionTheme[];
+  route: ExhibitionRouteStop[];
+  feedbacks: VisitorFeedback[];
+  statistics: ExhibitionStatistics;
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+  publishedAt?: number;
+  totalViews: number;
 }
 
 

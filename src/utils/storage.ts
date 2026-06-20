@@ -1,4 +1,4 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState, CurriculumSystemState, ConsignmentMarketState } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState, CurriculumSystemState, ConsignmentMarketState, ExhibitionState } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 import { createInitialQuestSystemState } from './questSystem';
 import { createInitialReviewSystemState } from './reviewSystem';
@@ -16,6 +16,8 @@ export const MAX_INVENTORY_RECORDS = 200;
 export const MAX_CONSIGNMENT_WORKS = 100;
 export const MAX_CONSIGNMENT_ORDERS = 200;
 export const MAX_CERTIFICATES = 200;
+export const MAX_EXHIBITIONS = 20;
+export const MAX_EXHIBITION_FEEDBACKS = 200;
 export const STORAGE_QUOTA_WARNING = 0.8;
 export const BACKUP_COUNT = 3;
 
@@ -40,7 +42,7 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system' | 'curriculum_system' | 'consignment_market';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system' | 'curriculum_system' | 'consignment_market' | 'exhibition_system';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
@@ -55,7 +57,8 @@ const KEY_MAP: Record<StorageKey, string> = {
   inventory_system: 'darkroom_inventory',
   publication_system: 'darkroom_publication',
   curriculum_system: 'darkroom_curriculum',
-  consignment_market: 'darkroom_consignment_market'
+  consignment_market: 'darkroom_consignment_market',
+  exhibition_system: 'darkroom_exhibition_system'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -432,6 +435,9 @@ function validateData<T>(key: StorageKey, data: unknown): T | null {
     case 'curriculum_system': {
       return validateCurriculumSystemState(data) ? (data as T) : null;
     }
+    case 'exhibition_system': {
+      return validateExhibitionState(data) ? (data as T) : null;
+    }
     default:
       return null;
   }
@@ -551,6 +557,28 @@ export function enforceLimits<T>(key: StorageKey, data: T): T {
           .slice(0, MAX_ORDERS) as T;
       }
       return data;
+    }
+    case 'exhibition_system': {
+      const state = data as ExhibitionState;
+      if (state.exhibitions.length > MAX_EXHIBITIONS) {
+        return {
+          ...state,
+          exhibitions: state.exhibitions
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+            .slice(0, MAX_EXHIBITIONS)
+            .map(exh => ({
+              ...exh,
+              feedbacks: exh.feedbacks.slice(0, MAX_EXHIBITION_FEEDBACKS)
+            }))
+        } as T;
+      }
+      return {
+        ...state,
+        exhibitions: state.exhibitions.map(exh => ({
+          ...exh,
+          feedbacks: exh.feedbacks.slice(0, MAX_EXHIBITION_FEEDBACKS)
+        }))
+      } as T;
     }
     default:
       return data;
@@ -999,4 +1027,229 @@ export function loadSavedConsignmentMarket(): { state: ConsignmentMarketState; s
 export function saveConsignmentMarket(state: ConsignmentMarketState): boolean {
   const itemCount = state.works.length + state.orders.length + state.certificates.length;
   return saveWithBackup('consignment_market', state, itemCount);
+}
+
+function validateExhibitionState(data: unknown): data is ExhibitionState {
+  if (typeof data !== 'object' || data === null) return false;
+  const e = data as Record<string, unknown>;
+  return (
+    Array.isArray(e.exhibitions) &&
+    typeof e.activeTab === 'string' &&
+    typeof e.previewMode === 'string'
+  );
+}
+
+export function createInitialExhibitionState(): ExhibitionState {
+  const defaultThemes = createDefaultExhibitionThemes();
+  const now = Date.now();
+  const defaultExhibitionId = 'exhibition_default_' + now;
+
+  const defaultExhibition = {
+    id: defaultExhibitionId,
+    title: '我的第一次展览',
+    subtitle: '摄影作品展',
+    curatorName: '策展人',
+    description: '精心策划的个人摄影作品展览',
+    status: 'draft' as const,
+    groups: [],
+    walls: [
+      {
+        id: 'wall_' + now + '_1',
+        name: '主墙',
+        description: '展览入口主墙面',
+        width: 1200,
+        height: 600,
+        backgroundColor: '#f5f0e8',
+        textureType: 'smooth' as const,
+        layoutType: 'grid' as const,
+        placements: [],
+        order: 0
+      }
+    ],
+    themeId: defaultThemes[0].id,
+    themes: defaultThemes,
+    route: [],
+    feedbacks: [],
+    statistics: createDefaultExhibitionStatistics(),
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+    totalViews: 0
+  };
+
+  return {
+    exhibitions: [defaultExhibition],
+    activeExhibitionId: defaultExhibitionId,
+    activeTab: 'groups',
+    selectedGroupId: null,
+    selectedWallId: 'wall_' + now + '_1',
+    selectedPlacementId: null,
+    isEditingPlacement: false,
+    previewMode: 'edit',
+    routeAnimationSpeed: 1,
+    showWorkCaptions: true,
+    showSpotlights: true
+  };
+}
+
+function createDefaultExhibitionThemes() {
+  const now = Date.now();
+  return [
+    {
+      id: 'theme_classic_' + now,
+      name: '经典白廊',
+      colorPalette: {
+        primary: '#2c2c2c',
+        secondary: '#6b6b6b',
+        accent: '#c9a96a',
+        background: '#f8f6f2',
+        text: '#2c2c2c',
+        wall: '#ffffff',
+        floor: '#d4c4a8'
+      },
+      fontStyle: 'serif' as const,
+      lightingScheme: 'natural' as const
+    },
+    {
+      id: 'theme_modern_' + now,
+      name: '现代极简',
+      colorPalette: {
+        primary: '#1a1a1a',
+        secondary: '#404040',
+        accent: '#e74c3c',
+        background: '#fafafa',
+        text: '#1a1a1a',
+        wall: '#f0f0f0',
+        floor: '#2c2c2c'
+      },
+      fontStyle: 'sans' as const,
+      lightingScheme: 'spotlight' as const
+    },
+    {
+      id: 'theme_gallery_' + now,
+      name: '专业画廊',
+      colorPalette: {
+        primary: '#1c1c1c',
+        secondary: '#555555',
+        accent: '#8b7355',
+        background: '#1a1814',
+        text: '#e8e0d0',
+        wall: '#2a2824',
+        floor: '#3a3528'
+      },
+      fontStyle: 'display' as const,
+      lightingScheme: 'dramatic' as const
+    },
+    {
+      id: 'theme_warm_' + now,
+      name: '温暖工业风',
+      colorPalette: {
+        primary: '#3d2817',
+        secondary: '#6b4423',
+        accent: '#d4a574',
+        background: '#2a1f14',
+        text: '#f0dcc0',
+        wall: '#4a3828',
+        floor: '#5c4033'
+      },
+      fontStyle: 'serif' as const,
+      lightingScheme: 'warm' as const
+    },
+    {
+      id: 'theme_loft_' + now,
+      name: '工业LOFT',
+      colorPalette: {
+        primary: '#2c3e50',
+        secondary: '#7f8c8d',
+        accent: '#f39c12',
+        background: '#ecf0f1',
+        text: '#2c3e50',
+        wall: '#bdc3c7',
+        floor: '#7f8c8d'
+      },
+      fontStyle: 'sans' as const,
+      lightingScheme: 'cool' as const
+    }
+  ];
+}
+
+function createDefaultExhibitionStatistics() {
+  return {
+    totalVisits: 0,
+    avgDuration: 0,
+    avgOverallRating: 0,
+    avgCurationRating: 0,
+    avgVarietyRating: 0,
+    avgFlowRating: 0,
+    avgLightingRating: 0,
+    topRatedWorks: [],
+    mostViewedWorks: [],
+    commonEmotions: [],
+    visitorTypeDistribution: [],
+    feedbackCount: 0
+  };
+}
+
+export function repairExhibitionSystem(state: ExhibitionState): ExhibitionState {
+  const initial = createInitialExhibitionState();
+  if (!state) return initial;
+
+  const validExhibitions = Array.isArray(state.exhibitions)
+    ? state.exhibitions
+        .filter(exh => exh && typeof exh.id === 'string' && typeof exh.title === 'string')
+        .slice(0, MAX_EXHIBITIONS)
+        .map(exh => ({
+          ...exh,
+          groups: Array.isArray(exh.groups) ? exh.groups.filter(g => g && typeof g.id === 'string') : [],
+          walls: Array.isArray(exh.walls) ? exh.walls.filter(w => w && typeof w.id === 'string') : [],
+          themes: Array.isArray(exh.themes) && exh.themes.length > 0 ? exh.themes : initial.exhibitions[0].themes,
+          route: Array.isArray(exh.route) ? exh.route : [],
+          feedbacks: Array.isArray(exh.feedbacks) ? exh.feedbacks.slice(0, MAX_EXHIBITION_FEEDBACKS) : [],
+          statistics: exh.statistics || createDefaultExhibitionStatistics(),
+          tags: Array.isArray(exh.tags) ? exh.tags : []
+        }))
+    : initial.exhibitions;
+
+  const firstValidId = validExhibitions.length > 0 ? validExhibitions[0].id : null;
+
+  return {
+    exhibitions: validExhibitions,
+    activeExhibitionId: state.activeExhibitionId && validExhibitions.some(e => e.id === state.activeExhibitionId)
+      ? state.activeExhibitionId
+      : firstValidId,
+    activeTab: typeof state.activeTab === 'string' ? state.activeTab : initial.activeTab,
+    selectedGroupId: state.selectedGroupId || null,
+    selectedWallId: state.selectedWallId || null,
+    selectedPlacementId: state.selectedPlacementId || null,
+    isEditingPlacement: typeof state.isEditingPlacement === 'boolean' ? state.isEditingPlacement : false,
+    previewMode: typeof state.previewMode === 'string' ? state.previewMode : initial.previewMode,
+    routeAnimationSpeed: typeof state.routeAnimationSpeed === 'number' ? state.routeAnimationSpeed : 1,
+    showWorkCaptions: typeof state.showWorkCaptions === 'boolean' ? state.showWorkCaptions : true,
+    showSpotlights: typeof state.showSpotlights === 'boolean' ? state.showSpotlights : true
+  };
+}
+
+export function loadSavedExhibitionSystem(): { state: ExhibitionState; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<ExhibitionState>('exhibition_system', createInitialExhibitionState());
+  const status: Partial<StorageStatus> = {
+    exhibitionSystemLoaded: result.success
+  };
+
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+
+  let state = result.data || createInitialExhibitionState();
+  state = repairExhibitionSystem(state);
+
+  return { state, status };
+}
+
+export function saveExhibitionSystem(state: ExhibitionState): boolean {
+  const limited = enforceLimits('exhibition_system', state) as ExhibitionState;
+  const itemCount = limited.exhibitions.reduce((sum, exh) => sum + exh.feedbacks.length + exh.walls.length + exh.groups.length, 0);
+  return saveWithBackup('exhibition_system', limited, itemCount);
 }

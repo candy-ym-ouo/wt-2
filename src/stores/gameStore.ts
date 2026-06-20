@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus, ExhibitionState, Exhibition, ExhibitionWorkGroup, ExhibitionWall, ExhibitionWorkPlacement, ExhibitionTheme, ExhibitionRouteStop, VisitorFeedback, ExhibitionCuratorTab, ExhibitionStatus } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES, DEFAULT_WORKSHOP_STATE, createBlankTemplate } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
@@ -35,7 +35,10 @@ import {
   loadSavedPublicationSystem,
   savePublicationSystem,
   loadSavedConsignmentMarket,
-  saveConsignmentMarket
+  saveConsignmentMarket,
+  createInitialExhibitionState,
+  loadSavedExhibitionSystem,
+  saveExhibitionSystem
 } from '../utils/storage';
 import {
   createInitialQuestSystemState,
@@ -667,6 +670,7 @@ function createInitialGameState(): GameState {
   const publicationSystemResult = loadSavedPublicationSystem();
   const curriculumSystemResult = loadSavedCurriculumSystem();
   const consignmentMarketResult = loadSavedConsignmentMarket();
+  const exhibitionSystemResult = loadSavedExhibitionSystem();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -684,6 +688,7 @@ function createInitialGameState(): GameState {
   storageStatus.publicationSystemLoaded = publicationSystemResult.status.publicationSystemLoaded || false;
   storageStatus.curriculumSystemLoaded = curriculumSystemResult.status.curriculumSystemLoaded || false;
   storageStatus.consignmentMarketLoaded = consignmentMarketResult.status.consignmentMarketLoaded || false;
+  storageStatus.exhibitionSystemLoaded = exhibitionSystemResult.status.exhibitionSystemLoaded || false;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
@@ -696,7 +701,8 @@ function createInitialGameState(): GameState {
     inventorySystemResult.status.migrationPerformed ||
     publicationSystemResult.status.migrationPerformed ||
     curriculumSystemResult.status.migrationPerformed ||
-    consignmentMarketResult.status.migrationPerformed);
+    consignmentMarketResult.status.migrationPerformed ||
+    exhibitionSystemResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
     tutorialResult.status.recoveryPerformed ||
@@ -708,7 +714,8 @@ function createInitialGameState(): GameState {
     inventorySystemResult.status.recoveryPerformed ||
     publicationSystemResult.status.recoveryPerformed ||
     curriculumSystemResult.status.recoveryPerformed ||
-    consignmentMarketResult.status.recoveryPerformed);
+    consignmentMarketResult.status.recoveryPerformed ||
+    exhibitionSystemResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
@@ -751,13 +758,14 @@ function createInitialGameState(): GameState {
     storageStatus.corruptedItems.collections +
     storageStatus.corruptedItems.orders +
     (storageStatus.corruptedItems.reviewSystem || 0) +
-    (storageStatus.corruptedItems.inventorySystem || 0);
+    (storageStatus.corruptedItems.inventorySystem || 0) +
+    (storageStatus.corruptedItems.exhibitionSystem || 0);
   if (corruptedCount > 0) {
     warnings.push({
       type: 'corrupted',
       message: `发现 ${corruptedCount} 个损坏数据项，已自动清理`,
       timestamp: now,
-      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个, 订单: ${storageStatus.corruptedItems.orders} 个, 评审: ${storageStatus.corruptedItems.reviewSystem || 0} 个, 库存: ${storageStatus.corruptedItems.inventorySystem || 0} 个`
+      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个, 订单: ${storageStatus.corruptedItems.orders} 个, 评审: ${storageStatus.corruptedItems.reviewSystem || 0} 个, 库存: ${storageStatus.corruptedItems.inventorySystem || 0} 个, 展览: ${storageStatus.corruptedItems.exhibitionSystem || 0} 个`
     });
   }
   
@@ -823,7 +831,8 @@ function createInitialGameState(): GameState {
     publicationSystem: publicationSystemResult.state,
     subjectWorkshop: createInitialSubjectWorkshopState(),
     curriculumSystem: curriculumSystemResult.state,
-    consignmentMarket: consignmentMarketResult.state
+    consignmentMarket: consignmentMarketResult.state,
+    exhibitionSystem: exhibitionSystemResult.state
   };
 }
 
@@ -4028,6 +4037,632 @@ function createGameStore() {
       const newState = transferCertificate(state.consignmentMarket, certificateId, newOwnerId, newOwnerName);
       saveConsignmentMarket(newState);
       return { ...state, consignmentMarket: newState };
+    }),
+
+    setExhibitionActiveTab: (tab: ExhibitionCuratorTab) => update(state => ({
+      ...state,
+      exhibitionSystem: { ...state.exhibitionSystem, activeTab: tab }
+    })),
+
+    setActiveExhibition: (exhibitionId: string | null) => update(state => ({
+      ...state,
+      exhibitionSystem: { ...state.exhibitionSystem, activeExhibitionId: exhibitionId }
+    })),
+
+    createExhibition: (title: string, subtitle: string = '', description: string = ''): string | null => {
+      let newExhibitionId: string | null = null;
+      update(state => {
+        const now = Date.now();
+        const id = generateId();
+        newExhibitionId = id;
+        const initialThemes = state.exhibitionSystem.exhibitions.length > 0
+          ? state.exhibitionSystem.exhibitions[0].themes
+          : createInitialExhibitionState().exhibitions[0].themes;
+        const firstWallId = 'wall_' + id + '_0';
+
+        const newExhibition: Exhibition = {
+          id,
+          title,
+          subtitle,
+          curatorName: '策展人',
+          description,
+          status: 'draft',
+          groups: [],
+          walls: [{
+            id: firstWallId,
+            name: '主墙',
+            description: '',
+            width: 1200,
+            height: 600,
+            backgroundColor: '#f5f0e8',
+            textureType: 'smooth',
+            layoutType: 'grid',
+            placements: [],
+            order: 0
+          }],
+          themeId: initialThemes[0]?.id || '',
+          themes: initialThemes,
+          route: [],
+          feedbacks: [],
+          statistics: {
+            totalVisits: 0,
+            avgDuration: 0,
+            avgOverallRating: 0,
+            avgCurationRating: 0,
+            avgVarietyRating: 0,
+            avgFlowRating: 0,
+            avgLightingRating: 0,
+            topRatedWorks: [],
+            mostViewedWorks: [],
+            commonEmotions: [],
+            visitorTypeDistribution: [],
+            feedbackCount: 0
+          },
+          tags: [],
+          createdAt: now,
+          updatedAt: now,
+          totalViews: 0
+        };
+
+        const newSystemState = {
+          ...state.exhibitionSystem,
+          exhibitions: [...state.exhibitionSystem.exhibitions, newExhibition],
+          activeExhibitionId: id,
+          selectedWallId: firstWallId
+        };
+        saveExhibitionSystem(newSystemState);
+
+        return { ...state, exhibitionSystem: newSystemState };
+      });
+      return newExhibitionId;
+    },
+
+    updateExhibition: (exhibitionId: string, updates: Partial<Exhibition>) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh =>
+        exh.id === exhibitionId ? { ...exh, ...updates, updatedAt: now } : exh
+      );
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    deleteExhibition: (exhibitionId: string) => update(state => {
+      const remaining = state.exhibitionSystem.exhibitions.filter(e => e.id !== exhibitionId);
+      const newActiveId = remaining.length > 0 ? remaining[0].id : null;
+      const newSystemState = {
+        ...state.exhibitionSystem,
+        exhibitions: remaining,
+        activeExhibitionId: newActiveId,
+        selectedWallId: null
+      };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    createWorkGroup: (exhibitionId: string, name: string, colorTag: string = '#4a90d9', description?: string): string | null => {
+      let newGroupId: string | null = null;
+      update(state => {
+        const now = Date.now();
+        const id = generateId();
+        newGroupId = id;
+        const newGroup: ExhibitionWorkGroup = {
+          id,
+          name,
+          description,
+          colorTag,
+          photoIds: [],
+          tags: [],
+          createdAt: now,
+          updatedAt: now
+        };
+
+        const newExhibitions = state.exhibitionSystem.exhibitions.map(exh =>
+          exh.id === exhibitionId
+            ? { ...exh, groups: [...exh.groups, newGroup], updatedAt: now }
+            : exh
+        );
+        const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions, selectedGroupId: id };
+        saveExhibitionSystem(newSystemState);
+        return { ...state, exhibitionSystem: newSystemState };
+      });
+      return newGroupId;
+    },
+
+    updateWorkGroup: (exhibitionId: string, groupId: string, updates: Partial<ExhibitionWorkGroup>) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        return {
+          ...exh,
+          groups: exh.groups.map(g =>
+            g.id === groupId ? { ...g, ...updates, updatedAt: now } : g
+          ),
+          updatedAt: now
+        };
+      });
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    deleteWorkGroup: (exhibitionId: string, groupId: string) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        return {
+          ...exh,
+          groups: exh.groups.filter(g => g.id !== groupId),
+          updatedAt: now
+        };
+      });
+      const newSystemState = {
+        ...state.exhibitionSystem,
+        exhibitions: newExhibitions,
+        selectedGroupId: state.exhibitionSystem.selectedGroupId === groupId ? null : state.exhibitionSystem.selectedGroupId
+      };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    addPhotoToExhibitionGroup: (exhibitionId: string, groupId: string, photoId: string) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        return {
+          ...exh,
+          groups: exh.groups.map(g =>
+            g.id === groupId && !g.photoIds.includes(photoId)
+              ? { ...g, photoIds: [...g.photoIds, photoId], updatedAt: now }
+              : g
+          ),
+          updatedAt: now
+        };
+      });
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    removePhotoFromExhibitionGroup: (exhibitionId: string, groupId: string, photoId: string) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        return {
+          ...exh,
+          groups: exh.groups.map(g =>
+            g.id === groupId
+              ? { ...g, photoIds: g.photoIds.filter(p => p !== photoId), updatedAt: now }
+              : g
+          ),
+          updatedAt: now
+        };
+      });
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    selectGroup: (groupId: string | null) => update(state => ({
+      ...state,
+      exhibitionSystem: { ...state.exhibitionSystem, selectedGroupId: groupId }
+    })),
+
+    selectWall: (wallId: string | null) => update(state => ({
+      ...state,
+      exhibitionSystem: { ...state.exhibitionSystem, selectedWallId: wallId }
+    })),
+
+    createWall: (exhibitionId: string, name: string): string | null => {
+      let newWallId: string | null = null;
+      update(state => {
+        const now = Date.now();
+        const exh = state.exhibitionSystem.exhibitions.find(e => e.id === exhibitionId);
+        if (!exh) return state;
+        const id = generateId();
+        newWallId = id;
+        const newWall: ExhibitionWall = {
+          id,
+          name,
+          width: 1200,
+          height: 600,
+          backgroundColor: '#f5f0e8',
+          textureType: 'smooth',
+          layoutType: 'grid',
+          placements: [],
+          order: exh.walls.length
+        };
+
+        const newExhibitions = state.exhibitionSystem.exhibitions.map(e =>
+          e.id === exhibitionId
+            ? { ...e, walls: [...e.walls, newWall], updatedAt: now }
+            : e
+        );
+        const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions, selectedWallId: id };
+        saveExhibitionSystem(newSystemState);
+        return { ...state, exhibitionSystem: newSystemState };
+      });
+      return newWallId;
+    },
+
+    updateWall: (exhibitionId: string, wallId: string, updates: Partial<ExhibitionWall>) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        return {
+          ...exh,
+          walls: exh.walls.map(w =>
+            w.id === wallId ? { ...w, ...updates } : w
+          ),
+          updatedAt: now
+        };
+      });
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    deleteWall: (exhibitionId: string, wallId: string) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        return {
+          ...exh,
+          walls: exh.walls.filter(w => w.id !== wallId),
+          route: exh.route.filter(r => r.wallId !== wallId),
+          updatedAt: now
+        };
+      });
+      const newSystemState = {
+        ...state.exhibitionSystem,
+        exhibitions: newExhibitions,
+        selectedWallId: state.exhibitionSystem.selectedWallId === wallId ? null : state.exhibitionSystem.selectedWallId
+      };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    addPlacementToWall: (exhibitionId: string, wallId: string, photoId: string, x: number = 50, y: number = 50) => update(state => {
+      const now = Date.now();
+      const workId = generateId();
+      const newPlacement: ExhibitionWorkPlacement = {
+        workId,
+        photoId,
+        x,
+        y,
+        width: 120,
+        height: 160,
+        rotation: 0,
+        zIndex: 1,
+        frameStyle: 'minimal',
+        frameColor: '#2c2c2c',
+        matWidth: 8,
+        matColor: '#ffffff',
+        spotLightIntensity: 0.8,
+        spotLightColor: '#fff8e7'
+      };
+
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        return {
+          ...exh,
+          walls: exh.walls.map(w =>
+            w.id === wallId ? { ...w, placements: [...w.placements, newPlacement] } : w
+          ),
+          updatedAt: now
+        };
+      });
+      const newSystemState = {
+        ...state.exhibitionSystem,
+        exhibitions: newExhibitions,
+        selectedPlacementId: workId
+      };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    updatePlacement: (exhibitionId: string, wallId: string, workId: string, updates: Partial<ExhibitionWorkPlacement>) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        return {
+          ...exh,
+          walls: exh.walls.map(w =>
+            w.id === wallId
+              ? {
+                  ...w,
+                  placements: w.placements.map(p =>
+                    p.workId === workId ? { ...p, ...updates } : p
+                  )
+                }
+              : w
+          ),
+          updatedAt: now
+        };
+      });
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    removePlacement: (exhibitionId: string, wallId: string, workId: string) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        return {
+          ...exh,
+          walls: exh.walls.map(w =>
+            w.id === wallId
+              ? { ...w, placements: w.placements.filter(p => p.workId !== workId) }
+              : w
+          ),
+          route: exh.route.filter(r => r.placementId !== workId),
+          updatedAt: now
+        };
+      });
+      const newSystemState = {
+        ...state.exhibitionSystem,
+        exhibitions: newExhibitions,
+        selectedPlacementId: state.exhibitionSystem.selectedPlacementId === workId ? null : state.exhibitionSystem.selectedPlacementId
+      };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    selectPlacement: (placementId: string | null) => update(state => ({
+      ...state,
+      exhibitionSystem: { ...state.exhibitionSystem, selectedPlacementId: placementId }
+    })),
+
+    setEditingPlacement: (editing: boolean) => update(state => ({
+      ...state,
+      exhibitionSystem: { ...state.exhibitionSystem, isEditingPlacement: editing }
+    })),
+
+    setExhibitionTheme: (exhibitionId: string, themeId: string) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh =>
+        exh.id === exhibitionId ? { ...exh, themeId, updatedAt: now } : exh
+      );
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    updateExhibitionTheme: (exhibitionId: string, themeId: string, updates: Partial<ExhibitionTheme>) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        return {
+          ...exh,
+          themes: exh.themes.map(t =>
+            t.id === themeId ? { ...t, ...updates } : t
+          ),
+          updatedAt: now
+        };
+      });
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    addRouteStop: (exhibitionId: string, wallId: string, placementId?: string) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        const stop: ExhibitionRouteStop = {
+          wallId,
+          placementId,
+          stopIndex: exh.route.length,
+          dwellTime: 8,
+          focusZoom: 1
+        };
+        return {
+          ...exh,
+          route: [...exh.route, stop],
+          updatedAt: now
+        };
+      });
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    updateRouteStop: (exhibitionId: string, stopIndex: number, updates: Partial<ExhibitionRouteStop>) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        return {
+          ...exh,
+          route: exh.route.map((s, i) =>
+            i === stopIndex ? { ...s, ...updates } : s
+          ),
+          updatedAt: now
+        };
+      });
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    removeRouteStop: (exhibitionId: string, stopIndex: number) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        const newRoute = exh.route
+          .filter((_, i) => i !== stopIndex)
+          .map((s, i) => ({ ...s, stopIndex: i }));
+        return { ...exh, route: newRoute, updatedAt: now };
+      });
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    reorderRouteStop: (exhibitionId: string, fromIndex: number, toIndex: number) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        const newRoute = [...exh.route];
+        const [removed] = newRoute.splice(fromIndex, 1);
+        newRoute.splice(toIndex, 0, removed);
+        return {
+          ...exh,
+          route: newRoute.map((s, i) => ({ ...s, stopIndex: i })),
+          updatedAt: now
+        };
+      });
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    addVisitorFeedback: (exhibitionId: string, feedback: Omit<VisitorFeedback, 'id' | 'timestamp'>) => update(state => {
+      const now = Date.now();
+      const id = generateId();
+      const newFeedback: VisitorFeedback = { ...feedback, id, timestamp: now };
+
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh => {
+        if (exh.id !== exhibitionId) return exh;
+        const allFeedbacks = [...exh.feedbacks, newFeedback];
+        const avg = (key: keyof VisitorFeedback) =>
+          allFeedbacks.length > 0
+            ? allFeedbacks.reduce((sum, f) => sum + (f[key] as number), 0) / allFeedbacks.length
+            : 0;
+
+        const emotionCounts: Record<string, number> = {};
+        allFeedbacks.forEach(f => {
+          if (f.emotionalResponse) {
+            emotionCounts[f.emotionalResponse] = (emotionCounts[f.emotionalResponse] || 0) + 1;
+          }
+        });
+        const typeCounts: Record<string, number> = {};
+        allFeedbacks.forEach(f => {
+          typeCounts[f.visitorType] = (typeCounts[f.visitorType] || 0) + 1;
+        });
+        const workMentions: Record<string, number> = {};
+        const workRatings: Record<string, number[]> = {};
+        allFeedbacks.forEach(f => {
+          if (f.favoriteWorkId) {
+            workMentions[f.favoriteWorkId] = (workMentions[f.favoriteWorkId] || 0) + 1;
+            workRatings[f.favoriteWorkId] = workRatings[f.favoriteWorkId] || [];
+            workRatings[f.favoriteWorkId].push(f.overallRating);
+          }
+        });
+
+        return {
+          ...exh,
+          feedbacks: allFeedbacks,
+          statistics: {
+            ...exh.statistics,
+            feedbackCount: allFeedbacks.length,
+            avgOverallRating: Math.round(avg('overallRating') * 10) / 10,
+            avgCurationRating: Math.round(avg('curationRating') * 10) / 10,
+            avgVarietyRating: Math.round(avg('varietyRating') * 10) / 10,
+            avgFlowRating: Math.round(avg('flowRating') * 10) / 10,
+            avgLightingRating: Math.round(avg('lightingRating') * 10) / 10,
+            avgDuration: Math.round(avg('visitDuration') * 10) / 10,
+            totalVisits: allFeedbacks.length,
+            commonEmotions: Object.entries(emotionCounts).map(([emotion, count]) => ({ emotion, count })).sort((a, b) => b.count - a.count),
+            visitorTypeDistribution: Object.entries(typeCounts).map(([type, count]) => ({ type, count })),
+            topRatedWorks: Object.entries(workRatings)
+              .map(([photoId, ratings]) => ({
+                photoId,
+                rating: Math.round(ratings.reduce((a, b) => a + b, 0) / ratings.length * 10) / 10,
+                mentions: workMentions[photoId] || 0
+              }))
+              .sort((a, b) => b.mentions - a.mentions || b.rating - a.rating),
+            mostViewedWorks: Object.entries(workMentions).map(([photoId, views]) => ({ photoId, views })).sort((a, b) => b.views - a.views)
+          },
+          updatedAt: now,
+          totalViews: exh.totalViews + 1
+        };
+      });
+
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    setPreviewMode: (mode: 'edit' | 'walkthrough' | 'immersive') => update(state => ({
+      ...state,
+      exhibitionSystem: { ...state.exhibitionSystem, previewMode: mode }
+    })),
+
+    setRouteAnimationSpeed: (speed: number) => update(state => ({
+      ...state,
+      exhibitionSystem: { ...state.exhibitionSystem, routeAnimationSpeed: speed }
+    })),
+
+    toggleShowCaptions: () => update(state => ({
+      ...state,
+      exhibitionSystem: { ...state.exhibitionSystem, showWorkCaptions: !state.exhibitionSystem.showWorkCaptions }
+    })),
+
+    toggleShowSpotlights: () => update(state => ({
+      ...state,
+      exhibitionSystem: { ...state.exhibitionSystem, showSpotlights: !state.exhibitionSystem.showSpotlights }
+    })),
+
+    setExhibitionStatus: (exhibitionId: string, status: ExhibitionStatus) => update(state => {
+      const now = Date.now();
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(exh =>
+        exh.id === exhibitionId
+          ? { ...exh, status, updatedAt: now, publishedAt: status === 'published' ? now : exh.publishedAt }
+          : exh
+      );
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    autoLayoutWall: (exhibitionId: string, wallId: string) => update(state => {
+      const now = Date.now();
+      const exh = state.exhibitionSystem.exhibitions.find(e => e.id === exhibitionId);
+      const wall = exh?.walls.find(w => w.id === wallId);
+      if (!exh || !wall) return state;
+
+      const n = wall.placements.length;
+      if (n === 0) return state;
+
+      const cols = Math.ceil(Math.sqrt(n * (wall.width / wall.height)));
+      const rows = Math.ceil(n / cols);
+      const paddingX = wall.width * 0.08;
+      const paddingY = wall.height * 0.1;
+      const cellW = (wall.width - paddingX * 2) / cols;
+      const cellH = (wall.height - paddingY * 2) / rows;
+      const workW = cellW * 0.75;
+      const workH = cellH * 0.8;
+
+      let idx = 0;
+      const newPlacements = wall.placements.map(p => {
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        idx++;
+        return {
+          ...p,
+          x: paddingX + col * cellW + (cellW - workW) / 2,
+          y: paddingY + row * cellH + (cellH - workH) / 2,
+          width: workW,
+          height: workH,
+          rotation: 0,
+          zIndex: 1
+        };
+      });
+
+      const newExhibitions = state.exhibitionSystem.exhibitions.map(e => {
+        if (e.id !== exhibitionId) return e;
+        return {
+          ...e,
+          walls: e.walls.map(w =>
+            w.id === wallId ? { ...w, placements: newPlacements } : w
+          ),
+          updatedAt: now
+        };
+      });
+      const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
+      saveExhibitionSystem(newSystemState);
+      return { ...state, exhibitionSystem: newSystemState };
     })
   };
 }
