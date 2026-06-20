@@ -395,7 +395,7 @@ function validateCurriculumSystemState(data: unknown): data is CurriculumSystemS
 }
 
 function validateData<T>(key: StorageKey, data: unknown): T | null {
-  if (!Array.isArray(data) && key !== 'tutorial' && key !== 'achievements' && key !== 'quest_system' && key !== 'review_system' && key !== 'inventory_system' && key !== 'publication_system' && key !== 'curriculum_system' && key !== 'darkroom_calibration') {
+  if (!Array.isArray(data) && key !== 'tutorial' && key !== 'achievements' && key !== 'quest_system' && key !== 'review_system' && key !== 'inventory_system' && key !== 'publication_system' && key !== 'curriculum_system' && key !== 'consignment_market' && key !== 'exhibition_system' && key !== 'darkroom_calibration' && key !== 'challenge_system') {
     return null;
   }
   
@@ -445,6 +445,9 @@ function validateData<T>(key: StorageKey, data: unknown): T | null {
     }
     case 'darkroom_calibration': {
       return validateDarkroomCalibrationState(data) ? (data as T) : null;
+    }
+    case 'challenge_system': {
+      return validateChallengeState(data) ? (data as T) : null;
     }
     default:
       return null;

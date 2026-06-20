@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import { gameStore } from '../stores/gameStore';
   import { PHOTO_SUBJECTS, FILM_STOCKS } from '../data/gameData';
   import {
@@ -17,6 +17,9 @@
     updateChallengeStatuses
   } from '../utils/challengeSystem';
   import { REVIEW_DIMENSIONS } from '../utils/reviewSystem';
+  import { generateBaseScene, applyDevelopment, renderToCanvas, type RenderedImageData } from '../utils/renderEngine';
+  import { calculateScore } from '../utils/scoring';
+  import { generateId } from '../utils/math';
   import type {
     ChallengeState,
     ChallengeDefinition,
@@ -27,7 +30,10 @@
     ChallengeSeason,
     ChallengeLeaderboardEntry,
     ChallengeStatus,
-    ProcessedPhoto
+    ProcessedPhoto,
+    DevParams,
+    PhotoSubject,
+    FilmStock
   } from '../types/game';
 
   const dispatch = createEventDispatcher<{ close: void }>();
@@ -84,6 +90,24 @@
   let reviewComment = '';
   let selectedSubmissionForReview: ChallengeSubmission | null = null;
   let timerInterval: number | null = null;
+
+  let developCanvas: HTMLCanvasElement;
+  let developCtx: CanvasRenderingContext2D | null = null;
+  let developBaseScene: RenderedImageData | null = null;
+  let developFinalImage: RenderedImageData | null = null;
+  let developSubject: PhotoSubject | null = null;
+  let developFilm: FilmStock = FILM_STOCKS[0];
+  let developParams: DevParams = {
+    exposure: 0.5,
+    contrast: 0.5,
+    developmentTime: 0.5,
+    temperature: 0.5,
+    saturation: 0.5,
+    agitation: 0.5,
+    dilution: 0.5
+  };
+  let developIsReady = false;
+  let developPhotoUrl = '';
 
   const tabs: { id: ChallengeTab; label: string; icon: string }[] = [
     { id: 'browse', label: '赛事大厅', icon: '🏆' },
@@ -164,9 +188,26 @@
     gameStore.lockChallengeTeam(userTeam.id);
   }
 
-  function handleStartDevelop() {
-    if (!selectedChallengeId) return;
-    gameStore.startChallengeDevelop(selectedChallengeId);
+  function handleStartDevelop(challengeId: string) {
+    gameStore.setSelectedChallenge(challengeId);
+    gameStore.startChallengeDevelop(challengeId);
+    
+    developIsReady = false;
+    developBaseScene = null;
+    developFinalImage = null;
+    developSubject = null;
+    developFilm = FILM_STOCKS[0];
+    developParams = {
+      exposure: 0.5,
+      contrast: 0.5,
+      developmentTime: 0.5,
+      temperature: 0.5,
+      saturation: 0.5,
+      agitation: 0.5,
+      dilution: 0.5
+    };
+    developPhotoUrl = '';
+    
     showDevelopModal = true;
   }
 
@@ -177,8 +218,135 @@
     }
   }
 
-  function handleSubmitPhoto(photo: ProcessedPhoto) {
+  async function initDevelopCanvas() {
+    if (!developCanvas || !currentTheme) return;
+    
+    developCtx = developCanvas.getContext('2d');
+    if (!developCtx) return;
+
+    const subject = PHOTO_SUBJECTS.find(s => s.id === currentTheme.subjectId);
+    if (!subject) return;
+
+    developSubject = subject;
+    developBaseScene = generateBaseScene(subject);
+    developIsReady = true;
+    
+    await tick();
+    renderDevelopPhoto();
+  }
+
+  function renderDevelopPhoto() {
+    if (!developBaseScene || !developCtx || !developSubject) return;
+
+    const isColorFilm = developFilm.color === 'color';
+    developFinalImage = applyDevelopment(
+      developBaseScene,
+      {
+        exposure: developParams.exposure,
+        developmentTime: developParams.developmentTime,
+        temperature: developParams.temperature,
+        agitation: developParams.agitation,
+        contrast: developParams.contrast,
+        saturation: developParams.saturation,
+        dilution: developParams.dilution,
+        isColorFilm,
+        filmBaseContrast: developFilm.baseContrast,
+        filmBaseSaturation: developFilm.baseSaturation,
+        grainSize: developFilm.grainSize,
+        subjectBaseBrightness: developSubject.baseBrightness || 0.35,
+        seed: developSubject.seed || 1,
+        progress: 1,
+        stage: 'complete',
+        stageProgress: 1
+      },
+      false
+    );
+
+    renderToCanvas(developCtx, developFinalImage);
+    developPhotoUrl = developCanvas.toDataURL('image/jpeg', 0.85);
+  }
+
+  $: if (developIsReady && developBaseScene) {
+    renderDevelopPhoto();
+  }
+
+  $: developPreviewScore = (() => {
+    if (!developSubject || !developFinalImage) return 0;
+    const detail = calculateScore(
+      developSubject,
+      developParams,
+      developFinalImage,
+      developFilm.color === 'color',
+      undefined,
+      developFilm.id
+    );
+    return detail.overall;
+  })();
+
+  $: if (showDevelopModal && developCanvas && currentTheme && !developIsReady) {
+    initDevelopCanvas();
+  }
+
+  function updateDevelopParam(param: keyof DevParams, value: number | string) {
+    developParams = { ...developParams, [param]: value };
+  }
+
+  function handleExposureChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    updateDevelopParam('exposure', parseFloat(target.value));
+  }
+
+  function handleContrastChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    updateDevelopParam('contrast', parseFloat(target.value));
+  }
+
+  function handleTimeChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    updateDevelopParam('developmentTime', parseFloat(target.value));
+  }
+
+  function handleTempChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    updateDevelopParam('temperature', parseFloat(target.value));
+  }
+
+  function handleSaturationChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    updateDevelopParam('saturation', parseFloat(target.value));
+  }
+
+  function generateDevelopPhoto(): ProcessedPhoto | null {
+    if (!developSubject || !developFinalImage || !currentTheme) return null;
+
+    const isColorFilm = developFilm.color === 'color';
+    const scoreDetail = calculateScore(
+      developSubject,
+      developParams,
+      developFinalImage,
+      isColorFilm,
+      undefined,
+      developFilm.id
+    );
+
+    return {
+      id: 'photo_' + generateId(),
+      subjectId: developSubject.id,
+      filmId: developFilm.id,
+      params: { ...developParams },
+      score: scoreDetail.overall,
+      details: scoreDetail,
+      imageDataUrl: developPhotoUrl,
+      timestamp: Date.now()
+    };
+  }
+
+  function handleSubmitDevelopPhoto() {
     if (!selectedChallengeId || !developTimer.startTime) return;
+    
+    const photo = generateDevelopPhoto();
+    if (!photo) return;
+
     const developDurationMs = Date.now() - developTimer.startTime;
     gameStore.submitChallengePhoto(selectedChallengeId, photo, developDurationMs);
     closeDevelopModal();
@@ -577,10 +745,7 @@
                   <button
                     class="primary-btn"
                     disabled={developTimer.isRunning}
-                    on:click={() => {
-                      gameStore.setSelectedChallenge(challenge.id);
-                      handleStartDevelop();
-                    }}
+                    on:click={() => handleStartDevelop(challenge.id)}
                   >
                     {developTimer.isRunning && developTimer.challengeId === challenge.id
                       ? '冲洗中...'
@@ -946,6 +1111,176 @@
           <button class="secondary-btn" on:click={closeTeamModal}>取消</button>
           <button class="primary-btn" disabled={!teamName.trim()} on:click={handleCreateTeam}>
             创建队伍
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showDevelopModal && selectedChallenge && currentTheme}
+    <div class="modal-overlay" on:click={closeDevelopModal}>
+      <div class="modal extra-large" on:click|stopPropagation>
+        <div class="modal-header">
+          <h3>🎞️ 限时冲洗 - {selectedChallenge.title}</h3>
+          <div class="develop-modal-timer" style="color: {timerStatus.color}">
+            ⏱️ {formatTimeRemaining(developTimer.remainingMs)}
+          </div>
+          <button class="close-btn" on:click={closeDevelopModal}>×</button>
+        </div>
+        <div class="modal-content develop-modal-content">
+          <div class="develop-left-panel">
+            <div class="develop-theme-info">
+              <h4>当前主题</h4>
+              <div class="theme-badge">🎯 {currentTheme.name}</div>
+              <div class="theme-details">
+                <span>📸 题材：{getSubjectName(currentTheme.subjectId)}</span>
+                <span>⏱️ 限时：{currentTheme.timeLimitMinutes} 分钟</span>
+                <span>难度：{'⭐'.repeat(currentTheme.difficulty)}</span>
+              </div>
+              {#if currentTheme.requireFilmColor}
+                <div class="theme-film-req">
+                  要求胶片：{currentTheme.requireFilmColor === 'bw' ? '黑白胶片' : '彩色胶片'}
+                </div>
+              {/if}
+            </div>
+
+            <div class="develop-film-select">
+              <h4>选择胶片</h4>
+              <div class="film-options">
+                {#each FILM_STOCKS as film}
+                  <div 
+                    class="film-option"
+                    class:active={developFilm.id === film.id}
+                    on:click={() => { developFilm = film; }}
+                  >
+                    <span class="film-icon">{film.color === 'color' ? '🎨' : '⚫'}</span>
+                    <span class="film-name">{film.name}</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+
+            <div class="develop-params">
+              <h4>冲洗参数</h4>
+              
+              <div class="param-item">
+                <div class="param-label">
+                  <span>曝光补偿</span>
+                  <span class="param-value">{developParams.exposure > 0 ? '+' : ''}{developParams.exposure}</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="-3" 
+                  max="3" 
+                  step="0.1"
+                  value={developParams.exposure}
+                  on:input={handleExposureChange}
+                  class="param-slider"
+                />
+              </div>
+
+              <div class="param-item">
+                <div class="param-label">
+                  <span>反差</span>
+                  <span class="param-value">{developParams.contrast > 0 ? '+' : ''}{developParams.contrast}</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="-3" 
+                  max="3" 
+                  step="0.1"
+                  value={developParams.contrast}
+                  on:input={handleContrastChange}
+                  class="param-slider"
+                />
+              </div>
+
+              <div class="param-item">
+                <div class="param-label">
+                  <span>显影时间</span>
+                  <span class="param-value">{developParams.developmentTime} 分钟</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="1" 
+                  max="30" 
+                  step="0.5"
+                  value={developParams.developmentTime}
+                  on:input={handleTimeChange}
+                  class="param-slider"
+                />
+              </div>
+
+              <div class="param-item">
+                <div class="param-label">
+                  <span>显影温度</span>
+                  <span class="param-value">{developParams.temperature}°C</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="15" 
+                  max="30" 
+                  step="0.5"
+                  value={developParams.temperature}
+                  on:input={handleTempChange}
+                  class="param-slider"
+                />
+              </div>
+
+              {#if developFilm.color === 'color'}
+                <div class="param-item">
+                  <div class="param-label">
+                    <span>饱和度</span>
+                    <span class="param-value">{developParams.saturation > 0 ? '+' : ''}{developParams.saturation}</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="-3" 
+                    max="3" 
+                    step="0.1"
+                    value={developParams.saturation}
+                    on:input={handleSaturationChange}
+                    class="param-slider"
+                  />
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <div class="develop-right-panel">
+            <div class="develop-canvas-wrapper">
+              {#if developIsReady}
+                <canvas 
+                  bind:this={developCanvas}
+                  width="400" 
+                  height="400"
+                  class="develop-canvas"
+                />
+              {:else}
+                <div class="develop-canvas-placeholder">
+                  <span>加载中...</span>
+                </div>
+              {/if}
+            </div>
+
+            {#if developFinalImage}
+              <div class="develop-score-preview">
+                <div class="score-item">
+                  <span class="score-label">预计得分</span>
+                  <span class="score-value">{Math.round(developPreviewScore)}</span>
+                </div>
+              </div>
+            {/if}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="secondary-btn" on:click={closeDevelopModal}>取消</button>
+          <button 
+            class="primary-btn" 
+            on:click={handleSubmitDevelopPhoto}
+            disabled={developTimer.remainingMs <= 0 || !developFinalImage}
+          >
+            提交作品
           </button>
         </div>
       </div>
@@ -2259,5 +2594,238 @@
     .leaderboard-table td {
       padding: 8px;
     }
+
+    .develop-modal-content {
+      flex-direction: column;
+    }
+
+    .develop-left-panel,
+    .develop-right-panel {
+      width: 100%;
+    }
+  }
+
+  .modal.extra-large {
+    max-width: 1000px;
+    width: 95vw;
+  }
+
+  .develop-modal-timer {
+    font-size: 20px;
+    font-weight: 700;
+    margin-right: 16px;
+  }
+
+  .develop-modal-content {
+    display: flex;
+    gap: 24px;
+    max-height: 65vh;
+    overflow-y: auto;
+  }
+
+  .develop-left-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+  }
+
+  .develop-right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  .develop-theme-info {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 16px;
+    border-radius: 8px;
+  }
+
+  .develop-theme-info h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .theme-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+
+  .theme-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .theme-film-req {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #f39c12;
+  }
+
+  .develop-film-select h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .film-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .film-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .film-option:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .film-option.active {
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.2);
+  }
+
+  .film-icon {
+    font-size: 18px;
+  }
+
+  .film-name {
+    font-size: 13px;
+  }
+
+  .develop-params {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 16px;
+    border-radius: 8px;
+  }
+
+  .develop-params h4 {
+    margin: 0 0 16px 0;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .param-item {
+    margin-bottom: 16px;
+  }
+
+  .param-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .param-label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+
+  .param-value {
+    font-weight: 600;
+    color: #667eea;
+  }
+
+  .param-slider {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    outline: none;
+  }
+
+  .param-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #667eea;
+    cursor: pointer;
+  }
+
+  .param-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #667eea;
+    cursor: pointer;
+    border: none;
+  }
+
+  .develop-canvas-wrapper {
+    width: 100%;
+    max-width: 400px;
+    aspect-ratio: 1;
+    background: #0a0a0a;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .develop-canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .develop-canvas-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+  }
+
+  .develop-score-preview {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 16px 24px;
+    border-radius: 8px;
+    text-align: center;
+  }
+
+  .develop-score-preview .score-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .develop-score-preview .score-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .develop-score-preview .score-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #ffd700;
   }
 </style>

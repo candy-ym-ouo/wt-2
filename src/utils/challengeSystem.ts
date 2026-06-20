@@ -32,13 +32,15 @@ export function createInitialChallengeSystemState(): ChallengeState {
   const now = Date.now();
   const defaultChallenges = createDefaultChallenges();
   const defaultSeasons = createDefaultSeasons(defaultChallenges);
+  const mockSubmissions = createMockSubmissions(defaultChallenges);
+  const mockTeams = createMockTeams(defaultChallenges);
 
   return {
     challenges: defaultChallenges,
     seasons: defaultSeasons,
-    teams: [],
+    teams: mockTeams,
     registrations: [],
-    submissions: [],
+    submissions: mockSubmissions,
     activeTab: 'browse',
     selectedChallengeId: null,
     selectedTeamId: null,
@@ -857,4 +859,185 @@ export function getTimeStatus(remainingMs: number): { color: string; label: stri
     return { color: '#f39c12', label: '紧张' };
   }
   return { color: '#27ae60', label: '充足' };
+}
+
+const MOCK_USERS = [
+  { id: 'mock_user_1', name: '光影猎人' },
+  { id: 'mock_user_2', name: '暗房艺术家' },
+  { id: 'mock_user_3', name: '胶片诗人' },
+  { id: 'mock_user_4', name: '快门行者' },
+  { id: 'mock_user_5', name: '黑白匠人' },
+  { id: 'mock_user_6', name: '色彩魔法师' },
+  { id: 'mock_user_7', name: '街头观察家' },
+  { id: 'mock_user_8', name: '风景捕手' }
+];
+
+function createMockSubmission(
+  challengeId: string,
+  userId: string,
+  userName: string,
+  subjectId: string,
+  score: number,
+  teamId: string | null = null
+): ChallengeSubmission {
+  return {
+    id: 'sub_mock_' + generateId(),
+    challengeId,
+    userId,
+    userName,
+    teamId,
+    photoId: 'photo_mock_' + generateId(),
+    photoDataUrl: 'data:image/svg+xml;base64,' + btoa(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">
+        <rect width="400" height="400" fill="#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}"/>
+        <text x="200" y="200" text-anchor="middle" fill="white" font-size="24">${userName}</text>
+        <text x="200" y="240" text-anchor="middle" fill="white" font-size="16">得分: ${score}</text>
+      </svg>`
+    ),
+    subjectId,
+    filmId: FILM_STOCKS[Math.floor(Math.random() * FILM_STOCKS.length)].id,
+    params: {
+      exposure: 0.5,
+      contrast: 0.5,
+      developmentTime: 0.5,
+      temperature: 0.5,
+      saturation: 0.5,
+      agitation: 0.5,
+      dilution: 0.5
+    },
+    score,
+    details: {
+      overall: score,
+      grade: (score >= 85 ? 'S' : score >= 70 ? 'A' : score >= 55 ? 'B' : score >= 40 ? 'C' : 'D') as 'S' | 'A' | 'B' | 'C' | 'D',
+      exposure: score * 0.35,
+      contrast: score * 0.25,
+      color: score * 0.2,
+      detail: score * 0.2,
+      feedback: [],
+      keyAreaResults: [],
+      paramDeviations: [],
+      deductions: [],
+      overexposedPct: 0,
+      underexposedPct: 0,
+      dynamicRange: 0,
+      sharpness: 0,
+      stageImpact: {
+        developPenalty: 0,
+        fixPenalty: 0,
+        washPenalty: 0,
+        developFeedback: '',
+        fixFeedback: '',
+        washFeedback: ''
+      }
+    },
+    submittedAt: Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000,
+    developDurationMs: 5 * 60 * 1000 + Math.random() * 20 * 60 * 1000,
+    reviewStatus: 'pending',
+    reviews: [],
+    reviewScore: 0,
+    finalScore: score,
+    rank: 0
+  };
+}
+
+export function createMockSubmissions(challenges: ChallengeDefinition[]): ChallengeSubmission[] {
+  const submissions: ChallengeSubmission[] = [];
+  
+  challenges.forEach(challenge => {
+    if (challenge.status !== 'developing' && challenge.status !== 'reviewing' && challenge.status !== 'completed') return;
+    
+    const theme = challenge.themes[challenge.currentThemeIndex];
+    if (!theme) return;
+    
+    const numSubmissions = 5 + Math.floor(Math.random() * 8);
+    const shuffledUsers = [...MOCK_USERS].sort(() => Math.random() - 0.5);
+    
+    for (let i = 0; i < numSubmissions && i < shuffledUsers.length; i++) {
+      const user = shuffledUsers[i];
+      const baseScore = 50 + Math.random() * 45;
+      const submission = createMockSubmission(
+        challenge.id,
+        user.id,
+        user.name,
+        theme.subjectId,
+        Math.round(baseScore)
+      );
+      
+      if (challenge.status === 'reviewing' || challenge.status === 'completed') {
+        const numReviews = 2 + Math.floor(Math.random() * 3);
+        const reviewers = shuffledUsers.filter(u => u.id !== user.id).slice(0, numReviews);
+        const reviews = reviewers.map(reviewer => ({
+          id: 'review_mock_' + generateId(),
+          submissionId: submission.id,
+          reviewerId: reviewer.id,
+          reviewerName: reviewer.name,
+          score: 50 + Math.random() * 45,
+          comment: '作品很棒，继续加油！',
+          reviewedAt: Date.now() - Math.random() * 3 * 24 * 60 * 60 * 1000,
+          dimensions: REVIEW_DIMENSIONS.map(dim => ({
+            dimensionId: dim.id,
+            score: 50 + Math.random() * 45,
+            comment: '表现不错'
+          }))
+        }));
+        submission.reviews = reviews;
+        submission.reviewScore = reviews.reduce((sum, r) => sum + r.score, 0) / reviews.length;
+        submission.finalScore = Math.round(submission.score * 0.6 + submission.reviewScore * 0.4);
+        submission.reviewStatus = 'accepted';
+      }
+      
+      submissions.push(submission);
+    }
+  });
+  
+  return submissions;
+}
+
+export function createMockTeams(challenges: ChallengeDefinition[]): ChallengeTeam[] {
+  const teams: ChallengeTeam[] = [];
+  const teamNames = ['光影联盟', '暗房先锋', '胶片骑士', '色彩部落', '快门军团'];
+  
+  challenges.forEach((challenge, idx) => {
+    if (!challenge.allowTeams) return;
+    
+    const numTeams = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < numTeams && i < teamNames.length; i++) {
+      const teamId = `team_mock_${challenge.id}_${i}`;
+      const leaderIdx = (idx * 2 + i) % MOCK_USERS.length;
+      const members = [
+        {
+          userId: MOCK_USERS[leaderIdx].id,
+          userName: MOCK_USERS[leaderIdx].name,
+          role: 'leader' as TeamRole,
+          joinedAt: Date.now() - 5 * 24 * 60 * 60 * 1000
+        }
+      ];
+      
+      if (challenge.maxTeamSize > 1) {
+        const memberIdx = (leaderIdx + 1) % MOCK_USERS.length;
+        members.push({
+          userId: MOCK_USERS[memberIdx].id,
+          userName: MOCK_USERS[memberIdx].name,
+          role: 'member' as TeamRole,
+          joinedAt: Date.now() - 4 * 24 * 60 * 60 * 1000
+        });
+      }
+      
+      teams.push({
+        id: teamId,
+        challengeId: challenge.id,
+        name: `${teamNames[i]}_${challenge.id.slice(0, 8)}`,
+        slogan: '用镜头记录美好',
+        avatarColor: AVATAR_COLORS[(idx + i) % AVATAR_COLORS.length],
+        leaderId: MOCK_USERS[leaderIdx].id,
+        leaderName: MOCK_USERS[leaderIdx].name,
+        members,
+        maxMembers: challenge.maxTeamSize,
+        registeredAt: Date.now() - 7 * 24 * 60 * 60 * 1000,
+        isLocked: true
+      });
+    }
+  });
+  
+  return teams;
 }
