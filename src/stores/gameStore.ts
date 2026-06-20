@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES, DEFAULT_WORKSHOP_STATE, createBlankTemplate } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
@@ -105,6 +105,29 @@ import {
   getNewTemplate,
   filterAndSortTemplates
 } from '../utils/subjectWorkshop';
+import {
+  createInitialCurriculumSystemState,
+  completeStep,
+  recordStepAttempt,
+  checkQuizAnswer,
+  calculateExamScore,
+  generateParamFeedback,
+  generateScoreFeedback,
+  evaluatePracticeExercise,
+  getChapterById,
+  getStepById,
+  getNextStepId,
+  getPrevStepId,
+  getChapterProgressStats,
+  getOverallProgress,
+  isChapterUnlocked,
+  isStepUnlocked,
+  addLearningNote
+} from '../utils/curriculumSystem';
+import {
+  loadSavedCurriculumSystem,
+  saveCurriculumSystem
+} from '../utils/storage';
 
 function createInitialStageState(): StageState {
   return {
@@ -616,6 +639,7 @@ function createInitialGameState(): GameState {
   const reviewSystemResult = loadSavedReviewSystem();
   const inventorySystemResult = loadSavedInventorySystem();
   const publicationSystemResult = loadSavedPublicationSystem();
+  const curriculumSystemResult = loadSavedCurriculumSystem();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -631,6 +655,7 @@ function createInitialGameState(): GameState {
   storageStatus.reviewSystemLoaded = reviewSystemResult.status.reviewSystemLoaded || false;
   storageStatus.inventorySystemLoaded = inventorySystemResult.status.inventorySystemLoaded || false;
   storageStatus.publicationSystemLoaded = publicationSystemResult.status.publicationSystemLoaded || false;
+  storageStatus.curriculumSystemLoaded = curriculumSystemResult.status.curriculumSystemLoaded || false;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
@@ -641,7 +666,8 @@ function createInitialGameState(): GameState {
     questSystemResult.status.migrationPerformed ||
     reviewSystemResult.status.migrationPerformed ||
     inventorySystemResult.status.migrationPerformed ||
-    publicationSystemResult.status.migrationPerformed);
+    publicationSystemResult.status.migrationPerformed ||
+    curriculumSystemResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
     tutorialResult.status.recoveryPerformed ||
@@ -651,7 +677,8 @@ function createInitialGameState(): GameState {
     questSystemResult.status.recoveryPerformed ||
     reviewSystemResult.status.recoveryPerformed ||
     inventorySystemResult.status.recoveryPerformed ||
-    publicationSystemResult.status.recoveryPerformed);
+    publicationSystemResult.status.recoveryPerformed ||
+    curriculumSystemResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
@@ -764,7 +791,8 @@ function createInitialGameState(): GameState {
     reviewSystem: reviewSystemResult.state,
     inventorySystem: inventorySystemResult.state,
     publicationSystem: publicationSystemResult.state,
-    subjectWorkshop: createInitialSubjectWorkshopState()
+    subjectWorkshop: createInitialSubjectWorkshopState(),
+    curriculumSystem: curriculumSystemResult.state
   };
 }
 
@@ -1377,6 +1405,284 @@ function createGameStore() {
         paramAdjustTimestamps: {},
         developStartedAt: null,
         tutorial: newTutorialState
+      };
+    }),
+    setCurriculumActiveChapter: (chapterId: string | null) => update(state => {
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        activeChapterId: chapterId,
+        activeStepId: chapterId
+          ? (getChapterById(chapterId)?.steps[0]?.id || null)
+          : null
+      };
+      saveCurriculumSystem(newCurriculum);
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    setCurriculumActiveStep: (chapterId: string, stepId: string | null) => update(state => {
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        activeChapterId: chapterId,
+        activeStepId: stepId,
+        profile: {
+          ...state.curriculumSystem.profile,
+          currentChapterId: chapterId,
+          currentStepId: stepId
+        }
+      };
+      saveCurriculumSystem(newCurriculum);
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    toggleCurriculumPanel: (show?: boolean) => update(state => {
+      const shouldShow = show !== undefined ? show : !state.curriculumSystem.showCurriculumPanel;
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        showCurriculumPanel: shouldShow
+      };
+      saveCurriculumSystem(newCurriculum);
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    toggleCurriculumPracticeMode: (enabled?: boolean) => update(state => {
+      const shouldEnable = enabled !== undefined ? enabled : !state.curriculumSystem.practiceMode;
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        practiceMode: shouldEnable
+      };
+      saveCurriculumSystem(newCurriculum);
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    submitQuizAnswer: (
+      chapterId: string,
+      stepId: string,
+      questionId: string,
+      question: QuizQuestion,
+      userAnswer: string | string[]
+    ) => update(state => {
+      const result = checkQuizAnswer(question, userAnswer);
+      const feedbacks: CurriculumFeedback[] = [{
+        id: 'feedback_' + generateId(),
+        timestamp: Date.now(),
+        severity: result.correct ? 'info' : 'warning',
+        category: result.correct ? 'encouragement' : 'knowledge_gap',
+        title: result.correct ? '回答正确！' : '回答错误',
+        message: result.feedback,
+        suggestion: result.correct
+          ? '很好，继续保持！进入下一步学习。'
+          : '回顾相关知识点后再次尝试。'
+      }];
+
+      const newProfile = result.correct
+        ? completeStep(state.curriculumSystem.profile, chapterId, stepId, result.score, feedbacks)
+        : recordStepAttempt(state.curriculumSystem.profile, chapterId, stepId, ['knowledge_gap'], 0);
+
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        profile: newProfile,
+        activeFeedback: feedbacks[0],
+        lastGeneratedFeedback: feedbacks[0]
+      };
+      saveCurriculumSystem(newCurriculum);
+
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    completeReadingStep: (chapterId: string, stepId: string) => update(state => {
+      const feedbacks: CurriculumFeedback[] = [{
+        id: 'feedback_' + generateId(),
+        timestamp: Date.now(),
+        severity: 'info',
+        category: 'encouragement',
+        title: '学习完成',
+        message: '已完成本章节的阅读学习。',
+        suggestion: '继续下一步，或进行练习巩固知识。'
+      }];
+
+      const newProfile = completeStep(state.curriculumSystem.profile, chapterId, stepId, 5, feedbacks);
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        profile: newProfile,
+        activeFeedback: feedbacks[0]
+      };
+      saveCurriculumSystem(newCurriculum);
+
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    submitChapterExam: (
+      chapterId: string,
+      answers: Record<string, string | string[]>
+    ) => update(state => {
+      const chapter = getChapterById(chapterId);
+      if (!chapter?.chapterExam) return state;
+
+      const examResult = calculateExamScore(chapter.chapterExam.questions, answers);
+      const passed = examResult.percentage >= chapter.chapterExam.passingScore;
+
+      const feedbacks: CurriculumFeedback[] = [{
+        id: 'feedback_' + generateId(),
+        timestamp: Date.now(),
+        severity: passed ? 'info' : 'error',
+        category: passed ? 'encouragement' : 'knowledge_gap',
+        title: passed ? '章节测验通过！' : '章节测验未通过',
+        message: `得分: ${examResult.score}/${examResult.totalPoints} (${examResult.percentage}%)，正确率: ${examResult.correctCount}/${chapter.chapterExam.questions.length}`,
+        suggestion: passed
+          ? '恭喜通过本章节测验！继续学习下一章。'
+          : `及格线: ${chapter.chapterExam.passingScore}%，请复习后再次尝试。`
+      }];
+
+      const chapterProgress = state.curriculumSystem.profile.chapterProgress[chapterId];
+      const newStatus: ChapterProgress['status'] = passed ? 'completed' : 'exam_failed';
+      const newProfile = {
+        ...state.curriculumSystem.profile,
+        totalPointsEarned: state.curriculumSystem.profile.totalPointsEarned + examResult.score,
+        chapterProgress: {
+          ...state.curriculumSystem.profile.chapterProgress,
+          [chapterId]: {
+            ...chapterProgress,
+            examScore: examResult.percentage,
+            examAttempts: (chapterProgress?.examAttempts || 0) + 1,
+            status: newStatus,
+            completedAt: passed ? Date.now() : chapterProgress?.completedAt,
+            earnedPoints: (chapterProgress?.earnedPoints || 0) + examResult.score
+          }
+        },
+        feedbackHistory: [...state.curriculumSystem.profile.feedbackHistory, ...feedbacks].slice(-100)
+      };
+
+      if (passed && !newProfile.completedChapterIds.includes(chapterId)) {
+        newProfile.completedChapterIds = [...newProfile.completedChapterIds, chapterId];
+      }
+
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        profile: newProfile,
+        activeFeedback: feedbacks[0],
+        lastGeneratedFeedback: feedbacks[0],
+        currentExamAnswers: {}
+      };
+      saveCurriculumSystem(newCurriculum);
+
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    setExamAnswer: (questionId: string, answer: string | string[]) => update(state => {
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        currentExamAnswers: {
+          ...state.curriculumSystem.currentExamAnswers,
+          [questionId]: answer
+        }
+      };
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    generateParamFeedbackForCurrent: (
+      param: keyof DevParams,
+      actualValue: number,
+      idealValue: number
+    ) => update(state => {
+      const feedback = generateParamFeedback(param, actualValue, idealValue);
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        activeFeedback: feedback,
+        lastGeneratedFeedback: feedback
+      };
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    evaluatePracticeResult: (
+      chapterId: string,
+      stepId: string,
+      exerciseId: string,
+      score: number,
+      grade: string,
+      params: DevParams,
+      filmId: string,
+      attemptNumber: number
+    ) => update(state => {
+      const chapter = getChapterById(chapterId);
+      const step = getStepById(chapterId, stepId);
+      const exercise = step?.exercise;
+
+      if (!exercise) return state;
+
+      const result = evaluatePracticeExercise(exercise, score, grade, params, filmId, attemptNumber);
+
+      const newProfile = result.passed
+        ? completeStep(state.curriculumSystem.profile, chapterId, stepId, result.earnedPoints, result.feedback)
+        : recordStepAttempt(state.curriculumSystem.profile, chapterId, stepId, ['param_error'], score);
+
+      const bonusesText = result.bonusesEarned.length > 0
+        ? ` 奖励: ${result.bonusesEarned.map(b => `${b.description} +${b.points}分`).join(', ')}`
+        : '';
+
+      const finalFeedbacks = result.feedback.map(f => ({
+        ...f,
+        message: f.message + bonusesText
+      }));
+
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        profile: newProfile,
+        activeFeedback: finalFeedbacks[0] || null,
+        lastGeneratedFeedback: finalFeedbacks[0] || null
+      };
+      saveCurriculumSystem(newCurriculum);
+
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    dismissCurriculumFeedback: () => update(state => {
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        activeFeedback: null
+      };
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    addLearningNote: (chapterId: string, content: string, stepId?: string) => update(state => {
+      const newProfile = addLearningNote(state.curriculumSystem.profile, chapterId, content, stepId);
+      const newCurriculum = {
+        ...state.curriculumSystem,
+        profile: newProfile
+      };
+      saveCurriculumSystem(newCurriculum);
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
+      };
+    }),
+    resetCurriculumProgress: () => update(state => {
+      const newCurriculum = createInitialCurriculumSystemState();
+      saveCurriculumSystem(newCurriculum);
+      return {
+        ...state,
+        curriculumSystem: newCurriculum
       };
     }),
     openAlbum: () => update(state => ({

@@ -1738,3 +1738,968 @@ export const DEFAULT_WORKSHOP_STATE = {
 };
 
 export { createTemplateFromSubject };
+
+import type { CurriculumChapter, LearningMilestone, CurriculumChapterCategory } from '../types/game';
+
+export const CURRICULUM_CATEGORY_LABELS: Record<CurriculumChapterCategory, string> = {
+  fundamentals: '基础入门',
+  exposure: '曝光控制',
+  development: '显影工艺',
+  advanced: '进阶技巧',
+  mastery: '大师之路'
+};
+
+export const CURRICULUM_CATEGORY_ICONS: Record<CurriculumChapterCategory, string> = {
+  fundamentals: '📚',
+  exposure: '☀️',
+  development: '🧪',
+  advanced: '🔬',
+  mastery: '👑'
+};
+
+export const CURRICULUM_CHAPTERS: CurriculumChapter[] = [
+  {
+    id: 'chapter_fundamentals_01',
+    category: 'fundamentals',
+    order: 1,
+    title: '暗房入门：初识胶片世界',
+    subtitle: '了解暗房基本概念与安全规范',
+    description: '带你走进暗房的神秘世界，了解胶片摄影的基本原理、暗房环境要求和安全操作规范。',
+    icon: '🏠',
+    color: '#8b5a2b',
+    difficulty: 1,
+    estimatedTotalMinutes: 15,
+    prerequisites: [],
+    steps: [
+      {
+        id: 'step_f01_01',
+        order: 1,
+        type: 'reading',
+        title: '什么是暗房？',
+        content: '暗房（Darkroom）是胶片摄影中用于冲洗底片和放大照片的专用空间。之所以称为"暗房"，是因为在冲洗黑白胶片时需要完全黑暗的环境，以防止未显影的胶片被意外曝光。现代暗房通常配备安全灯（红光），可以在冲洗过程中提供有限的照明。',
+        estimatedMinutes: 3,
+        keyPoints: [
+          '暗房是冲洗胶片和放大照片的专用工作空间',
+          '黑白胶片冲洗需要全黑环境或安全红灯照明',
+          '暗房分为干区（放大区）和湿区（冲洗区）'
+        ],
+        commonMistakes: [
+          '误以为所有胶片都能用红光照明——彩色胶片需要完全黑暗',
+          '忽略暗房密封性导致光线泄漏'
+        ]
+      },
+      {
+        id: 'step_f01_02',
+        order: 2,
+        type: 'reading',
+        title: '胶片的基本结构',
+        content: '胶片由片基、乳剂层和保护层组成。片基是透明的塑料基底，提供物理支撑；乳剂层含有卤化银晶体，是记录影像的关键部分；保护层防止乳剂被刮伤。曝光时，光子击中卤化银晶体，形成潜影；显影过程将潜影转化为可见的银粒影像。',
+        estimatedMinutes: 4,
+        keyPoints: [
+          '片基：透明塑料基底，提供物理支撑',
+          '乳剂层：含卤化银晶体，记录影像的核心',
+          '曝光形成潜影，显影将潜影转化为可见影像'
+        ],
+        commonMistakes: [
+          '用手触摸胶片乳剂面会留下指纹',
+          '胶片在显影前已见光会导致整卷报废'
+        ]
+      },
+      {
+        id: 'step_f01_03',
+        order: 3,
+        type: 'quiz',
+        title: '入门知识小测验',
+        content: '检验你对暗房基础知识的理解。',
+        estimatedMinutes: 3,
+        keyPoints: ['巩固暗房基本概念'],
+        quiz: {
+          id: 'quiz_f01_03',
+          type: 'single_choice',
+          question: '暗房中冲洗黑白胶片时可以使用什么颜色的安全灯？',
+          options: [
+            { id: 'a', text: '蓝色安全灯', feedback: '错误。蓝光波长较短，会使黑白胶片曝光。' },
+            { id: 'b', text: '红色安全灯', feedback: '正确！红光波长较长，黑白胶片对红光不敏感。' },
+            { id: 'c', text: '绿色安全灯', feedback: '错误。绿光也可能使某些胶片感光。' },
+            { id: 'd', text: '白色安全灯', feedback: '错误。白光会立即使胶片曝光报废。' }
+          ],
+          correctAnswer: 'b',
+          difficulty: 1,
+          points: 10,
+          explanation: '黑白胶片的卤化银对蓝、紫光敏感，对红光不敏感，因此暗房使用暗红色安全灯照明。'
+        }
+      },
+      {
+        id: 'step_f01_04',
+        order: 4,
+        type: 'quiz',
+        title: '胶片结构测验',
+        content: '检查你对胶片结构的理解。',
+        estimatedMinutes: 2,
+        keyPoints: ['掌握胶片各层的作用'],
+        quiz: {
+          id: 'quiz_f01_04',
+          type: 'true_false',
+          question: '胶片的乳剂层是记录影像的关键部分，含有卤化银晶体。',
+          options: [
+            { id: 't', text: '正确' },
+            { id: 'f', text: '错误' }
+          ],
+          correctAnswer: 't',
+          difficulty: 1,
+          points: 10,
+          explanation: '乳剂层确实是胶片的核心感光层，含有卤化银晶体，曝光后形成潜影。'
+        }
+      },
+      {
+        id: 'step_f01_05',
+        order: 5,
+        type: 'interactive',
+        title: '开始你的第一次探索',
+        content: '恭喜你完成暗房基础入门！现在让我们进入系统，开始选择你的第一个拍摄题材。',
+        estimatedMinutes: 3,
+        highlightArea: 'subject-list',
+        interactiveAction: { type: 'subject_selected' },
+        keyPoints: [
+          '按照场景描述选择感兴趣的题材',
+          '注意题材标注的难度等级'
+        ]
+      }
+    ],
+    chapterExam: {
+      title: '第一章基础测验',
+      passingScore: 60,
+      questions: [
+        {
+          id: 'exam_f01_01',
+          type: 'single_choice',
+          question: '暗房中的"湿区"主要用于什么操作？',
+          options: [
+            { id: 'a', text: '存储相机和镜头' },
+            { id: 'b', text: '冲洗胶片和相纸的化学处理' },
+            { id: 'c', text: '晾干已冲洗的照片' },
+            { id: 'd', text: '放大照片的光学操作' }
+          ],
+          correctAnswer: 'b',
+          difficulty: 1,
+          points: 20
+        },
+        {
+          id: 'exam_f01_02',
+          type: 'single_choice',
+          question: '胶片曝光后，在显影之前形成的影像称为？',
+          options: [
+            { id: 'a', text: '可见影像' },
+            { id: 'b', text: '潜影' },
+            { id: 'c', text: '负像' },
+            { id: 'd', text: '正像' }
+          ],
+          correctAnswer: 'b',
+          difficulty: 1,
+          points: 20
+        },
+        {
+          id: 'exam_f01_03',
+          type: 'multiple_choice',
+          question: '以下哪些是暗房操作中需要注意的安全规范？（多选）',
+          options: [
+            { id: 'a', text: '确保暗房完全避光，防止光线泄漏' },
+            { id: 'b', text: '化学药品操作时佩戴手套和护目镜' },
+            { id: 'c', text: '保持暗房通风良好' },
+            { id: 'd', text: '可以在暗房中饮食' }
+          ],
+          correctAnswer: ['a', 'b', 'c'],
+          difficulty: 2,
+          points: 30
+        },
+        {
+          id: 'exam_f01_04',
+          type: 'fill_blank',
+          question: '胶片的三层基本结构分别是片基、______层和保护层。',
+          correctAnswer: '乳剂',
+          difficulty: 1,
+          points: 30
+        }
+      ]
+    },
+    unlockReward: {
+      type: 'badge',
+      value: 'darkroom_newcomer',
+      label: '暗房新手徽章'
+    }
+  },
+  {
+    id: 'chapter_exposure_01',
+    category: 'exposure',
+    order: 2,
+    title: '曝光基础：光影的艺术',
+    subtitle: '掌握曝光参数与曝光三角',
+    description: '深入理解曝光的概念，学习曝光三角（光圈、快门、ISO）的关系，掌握如何判断和调整曝光。',
+    icon: '☀️',
+    color: '#d4a017',
+    difficulty: 2,
+    estimatedTotalMinutes: 25,
+    prerequisites: ['chapter_fundamentals_01'],
+    steps: [
+      {
+        id: 'step_e01_01',
+        order: 1,
+        type: 'reading',
+        title: '什么是正确曝光？',
+        content: '曝光是指光线通过镜头到达胶片的过程。正确曝光意味着胶片接收到适量的光线，使得最终照片既能保留暗部细节（阴影），又能保留亮部细节（高光）。曝光不足会导致画面昏暗、暗部细节丢失；曝光过度则会使画面过亮、高光区域变成死白。',
+        estimatedMinutes: 4,
+        keyPoints: [
+          '正确曝光：同时保留高光和暗部细节',
+          '曝光不足：暗部死黑，细节丢失',
+          '曝光过度：高光死白，层次丢失'
+        ],
+        commonMistakes: [
+ '以屏幕预览为唯一标准，忽略直方图',
+          '极端天气下仍按常规参数曝光'
+        ]
+      },
+      {
+        id: 'step_e01_02',
+        order: 2,
+        type: 'reading',
+        title: '曝光参数详解',
+        content: '在本系统中，曝光参数控制到达胶片的光量。数值越大表示曝光越多（画面越亮），数值越小表示曝光越少（画面越暗）。曝光的理想值取决于题材的光线条件：高调场景（如雪景、亮调人像）通常需要更多曝光；低调场景（如夜景、剪影）则需要较少曝光。',
+        estimatedMinutes: 5,
+        keyPoints: [
+          '曝光值越高，画面越亮；曝光值越低，画面越暗',
+          '高调场景需要增加曝光补偿',
+          '低调场景需要减少曝光补偿'
+        ],
+        commonMistakes: [
+          '所有题材都使用相同的曝光参数',
+          '只关注整体亮度，忽略关键区域的表现'
+        ]
+      },
+      {
+        id: 'step_e01_03',
+        order: 3,
+        type: 'interactive',
+        title: '动手调整曝光',
+        content: '选择"窗边的少女"题材，尝试调整曝光滑块。观察预览画面的变化，找到一个既能看清人物面部又能保留窗外细节的曝光值。',
+        estimatedMinutes: 5,
+        highlightArea: 'param-panel',
+        interactiveAction: { type: 'param_adjusted', param: 'exposure' },
+        keyPoints: [
+          '小幅调整，边调边观察',
+          '注意人物面部的亮度表现',
+          '窗外高光不要过曝成死白'
+        ]
+      },
+      {
+        id: 'step_e01_04',
+        order: 4,
+        type: 'quiz',
+        title: '曝光知识测验',
+        content: '检验你对曝光原理的理解。',
+        estimatedMinutes: 3,
+        keyPoints: ['巩固曝光参数知识'],
+        quiz: {
+          id: 'quiz_e01_04',
+          type: 'single_choice',
+          question: '拍摄雪景时，为了还原雪的白色质感，应该如何调整曝光？',
+          options: [
+            { id: 'a', text: '减少曝光，让雪呈现灰色', feedback: '错误。这样雪会变成灰暗的灰色。' },
+            { id: 'b', text: '增加曝光，让雪呈现明亮的白色', feedback: '正确！雪是高反射物体，需要增加曝光才能还原其白色。' },
+            { id: 'c', text: '保持默认曝光不变', feedback: '错误。默认曝光会使雪呈现18%灰。' },
+            { id: 'd', text: '先大幅减少再增加', feedback: '错误。这样无法获得正确效果。' }
+          ],
+          correctAnswer: 'b',
+          difficulty: 2,
+          points: 15,
+          relatedParams: ['exposure'],
+          explanation: '这就是"白加黑减"原则。白色高反射物体需要增加曝光，黑色低反射物体需要减少曝光。'
+        }
+      },
+      {
+        id: 'step_e01_05',
+        order: 5,
+        type: 'practice',
+        title: '练习：曝光挑战',
+        content: '使用"窗边的少女"题材，仅调整曝光参数（其他参数保持默认），获得B级以上的成绩。重点关注曝光对画面效果的影响。',
+        estimatedMinutes: 8,
+        keyPoints: [
+          '只调整曝光参数，其他不变',
+          '重点观察曝光分数变化',
+          '尝试找到最佳曝光点'
+        ],
+        exercise: {
+          id: 'ex_e01_05',
+          title: '曝光参数练习',
+          description: '仅通过调整曝光参数，在人像题材上获得60分以上成绩。',
+          type: 'score_challenge',
+          subjectId: 'portrait_01',
+          targetScore: 60,
+          hints: [
+            '参考题材描述中的"理想曝光"数值',
+            '从0.5开始，每次调整0.05',
+            '注意观察关键区域的亮度'
+          ]
+        }
+      }
+    ],
+    chapterExam: {
+      title: '曝光基础测验',
+      passingScore: 70,
+      questions: [
+        {
+          id: 'exam_e01_01',
+          type: 'single_choice',
+          question: '曝光补偿中的"白加黑减"原则是指？',
+          options: [
+            { id: 'a', text: '拍白色物体增加曝光，拍黑色物体减少曝光' },
+            { id: 'b', text: '白天增加曝光，黑夜减少曝光' },
+            { id: 'c', text: '穿白衣服时增加曝光，穿黑衣服时减少曝光' },
+            { id: 'd', text: '白框区域增加曝光，黑框区域减少曝光' }
+          ],
+          correctAnswer: 'a',
+          difficulty: 2,
+          points: 25
+        },
+        {
+          id: 'exam_e01_02',
+          type: 'true_false',
+          question: '曝光过度会导致暗部细节丢失，画面整体变暗。',
+          options: [
+            { id: 't', text: '正确' },
+            { id: 'f', text: '错误' }
+          ],
+          correctAnswer: 'f',
+          difficulty: 1,
+          points: 25
+        },
+        {
+          id: 'exam_e01_03',
+          type: 'single_choice',
+          question: '以下哪种场景通常需要较少的曝光？',
+          options: [
+            { id: 'a', text: '阳光下的雪景' },
+            { id: 'b', text: '明亮的海滩' },
+            { id: 'c', text: '城市夜景' },
+            { id: 'd', text: '逆光人像（背景很亮）' }
+          ],
+          correctAnswer: 'c',
+          difficulty: 2,
+          points: 25
+        },
+        {
+          id: 'exam_e01_04',
+          type: 'single_choice',
+          question: '曝光参数从0.5调整到0.6，意味着？',
+          options: [
+            { id: 'a', text: '曝光减少，画面变暗' },
+            { id: 'b', text: '曝光增加，画面变亮' },
+            { id: 'c', text: '曝光不变，对比度变化' },
+            { id: 'd', text: '曝光不变，饱和度变化' }
+          ],
+          correctAnswer: 'b',
+          difficulty: 1,
+          points: 25
+        }
+      ]
+    },
+    unlockReward: {
+      type: 'unlock_subject',
+      value: 'landscape_01',
+      label: '解锁风光题材'
+    }
+  },
+  {
+    id: 'chapter_development_01',
+    category: 'development',
+    order: 3,
+    title: '显影工艺：化学反应的魔法',
+    subtitle: '理解显影参数对最终效果的影响',
+    description: '学习显影时间、温度、搅动等参数如何影响胶片的反差、颗粒和细节表现。',
+    icon: '🧪',
+    color: '#6b8e23',
+    difficulty: 2,
+    estimatedTotalMinutes: 30,
+    prerequisites: ['chapter_exposure_01'],
+    steps: [
+      {
+        id: 'step_d01_01',
+        order: 1,
+        type: 'reading',
+        title: '显影的基本原理',
+        content: '显影是将胶片上的潜影转化为可见影像的化学过程。显影液中的还原剂将已曝光的卤化银晶体还原为金属银，形成黑色的银粒影像。显影时间越长、温度越高、搅动越剧烈，还原反应就越充分，画面的反差就越高，颗粒也会越明显。',
+        estimatedMinutes: 5,
+        keyPoints: [
+          '显影将潜影转化为可见的银粒影像',
+          '显影时间↑ → 反差↑ 颗粒↑',
+          '显影温度↑ → 反应速度↑ 反差↑',
+          '搅动↑ → 显影更均匀，反差略增'
+        ],
+        commonMistakes: [
+          '显影时间越长越好——过度显影会导致灰雾和颗粒粗糙',
+          '显影温度可以随意——温度偏差会显著影响效果'
+        ]
+      },
+      {
+        id: 'step_d01_02',
+        order: 2,
+        type: 'reading',
+        title: '显影时间与温度',
+        content: '显影时间是控制反差的主要手段。短时间显影（时间值较低）会得到低反差、柔和的影像，适合人像；长时间显影（时间值较高）会得到高反差、硬朗的影像，适合风光和街头。显影温度影响化学反应速度，温度越高，相同时间内的显影效果越强烈。',
+        estimatedMinutes: 5,
+        keyPoints: [
+          '显影时间：主要控制反差强弱',
+          '显影温度：控制反应速度',
+          '人像题材适合较低的显影时间和温度',
+          '风光、街头题材可适当提高显影参数'
+        ],
+        commonMistakes: [
+          '人像使用高反差显影参数——会使皮肤瑕疵突出',
+          '所有题材使用相同的显影配方'
+        ]
+      },
+      {
+        id: 'step_d01_03',
+        order: 3,
+        type: 'reading',
+        title: '搅动与稀释',
+        content: '搅动确保显影液与胶片表面充分接触。适度的搅动可以保证显影均匀，但过度搅动可能导致显影不均（产生气泡或条纹）。稀释度控制显影液的浓度，稀释度越高（值越大表示显影液越稀），显影越温和，反差越低，但细节表现更细腻。',
+        estimatedMinutes: 4,
+        keyPoints: [
+          '搅动：保证显影均匀，适度即可',
+          '稀释度高 → 显影温和、反差低、细节细腻',
+          '稀释度低 → 显影强劲、反差高、颗粒明显'
+        ],
+        commonMistakes: [
+          '搅动过于剧烈导致显影不均',
+          '完全不搅动导致局部显影不足'
+        ]
+      },
+      {
+        id: 'step_d01_04',
+        order: 4,
+        type: 'interactive',
+        title: '体验显影参数',
+        content: '选择"山间晨雾"风光题材，分别调整显影时间从低到高，观察画面反差和颗粒感的变化。',
+        estimatedMinutes: 5,
+        highlightArea: 'param-panel',
+        interactiveAction: { type: 'param_adjusted', param: 'developmentTime' },
+        keyPoints: [
+          '先设低显影时间，观察效果',
+          '再设高显影时间，对比差异',
+          '注意反差和颗粒的变化'
+        ]
+      },
+      {
+        id: 'step_d01_05',
+        order: 5,
+        type: 'practice',
+        title: '练习：风格匹配',
+        content: '使用"山间晨雾"题材，通过调整显影相关参数（显影时间、温度、搅动、对比度、稀释度），获得"浓郁风光"的视觉效果，目标成绩B级以上。',
+        estimatedMinutes: 11,
+        keyPoints: [
+          '参考"浓郁风光"预设的参数设置',
+          '风光题材通常需要较高的对比度和饱和度',
+          '适当提高显影时间增强反差'
+        ],
+        exercise: {
+          id: 'ex_d01_05',
+          title: '风光显影练习',
+          description: '使用风光题材，通过调整显影参数获得浓郁风光效果，目标分数70分以上。',
+          type: 'style_reproduce',
+          subjectId: 'landscape_01',
+          targetStyle: 'vivid',
+          targetScore: 70,
+          hints: [
+            '提高显影时间到0.6-0.7范围',
+            '对比度参数设为0.7以上',
+            '饱和度参数设为0.75-0.8',
+            '稀释度适当降低（0.35-0.45）'
+          ],
+          bonusConditions: [
+            { description: '首次尝试即达标', condition: 'first_try', bonusPoints: 20 }
+          ]
+        }
+      }
+    ],
+    chapterExam: {
+      title: '显影工艺测验',
+      passingScore: 70,
+      questions: [
+        {
+          id: 'exam_d01_01',
+          type: 'single_choice',
+          question: '以下哪种参数组合最适合柔和的人像摄影？',
+          options: [
+            { id: 'a', text: '高显影时间 + 高温度 + 高对比度' },
+            { id: 'b', text: '低显影时间 + 中等温度 + 低对比度' },
+            { id: 'c', text: '高显影时间 + 低温度 + 高搅动' },
+            { id: 'd', text: '低显影时间 + 高温度 + 高稀释度' }
+          ],
+          correctAnswer: 'b',
+          difficulty: 2,
+          points: 25
+        },
+        {
+          id: 'exam_d01_02',
+          type: 'single_choice',
+          question: '显影液稀释度越高（值越大），通常会导致？',
+          options: [
+            { id: 'a', text: '反差越高，颗粒越粗' },
+            { id: 'b', text: '反差越低，细节越细腻' },
+            { id: 'c', text: '显影速度越快' },
+            { id: 'd', text: '胶片完全无法显影' }
+          ],
+          correctAnswer: 'b',
+          difficulty: 2,
+          points: 25
+        },
+        {
+          id: 'exam_d01_03',
+          type: 'true_false',
+          question: '显影时搅动越剧烈越好，这样可以确保显影液均匀接触胶片。',
+          options: [
+            { id: 't', text: '正确' },
+            { id: 'f', text: '错误' }
+          ],
+          correctAnswer: 'f',
+          difficulty: 1,
+          points: 25
+        },
+        {
+          id: 'exam_d01_04',
+          type: 'multiple_choice',
+          question: '以下哪些因素会增加画面反差？（多选）',
+          options: [
+            { id: 'a', text: '延长显影时间' },
+            { id: 'b', text: '提高显影温度' },
+            { id: 'c', text: '增加显影液稀释度' },
+            { id: 'd', text: '提高对比度参数' }
+          ],
+          correctAnswer: ['a', 'b', 'd'],
+          difficulty: 3,
+          points: 25
+        }
+      ]
+    },
+    unlockReward: {
+      type: 'unlock_film',
+      value: 'velvia50',
+      label: '解锁富士 Velvia 50 胶片'
+    }
+  },
+  {
+    id: 'chapter_advanced_01',
+    category: 'advanced',
+    order: 4,
+    title: '进阶技巧：胶片与题材的搭配',
+    subtitle: '理解不同胶片特性与题材适配',
+    description: '学习如何根据题材和目标效果选择合适的胶片，掌握黑白与彩色胶片的不同处理思路。',
+    icon: '🎞️',
+    color: '#7b68ee',
+    difficulty: 3,
+    estimatedTotalMinutes: 30,
+    prerequisites: ['chapter_development_01'],
+    steps: [
+      {
+        id: 'step_a01_01',
+        order: 1,
+        type: 'reading',
+        title: '胶片选择的艺术',
+        content: '不同胶片有截然不同的"性格"：黑白胶片侧重影调表现，适合追求质感和氛围的作品；彩色胶片则各具色彩倾向，有的偏暖调柔和，有的偏冷调浓郁。选择胶片时要考虑：题材类型（人像/风光/街头/夜景）、目标风格、光线条件以及个人审美偏好。',
+        estimatedMinutes: 5,
+        keyPoints: [
+          '黑白胶片：影调层次丰富，情绪表达强烈',
+          '低ISO胶片：颗粒细腻，适合风光和商业',
+          '高ISO胶片：颗粒粗犷，适合暗光和纪实',
+          '人像：选择肤色表现好的胶片',
+          '风光：选择色彩鲜艳或反差高的胶片'
+        ],
+        commonMistakes: [
+          '人像使用高感高速胶片——颗粒太粗影响肤感',
+          '夜景使用低感胶片——曝光不足导致画质差'
+        ]
+      },
+      {
+        id: 'step_a01_02',
+        order: 2,
+        type: 'reading',
+        title: '黑白胶片的魅力',
+        content: '黑白摄影剥离了色彩的干扰，让观者更专注于光影、构图和情感。伊尔福 HP5+ 是经典的中速黑白胶片，颗粒细腻，层次丰富，适应性强；柯达 Tri-X 400 反差略高，暗部表现出色，是街头摄影的传奇；伊尔福 Delta 3200 是高速胶片，适合弱光环境，颗粒感强烈，富有戏剧性。',
+        estimatedMinutes: 5,
+        keyPoints: [
+          'HP5+：全能型中速黑白，适合多数题材',
+          'Tri-X 400：高反差街头首选',
+          'Delta 3200：暗光利器，戏剧性强',
+          '黑白摄影：重点关注光比和影调分布'
+        ],
+        commonMistakes: [
+          '拍黑白只关注明暗，忽略纹理和质感',
+          '在所有光线下使用同一黑白胶片'
+        ]
+      },
+      {
+        id: 'step_a01_03',
+        order: 3,
+        type: 'reading',
+        title: '彩色胶片的选择',
+        content: '彩色胶片各有色彩特色：柯达 Portra 400 是人像王者，肤色表现自然柔和，色彩偏暖；柯达 Ektar 100 颗粒极细，饱和度极高，适合风光和商业；富士 Velvia 50 是专业反转片，色彩浓郁鲜艳，对比度高，是风光摄影师的最爱。记住：没有最好的胶片，只有最适合的胶片。',
+        estimatedMinutes: 5,
+        keyPoints: [
+          'Portra 400：专业人像首选，肤色自然',
+          'Ektar 100：细颗粒高饱和，商业风光',
+          'Velvia 50：反转片，色彩极致浓郁',
+          '考虑题材与胶片性格的匹配度'
+        ],
+        commonMistakes: [
+          '人像使用 Velvia 50——色彩过于夸张',
+          '风光使用 Portra 400——饱和度不够'
+        ]
+      },
+      {
+        id: 'step_a01_04',
+        order: 4,
+        type: 'practice',
+        title: '练习：胶片匹配挑战',
+        content: '为"都市夜景"题材选择最合适的胶片并冲洗出B级以上成绩。思考：夜景的特点是什么？哪种胶片最适合？',
+        estimatedMinutes: 10,
+        keyPoints: [
+          '夜景光线暗，需要高感或对比强烈的胶片',
+          '考虑黑白的戏剧性或彩色的灯光效果',
+          '注意曝光不要过度，保留灯光细节'
+        ],
+        exercise: {
+          id: 'ex_a01_04',
+          title: '夜景胶片匹配',
+          description: '为夜景题材选择合适的胶片，冲洗出65分以上成绩。',
+          type: 'param_match',
+          subjectId: 'night_01',
+          targetScore: 65,
+          hints: [
+            'Delta 3200 或 Tri-X 400 适合夜景的戏剧性',
+            'Portra 400 也能拍出色彩柔和的夜景',
+            '夜景曝光不要太高，保留灯光层次'
+          ],
+          bonusConditions: [
+            { description: '使用黑白胶片完成', condition: 'specific_film', bonusPoints: 15 }
+          ]
+        }
+      },
+      {
+        id: 'step_a01_05',
+        order: 5,
+        type: 'quiz',
+        title: '胶片知识综合测验',
+        content: '检验你对胶片特性的掌握程度。',
+        estimatedMinutes: 5,
+        keyPoints: ['巩固胶片选择知识'],
+        quiz: {
+          id: 'quiz_a01_05',
+          type: 'multiple_choice',
+          question: '以下哪些胶片适合拍摄人像？（多选）',
+          options: [
+            { id: 'a', text: '柯达 Portra 400', feedback: '正确！专业人像胶片，肤色表现极佳。' },
+            { id: 'b', text: '伊尔福 HP5+', feedback: '正确！细腻颗粒的黑白胶片，适合人像。' },
+            { id: 'c', text: '富士 Velvia 50', feedback: '不太合适。高饱和反转片会使肤色不自然。' },
+            { id: 'd', text: '伊尔福 Delta 3200', feedback: '不太合适。颗粒太粗，影响皮肤质感。' }
+          ],
+          correctAnswer: ['a', 'b'],
+          difficulty: 3,
+          points: 20,
+          explanation: '人像摄影需要细腻的颗粒和自然的色彩表现，Portra 400 和 HP5+ 都是很好的选择。'
+        }
+      }
+    ],
+    chapterExam: {
+      title: '胶片与题材搭配测验',
+      passingScore: 75,
+      questions: [
+        {
+          id: 'exam_a01_01',
+          type: 'single_choice',
+          question: '拍摄专业商业风光，追求极致色彩和细颗粒，应选择哪种胶片？',
+          options: [
+            { id: 'a', text: '伊尔福 Delta 3200' },
+            { id: 'b', text: '柯达 Portra 400' },
+            { id: 'c', text: '富士 Velvia 50' },
+            { id: 'd', text: '柯达 Tri-X 400' }
+          ],
+          correctAnswer: 'c',
+          difficulty: 2,
+          points: 25
+        },
+        {
+          id: 'exam_a01_02',
+          type: 'single_choice',
+          question: '街头纪实摄影，追求高反差暗部细节和快速拍摄，应选择？',
+          options: [
+            { id: 'a', text: '柯达 Ektar 100' },
+            { id: 'b', text: '柯达 Tri-X 400' },
+            { id: 'c', text: '富士 Velvia 50' },
+            { id: 'd', text: '柯达 Portra 400' }
+          ],
+          correctAnswer: 'b',
+          difficulty: 2,
+          points: 25
+        },
+        {
+          id: 'exam_a01_03',
+          type: 'true_false',
+          question: '黑白摄影因为没有色彩，所以比彩色摄影更容易掌握。',
+          options: [
+            { id: 't', text: '正确' },
+            { id: 'f', text: '错误' }
+          ],
+          correctAnswer: 'f',
+          difficulty: 2,
+          points: 25
+        },
+        {
+          id: 'exam_a01_04',
+          type: 'fill_blank',
+          question: '专业人像彩色胶片的代表是柯达______400，以肤色表现自然著称。',
+          correctAnswer: 'Portra',
+          difficulty: 2,
+          points: 25
+        }
+      ]
+    },
+    unlockReward: {
+      type: 'title',
+      value: '胶片鉴赏师',
+      label: '获得称号：胶片鉴赏师'
+    }
+  },
+  {
+    id: 'chapter_mastery_01',
+    category: 'mastery',
+    order: 5,
+    title: '大师之路：综合实战',
+    subtitle: '综合运用所学，挑战高难度题材',
+    description: '将前面学到的所有知识融会贯通，挑战最高难度的题材，追求完美的S级作品。',
+    icon: '👑',
+    color: '#b8860b',
+    difficulty: 5,
+    estimatedTotalMinutes: 45,
+    prerequisites: ['chapter_advanced_01'],
+    steps: [
+      {
+        id: 'step_m01_01',
+        order: 1,
+        type: 'reading',
+        title: '追求完美：什么是S级作品？',
+        content: 'S级（大师级）作品需要在曝光、反差、色彩、细节四个维度都达到极高水准。具体要求：整体得分90分以上，所有关键区域亮度命中优秀区间，参数偏差控制在极小范围内，无重大扣分项目。达到S级需要对题材、胶片、参数的深刻理解，以及反复的实践与调整。',
+        estimatedMinutes: 5,
+        keyPoints: [
+          'S级作品：总分90分以上',
+          '所有关键区域都达到优秀',
+          '参数偏差极小，接近理想值',
+          '无重大扣分项'
+        ],
+        commonMistakes: [
+          '只关注总分，忽略关键区域表现',
+          '过度调整某一参数导致其他维度失分'
+        ]
+      },
+      {
+        id: 'step_m01_02',
+        order: 2,
+        type: 'reading',
+        title: '关键区域的精确定位',
+        content: '每个题材都有几个关键区域（如人像的面部高光、眼睛、背景暗部），这些区域的表现直接决定作品等级。要获得高分，必须让每个关键区域的实际亮度尽可能接近理想值。优秀的暗房技师会反复调整参数，找到各区域之间的最佳平衡点。',
+        estimatedMinutes: 5,
+        keyPoints: [
+          '关键区域是评分的核心依据',
+          '重要区域（高权重）优先保证亮度准确',
+          '学会在各区域之间做权衡取舍',
+          '反复微调，追求最优平衡'
+        ],
+        commonMistakes: [
+          '只调整一个参数解决所有区域',
+          '忽略低权重区域导致累计失分过多'
+        ]
+      },
+      {
+        id: 'step_m01_03',
+        order: 3,
+        type: 'reading',
+        title: '复盘与迭代：从错误中学习',
+        content: '每次冲洗完成后，仔细分析评分反馈：哪个维度得分低？哪个关键区域偏差大？扣分原因是什么？然后针对性地调整参数再次尝试。优秀的暗房技师会从每一次失败中总结经验，逐步逼近完美。记住：参数调整应该小幅多次，而不是大幅摆动。',
+        estimatedMinutes: 5,
+        keyPoints: [
+          '仔细阅读每次的评分反馈',
+          '分析失分维度和区域',
+          '小幅调整，避免过犹不及',
+          '记录成功参数，建立自己的预设库'
+        ],
+        commonMistakes: [
+          '不看反馈直接盲目重试',
+          '一次调整多个参数，无法判断哪个有效'
+        ]
+      },
+      {
+        id: 'step_m01_04',
+        order: 4,
+        type: 'practice',
+        title: '终极挑战：逆光剪影S级',
+        content: '挑战高难度的"逆光剪影"题材，使用任意胶片，目标是获得85分以上的A级成绩。如果能达到90分以上的S级，那你就是真正的暗房大师！',
+        estimatedMinutes: 25,
+        keyPoints: [
+          '逆光题材最难的是人物轮廓和背景的平衡',
+          '发丝光是得分关键——需要较高的曝光',
+          '但曝光过高会让人物剪影不清晰',
+          '这是一个需要反复尝试的平衡艺术'
+        ],
+        exercise: {
+          id: 'ex_m01_04',
+          title: '逆光剪影大师挑战',
+          description: '在逆光剪影题材上获得85分以上，冲击S级（90分）。',
+          type: 'score_challenge',
+          subjectId: 'portrait_02',
+          targetScore: 85,
+          targetGrade: 'A',
+          hints: [
+            '参考题材描述：逆光人像重点是轮廓光和暖色调',
+            '曝光在0.5左右，确保背景天空明亮但人物轮廓清晰',
+            '对比度0.75以上，增强剪影效果',
+            '饱和度0.8左右，突出暖调日落色彩',
+            '显影时间适当提高，增加反差',
+            '发丝光区域（权重0.2）是高分关键，确保亮度接近0.9'
+          ],
+          bonusConditions: [
+            { description: '达到90分S级', condition: 'perfect_exposure', bonusPoints: 100 }
+          ]
+        }
+      },
+      {
+        id: 'step_m01_05',
+        order: 5,
+        type: 'experiment',
+        title: '自由探索：创造你的风格',
+        content: '恭喜你完成所有课程！现在是时候打破规则，自由探索了。尝试非常规的参数组合，使用不同的胶片-题材搭配，创造属于你独特的暗房风格。艺术没有标准答案，最重要的是表达。',
+        estimatedMinutes: 5,
+        keyPoints: [
+          '规则是用来打破的',
+          '尝试极端参数组合',
+          '记录有趣的意外效果',
+          '建立个人风格是长期过程'
+        ]
+      }
+    ],
+    chapterExam: {
+      title: '暗房大师综合考核',
+      passingScore: 80,
+      questions: [
+        {
+          id: 'exam_m01_01',
+          type: 'single_choice',
+          question: '在参数微调时，以下哪种策略最合理？',
+          options: [
+            { id: 'a', text: '每次同时调整多个参数，快速逼近目标' },
+            { id: 'b', text: '每次只调整一个参数，观察效果后再决定下一步' },
+            { id: 'c', text: '直接使用默认参数，碰运气' },
+            { id: 'd', text: '每次调整都大幅改变参数值' }
+          ],
+          correctAnswer: 'b',
+          difficulty: 3,
+          points: 20
+        },
+        {
+          id: 'exam_m01_02',
+          type: 'single_choice',
+          question: '某作品总分88分，但有一个关键区域严重过曝。它最可能的等级是？',
+          options: [
+            { id: 'a', text: 'S级' },
+            { id: 'b', text: 'A级' },
+            { id: 'c', text: 'B级' },
+            { id: 'd', text: 'D级' }
+          ],
+          correctAnswer: 'b',
+          difficulty: 3,
+          points: 20
+        },
+        {
+          id: 'exam_m01_03',
+          type: 'multiple_choice',
+          question: '以下哪些做法有助于获得更高分数？（多选）',
+          options: [
+            { id: 'a', text: '仔细分析评分反馈，针对性调整' },
+            { id: 'b', text: '优先保证高权重关键区域的亮度' },
+            { id: 'c', text: '记录每次的参数和成绩，建立经验库' },
+            { id: 'd', text: '完全随机调整参数' }
+          ],
+          correctAnswer: ['a', 'b', 'c'],
+          difficulty: 3,
+          points: 30
+        },
+        {
+          id: 'exam_m01_04',
+          type: 'true_false',
+          question: 'S级作品要求所有维度完美，所以只要有一个维度没到90分就不可能获得S级。',
+          options: [
+            { id: 't', text: '正确' },
+            { id: 'f', text: '错误' }
+          ],
+          correctAnswer: 'f',
+          difficulty: 3,
+          points: 30
+        }
+      ]
+    },
+    unlockReward: {
+      type: 'badge',
+      value: 'darkroom_master',
+      label: '暗房大师徽章'
+    }
+  }
+];
+
+export const LEARNING_MILESTONES: LearningMilestone[] = [
+  {
+    id: 'milestone_first_chapter',
+    title: '初入暗房',
+    description: '完成第一章基础入门课程',
+    icon: '🌱',
+    criteria: { type: 'chapters_completed', value: 1 },
+    reward: { type: 'badge', value: 'first_step' }
+  },
+  {
+    id: 'milestone_three_chapters',
+    title: '学有所成',
+    description: '完成3个课程章节',
+    icon: '📖',
+    criteria: { type: 'chapters_completed', value: 3 },
+    reward: { type: 'title', value: '暗房学徒' }
+  },
+  {
+    id: 'milestone_all_chapters',
+    title: '课程精通',
+    description: '完成全部课程章节',
+    icon: '🏆',
+    criteria: { type: 'chapters_completed', value: 5 },
+    reward: { type: 'title', value: '暗房大师' }
+  },
+  {
+    id: 'milestone_500_points',
+    title: '勤奋学习者',
+    description: '累计获得500学习积分',
+    icon: '⭐',
+    criteria: { type: 'total_points', value: 500 },
+    reward: { type: 'badge', value: 'hard_worker' }
+  },
+  {
+    id: 'milestone_perfect_steps',
+    title: '步步为营',
+    description: '连续5个步骤获得满分',
+    icon: '🎯',
+    criteria: { type: 'perfect_steps', value: 5 },
+    reward: { type: 'badge', value: 'perfectionist' }
+  },
+  {
+    id: 'milestone_avg_85',
+    title: '优等生',
+    description: '平均分数达到85分以上',
+    icon: '💯',
+    criteria: { type: 'avg_score', value: 85 },
+    reward: { type: 'title', value: '优等生' }
+  }
+];

@@ -276,6 +276,7 @@ export interface GameState {
   inventorySystem: InventorySystemState;
   publicationSystem: PublicationState;
   subjectWorkshop: SubjectWorkshopState;
+  curriculumSystem: CurriculumSystemState;
 }
 
 export type TutorialUnlockCondition = 
@@ -345,6 +346,7 @@ export interface StorageStatus {
   reviewSystemLoaded?: boolean;
   inventorySystemLoaded?: boolean;
   publicationSystemLoaded?: boolean;
+  curriculumSystemLoaded?: boolean;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -360,6 +362,7 @@ export interface StorageStatus {
     reviewSystem?: number;
     inventorySystem?: number;
     publicationSystem?: number;
+    curriculumSystem?: number;
   };
 }
 
@@ -1369,6 +1372,211 @@ export interface SubjectWorkshopState {
   filterCategory: SceneTemplateCategory | 'all';
   searchKeyword: string;
   sortBy: 'name_asc' | 'name_desc' | 'date_desc' | 'date_asc' | 'difficulty_asc' | 'difficulty_desc';
+}
+
+export type CurriculumChapterCategory = 'fundamentals' | 'exposure' | 'development' | 'advanced' | 'mastery';
+
+export type CurriculumStepType = 'reading' | 'interactive' | 'practice' | 'quiz' | 'experiment';
+
+export type QuizQuestionType = 'single_choice' | 'multiple_choice' | 'true_false' | 'fill_blank' | 'param_adjust';
+
+export interface QuizOption {
+  id: string;
+  text: string;
+  isCorrect?: boolean;
+  feedback?: string;
+}
+
+export interface QuizQuestion {
+  id: string;
+  type: QuizQuestionType;
+  question: string;
+  explanation?: string;
+  options?: QuizOption[];
+  correctAnswer?: string | string[];
+  difficulty: DifficultyLevel;
+  points: number;
+  relatedParams?: (keyof DevParams)[];
+  subjectHint?: string;
+}
+
+export interface PracticeExercise {
+  id: string;
+  title: string;
+  description: string;
+  type: 'param_match' | 'score_challenge' | 'style_reproduce' | 'free_practice';
+  subjectId?: string;
+  filmId?: string;
+  targetScore?: number;
+  targetGrade?: 'S' | 'A' | 'B' | 'C' | 'D';
+  targetStyle?: TargetStyle;
+  requiredParams?: Partial<DevParams>;
+  paramTolerance?: Partial<Record<keyof DevParams, number>>;
+  maxAttempts?: number;
+  timeLimitSeconds?: number;
+  hints: string[];
+  bonusConditions?: {
+    description: string;
+    condition: 'perfect_exposure' | 'high_contrast' | 'low_grain' | 'specific_film' | 'first_try';
+    bonusPoints: number;
+  }[];
+}
+
+export interface CurriculumLessonStep {
+  id: string;
+  order: number;
+  type: CurriculumStepType;
+  title: string;
+  content: string;
+  estimatedMinutes: number;
+  highlightArea?: string;
+  interactiveAction?: TutorialUnlockCondition;
+  quiz?: QuizQuestion;
+  exercise?: PracticeExercise;
+  keyPoints: string[];
+  commonMistakes?: string[];
+}
+
+export interface CurriculumChapter {
+  id: string;
+  category: CurriculumChapterCategory;
+  order: number;
+  title: string;
+  subtitle: string;
+  description: string;
+  icon: string;
+  color: string;
+  difficulty: DifficultyLevel;
+  estimatedTotalMinutes: number;
+  prerequisites: string[];
+  steps: CurriculumLessonStep[];
+  chapterExam?: {
+    title: string;
+    passingScore: number;
+    questions: QuizQuestion[];
+  };
+  unlockReward?: {
+    type: 'unlock_subject' | 'unlock_film' | 'unlock_recipe' | 'badge' | 'title';
+    value: string;
+    label: string;
+  };
+}
+
+export type StepProgressStatus = 'locked' | 'available' | 'in_progress' | 'completed' | 'failed';
+
+export interface StepProgress {
+  stepId: string;
+  status: StepProgressStatus;
+  unlockedAt?: number;
+  startedAt?: number;
+  completedAt?: number;
+  timeSpentSeconds: number;
+  attempts: number;
+  bestScore?: number;
+  lastScore?: number;
+  mistakes: string[];
+  feedbackHistory: CurriculumFeedback[];
+}
+
+export interface ChapterProgress {
+  chapterId: string;
+  status: 'locked' | 'in_progress' | 'completed' | 'exam_failed';
+  unlockedAt?: number;
+  startedAt?: number;
+  completedAt?: number;
+  currentStepIndex: number;
+  stepProgress: Record<string, StepProgress>;
+  examScore?: number;
+  examAttempts: number;
+  totalTimeSpentSeconds: number;
+  earnedPoints: number;
+  rewardsClaimed: boolean;
+}
+
+export type CurriculumFeedbackSeverity = 'info' | 'warning' | 'error' | 'critical';
+
+export interface CurriculumFeedback {
+  id: string;
+  timestamp: number;
+  severity: CurriculumFeedbackSeverity;
+  category: 'param_error' | 'timing_error' | 'technique_error' | 'knowledge_gap' | 'encouragement';
+  title: string;
+  message: string;
+  suggestion: string;
+  relatedParam?: keyof DevParams;
+  relatedStepId?: string;
+  exampleParams?: Partial<DevParams>;
+  knowledgeReference?: string;
+}
+
+export interface LearningMilestone {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  achievedAt?: number;
+  criteria: {
+    type: 'chapters_completed' | 'total_points' | 'perfect_steps' | 'streak_days' | 'avg_score';
+    value: number;
+  };
+  reward?: {
+    type: 'badge' | 'title' | 'unlock';
+    value: string;
+  };
+}
+
+export interface WeaknessAnalysis {
+  category: string;
+  categoryLabel: string;
+  errorCount: number;
+  totalAttempts: number;
+  errorRate: number;
+  recentTrend: 'improving' | 'worsening' | 'stable';
+  relatedChapters: string[];
+  suggestedReview: string[];
+}
+
+export interface LearningProfile {
+  learnerId: string;
+  enrolledAt: number;
+  lastActiveAt: number;
+  totalStudyTimeSeconds: number;
+  totalPointsEarned: number;
+  currentChapterId: string | null;
+  currentStepId: string | null;
+  chapterProgress: Record<string, ChapterProgress>;
+  completedChapterIds: string[];
+  masteredSkills: string[];
+  weaknesses: WeaknessAnalysis[];
+  milestones: LearningMilestone[];
+  earnedBadges: string[];
+  earnedTitles: string[];
+  streakDays: number;
+  lastStudyDate?: string;
+  totalAttempts: number;
+  successfulAttempts: number;
+  averageScore: number;
+  bestScore: number;
+  feedbackHistory: CurriculumFeedback[];
+  learningPath: string[];
+  notes: {
+    chapterId: string;
+    stepId?: string;
+    content: string;
+    createdAt: number;
+  }[];
+}
+
+export interface CurriculumSystemState {
+  chapters: CurriculumChapter[];
+  profile: LearningProfile;
+  activeChapterId: string | null;
+  activeStepId: string | null;
+  activeFeedback: CurriculumFeedback | null;
+  showCurriculumPanel: boolean;
+  practiceMode: boolean;
+  currentExamAnswers: Record<string, string | string[]>;
+  lastGeneratedFeedback: CurriculumFeedback | null;
 }
 
 

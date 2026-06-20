@@ -1,8 +1,9 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState, CurriculumSystemState } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 import { createInitialQuestSystemState } from './questSystem';
 import { createInitialReviewSystemState } from './reviewSystem';
 import { createInitialInventorySystemState } from './inventorySystem';
+import { createInitialCurriculumSystemState } from './curriculumSystem';
 
 export const CURRENT_STORAGE_VERSION = 3;
 export const MAX_PHOTOS = 100;
@@ -35,7 +36,7 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system' | 'curriculum_system';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
@@ -48,7 +49,8 @@ const KEY_MAP: Record<StorageKey, string> = {
   quest_system: 'darkroom_quest_system',
   review_system: 'darkroom_review_system',
   inventory_system: 'darkroom_inventory',
-  publication_system: 'darkroom_publication'
+  publication_system: 'darkroom_publication',
+  curriculum_system: 'darkroom_curriculum'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -369,8 +371,18 @@ function validateAchievementState(data: unknown): data is AchievementState {
   );
 }
 
+function validateCurriculumSystemState(data: unknown): data is CurriculumSystemState {
+  if (typeof data !== 'object' || data === null) return false;
+  const c = data as Record<string, unknown>;
+  return (
+    Array.isArray(c.chapters) &&
+    typeof c.profile === 'object' && c.profile !== null &&
+    typeof (c.profile as Record<string, unknown>).learnerId === 'string'
+  );
+}
+
 function validateData<T>(key: StorageKey, data: unknown): T | null {
-  if (!Array.isArray(data) && key !== 'tutorial' && key !== 'achievements' && key !== 'quest_system' && key !== 'review_system' && key !== 'inventory_system' && key !== 'publication_system') {
+  if (!Array.isArray(data) && key !== 'tutorial' && key !== 'achievements' && key !== 'quest_system' && key !== 'review_system' && key !== 'inventory_system' && key !== 'publication_system' && key !== 'curriculum_system') {
     return null;
   }
   
@@ -411,6 +423,9 @@ function validateData<T>(key: StorageKey, data: unknown): T | null {
     }
     case 'publication_system': {
       return validatePublicationState(data) ? (data as T) : null;
+    }
+    case 'curriculum_system': {
+      return validateCurriculumSystemState(data) ? (data as T) : null;
     }
     default:
       return null;
@@ -895,4 +910,46 @@ export function loadSavedPublicationSystem(): { state: PublicationState; status:
 export function savePublicationSystem(state: PublicationState): boolean {
   const limited = enforceLimits('publication_system', state) as PublicationState;
   return saveWithBackup('publication_system', limited, limited.publications.length);
+}
+
+export function repairCurriculumSystem(state: CurriculumSystemState): CurriculumSystemState {
+  const initial = createInitialCurriculumSystemState();
+  if (!state) return initial;
+
+  return {
+    ...initial,
+    profile: {
+      ...initial.profile,
+      ...state.profile,
+      chapterProgress: state.profile?.chapterProgress || initial.profile.chapterProgress,
+      milestones: state.profile?.milestones || initial.profile.milestones
+    },
+    activeChapterId: state.activeChapterId || initial.activeChapterId,
+    activeStepId: state.activeStepId || initial.activeStepId,
+    showCurriculumPanel: typeof state.showCurriculumPanel === 'boolean' ? state.showCurriculumPanel : initial.showCurriculumPanel,
+    practiceMode: typeof state.practiceMode === 'boolean' ? state.practiceMode : initial.practiceMode
+  };
+}
+
+export function loadSavedCurriculumSystem(): { state: CurriculumSystemState; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<CurriculumSystemState>('curriculum_system', createInitialCurriculumSystemState());
+  const status: Partial<StorageStatus> = {
+    curriculumSystemLoaded: result.success
+  };
+
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+
+  let state = result.data || createInitialCurriculumSystemState();
+  state = repairCurriculumSystem(state);
+
+  return { state, status };
+}
+
+export function saveCurriculumSystem(state: CurriculumSystemState): boolean {
+  return saveWithBackup('curriculum_system', state, Object.keys(state.profile.chapterProgress).length);
 }
