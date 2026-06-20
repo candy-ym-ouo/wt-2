@@ -102,6 +102,16 @@
     return processedPhotos.filter(p => ids.has(p.id));
   })();
 
+  $: ratingDimensions = (() => {
+    if (!currentExhibition) return [] as {label: string; value: number}[];
+    return [
+      { label: '策展水平', value: currentExhibition.statistics.avgCurationRating },
+      { label: '作品丰富度', value: currentExhibition.statistics.avgVarietyRating },
+      { label: '动线设计', value: currentExhibition.statistics.avgFlowRating },
+      { label: '灯光氛围', value: currentExhibition.statistics.avgLightingRating }
+    ];
+  })();
+
   function formatDate(ts: number) {
     const d = new Date(ts);
     return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
@@ -239,6 +249,18 @@
   function getGroupPhotos(group: ExhibitionWorkGroup) {
     return group.photoIds.map(id => getPhotoInfo(id)).filter(Boolean) as ProcessedPhoto[];
   }
+
+  function ev(e: Event, _targetType: 'input' | 'select' | 'textarea'): HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {
+    return e.target as any;
+  }
+  function _input(e: Event) { return (e.target as HTMLInputElement); }
+  function _select(e: Event) { return (e.target as HTMLSelectElement); }
+  function _textarea(e: Event) { return (e.target as HTMLTextAreaElement); }
+  function _any(v: any) { return v; }
+  function _tabKey(v: string) { return v as any; }
+  function _selectVal(e: Event) { return (e.target as HTMLSelectElement).value as any; }
+  function _photoUrl(photoId: string) { const p = getPhotoInfo(photoId); return p ? p.imageDataUrl : ''; }
+  function _notNull(v: any) { return v; }
 </script>
 
 <div class="exhibition-modal">
@@ -257,7 +279,7 @@
           <div class="exhibition-selector">
             <select
               value={currentExhibition.id}
-              on:change={(e) => gameStore.setActiveExhibition((e.target as HTMLSelectElement).value)}
+              on:change={(e) => gameStore.setActiveExhibition(_select(e).value)}
             >
               {#each systemState.exhibitions as exh (exh.id)}
                 <option value={exh.id}>{exh.title}</option>
@@ -276,7 +298,7 @@
 
     <nav class="tabs-nav">
       {#each TABS as tab}
-        <button class="tab-btn {systemState.activeTab === tab.key ? 'active' : ''}" on:click={() => gameStore.setExhibitionActiveTab(tab.key as any)}>
+        <button class="tab-btn {systemState.activeTab === tab.key ? 'active' : ''}" on:click={() => gameStore.setExhibitionActiveTab(_tabKey(tab.key))}>
           <span class="tab-icon">{tab.icon}</span>
           <span class="tab-label">{tab.label}</span>
         </button>
@@ -370,25 +392,25 @@
               <h3>展览信息</h3>
               <div class="form-grid">
                 <label class="form-item"><span>展览标题</span>
-                  <input type="text" value={currentExhibition.title} on:input={(e) => gameStore.updateExhibition(currentExhibition.id, { title: (e.target as HTMLInputElement).value })} />
+                  <input type="text" value={currentExhibition.title} on:input={(e) => gameStore.updateExhibition(currentExhibition.id, { title: _input(e).value })} />
                 </label>
                 <label class="form-item"><span>副标题</span>
-                  <input type="text" value={currentExhibition.subtitle} on:input={(e) => gameStore.updateExhibition(currentExhibition.id, { subtitle: (e.target as HTMLInputElement).value })} />
+                  <input type="text" value={currentExhibition.subtitle} on:input={(e) => gameStore.updateExhibition(currentExhibition.id, { subtitle: _input(e).value })} />
                 </label>
                 <label class="form-item"><span>策展人</span>
-                  <input type="text" value={currentExhibition.curatorName} on:input={(e) => gameStore.updateExhibition(currentExhibition.id, { curatorName: (e.target as HTMLInputElement).value })} />
+                  <input type="text" value={currentExhibition.curatorName} on:input={(e) => gameStore.updateExhibition(currentExhibition.id, { curatorName: _input(e).value })} />
                 </label>
                 <label class="form-item"><span>展览状态</span>
-                  <select value={currentExhibition.status} on:change={(e) => gameStore.setExhibitionStatus(currentExhibition.id, (e.target as HTMLSelectElement).value as any)}>
+                  <select value={currentExhibition.status} on:change={(e) => gameStore.setExhibitionStatus(currentExhibition.id, _selectVal(e))}>
                     <option value="draft">草稿</option><option value="planning">策划中</option>
                     <option value="published">已发布</option><option value="archived">已归档</option>
                   </select>
                 </label>
                 <label class="form-item full"><span>展览描述</span>
-                  <textarea rows="3" value={currentExhibition.description} on:input={(e) => gameStore.updateExhibition(currentExhibition.id, { description: (e.target as HTMLTextAreaElement).value })} />
+                  <textarea rows="3" value={currentExhibition.description} on:input={(e) => gameStore.updateExhibition(currentExhibition.id, { description: _textarea(e).value })} />
                 </label>
                 <label class="form-item full"><span>策展说明</span>
-                  <textarea rows="4" value={currentExhibition.exhibitionStatement || ''} on:input={(e) => gameStore.updateExhibition(currentExhibition.id, { exhibitionStatement: (e.target as HTMLTextAreaElement).value })} />
+                  <textarea rows="4" value={currentExhibition.exhibitionStatement || ''} on:input={(e) => gameStore.updateExhibition(currentExhibition.id, { exhibitionStatement: _textarea(e).value })} />
                 </label>
               </div>
             </div>
@@ -422,8 +444,8 @@
                     {#each Object.entries(currentTheme.colorPalette) as [key, color] (key)}
                       <label class="color-item"><span class="color-label">{key}</span>
                         <div class="color-row">
-                          <input type="color" value={color} on:input={(e) => gameStore.updateExhibitionTheme(currentExhibition.id, currentTheme.id, { colorPalette: { ...currentTheme.colorPalette, [key]: (e.target as HTMLInputElement).value } })} />
-                          <input type="text" class="color-hex" value={color} on:input={(e) => gameStore.updateExhibitionTheme(currentExhibition.id, currentTheme.id, { colorPalette: { ...currentTheme.colorPalette, [key]: (e.target as HTMLInputElement).value } })} />
+                          <input type="color" value={color} on:input={(e) => gameStore.updateExhibitionTheme(currentExhibition.id, currentTheme.id, { colorPalette: { ...currentTheme.colorPalette, [key]: _input(e).value } })} />
+                          <input type="text" class="color-hex" value={color} on:input={(e) => gameStore.updateExhibitionTheme(currentExhibition.id, currentTheme.id, { colorPalette: { ...currentTheme.colorPalette, [key]: _input(e).value } })} />
                         </div>
                       </label>
                     {/each}
@@ -453,15 +475,15 @@
               <div class="wall-properties">
                 <h4>墙面设置</h4>
                 <label class="form-item"><span>墙面名称</span>
-                  <input type="text" value={selectedWall.name} on:input={(e) => gameStore.updateWall(currentExhibition.id, selectedWall.id, { name: (e.target as HTMLInputElement).value })} />
+                  <input type="text" value={selectedWall.name} on:input={(e) => gameStore.updateWall(currentExhibition.id, selectedWall.id, { name: _input(e).value })} />
                 </label>
                 <label class="form-item"><span>墙面纹理</span>
-                  <select value={selectedWall.textureType} on:change={(e) => gameStore.updateWall(currentExhibition.id, selectedWall.id, { textureType: (e.target as HTMLSelectElement).value as any })}>
+                  <select value={selectedWall.textureType} on:change={(e) => gameStore.updateWall(currentExhibition.id, selectedWall.id, { textureType: _selectVal(e) })}>
                     {#each TEXTURE_TYPES as t}<option value={t.key}>{t.label}</option>{/each}
                   </select>
                 </label>
                 <label class="form-item"><span>墙面颜色</span>
-                  <input type="color" value={selectedWall.backgroundColor} on:input={(e) => gameStore.updateWall(currentExhibition.id, selectedWall.id, { backgroundColor: (e.target as HTMLInputElement).value })} />
+                  <input type="color" value={selectedWall.backgroundColor} on:input={(e) => gameStore.updateWall(currentExhibition.id, selectedWall.id, { backgroundColor: _input(e).value })} />
                 </label>
                 <button class="btn btn-secondary btn-full" on:click={() => gameStore.autoLayoutWall(currentExhibition.id, selectedWall.id)}>📐 自动排布</button>
               </div>
@@ -469,21 +491,21 @@
                 <div class="placement-props">
                   <h4>作品属性</h4>
                   <label class="form-item"><span>画框样式</span>
-                    <select value={selectedPlacement.frameStyle} on:change={(e) => gameStore.updatePlacement(currentExhibition.id, selectedWall.id, selectedPlacement.workId, { frameStyle: (e.target as HTMLSelectElement).value as any })}>
+                    <select value={selectedPlacement.frameStyle} on:change={(e) => gameStore.updatePlacement(currentExhibition.id, selectedWall.id, selectedPlacement.workId, { frameStyle: _selectVal(e) })}>
                       {#each FRAME_STYLES as f}<option value={f}>{f}</option>{/each}
                     </select>
                   </label>
                   <label class="form-item"><span>画框颜色</span>
-                    <input type="color" value={selectedPlacement.frameColor} on:input={(e) => gameStore.updatePlacement(currentExhibition.id, selectedWall.id, selectedPlacement.workId, { frameColor: (e.target as HTMLInputElement).value })} />
+                    <input type="color" value={selectedPlacement.frameColor} on:input={(e) => gameStore.updatePlacement(currentExhibition.id, selectedWall.id, selectedPlacement.workId, { frameColor: _input(e).value })} />
                   </label>
                   <label class="form-item"><span>衬边 {selectedPlacement.matWidth}px</span>
-                    <input type="range" min="0" max="40" value={selectedPlacement.matWidth} on:input={(e) => gameStore.updatePlacement(currentExhibition.id, selectedWall.id, selectedPlacement.workId, { matWidth: Number((e.target as HTMLInputElement).value) })} />
+                    <input type="range" min="0" max="40" value={selectedPlacement.matWidth} on:input={(e) => gameStore.updatePlacement(currentExhibition.id, selectedWall.id, selectedPlacement.workId, { matWidth: Number(_input(e).value) })} />
                   </label>
                   <label class="form-item"><span>聚光 {Math.round(selectedPlacement.spotLightIntensity * 100)}%</span>
-                    <input type="range" min="0" max="1" step="0.05" value={selectedPlacement.spotLightIntensity} on:input={(e) => gameStore.updatePlacement(currentExhibition.id, selectedWall.id, selectedPlacement.workId, { spotLightIntensity: Number((e.target as HTMLInputElement).value) })} />
+                    <input type="range" min="0" max="1" step="0.05" value={selectedPlacement.spotLightIntensity} on:input={(e) => gameStore.updatePlacement(currentExhibition.id, selectedWall.id, selectedPlacement.workId, { spotLightIntensity: Number(_input(e).value) })} />
                   </label>
                   <label class="form-item"><span>旋转 {Math.round(selectedPlacement.rotation)}°</span>
-                    <input type="range" min="-15" max="15" step="0.5" value={selectedPlacement.rotation} on:input={(e) => gameStore.updatePlacement(currentExhibition.id, selectedWall.id, selectedPlacement.workId, { rotation: Number((e.target as HTMLInputElement).value) })} />
+                    <input type="range" min="-15" max="15" step="0.5" value={selectedPlacement.rotation} on:input={(e) => gameStore.updatePlacement(currentExhibition.id, selectedWall.id, selectedPlacement.workId, { rotation: Number(_input(e).value) })} />
                   </label>
                   <button class="btn btn-danger btn-full" on:click={() => gameStore.removePlacement(currentExhibition.id, selectedWall.id, selectedPlacement.workId)}>🗑 移除</button>
                 </div>
@@ -509,7 +531,7 @@
                   <div class="empty-wall-hint"><div class="hint-icon">🎨</div><p>从下方拖拽或点击照片添加到墙面</p></div>
                 {/if}
                 {#each selectedWall?.placements || [] as placement (placement.workId)}
-                  {#const photo = getPhotoInfo(placement.photoId)}
+                  {@const photo = getPhotoInfo(placement.photoId)}
                   {@const isSelected = systemState.selectedPlacementId === placement.workId}
                   {@const isInRoute = currentExhibition.route.some(r => r.placementId === placement.workId)}
                   <div class="placement-frame frame-style-{placement.frameStyle}"
@@ -532,7 +554,6 @@
                       <button class="quick-route-btn" on:click|stopPropagation={() => addRouteForPlacement(placement.workId)}>+🧭</button>
                     {/if}
                   </div>
-                  {/const}
                 {/each}
               </div>
             </div>
@@ -580,9 +601,9 @@
               {:else}
                 <div class="route-stops-list">
                   {#each currentExhibition.route as stop, idx (stop.stopIndex)}
-                    {#const wall = currentExhibition.walls.find(w => w.id === stop.wallId)}
-                    {#const placement = stop.placementId ? wall?.placements.find(p => p.workId === stop.placementId) : null}
-                    {#const photo = placement ? getPhotoInfo(placement.photoId) : null}
+                    {@const wall = currentExhibition.walls.find(w => w.id === stop.wallId)}
+                    {@const placement = stop.placementId ? wall?.placements.find(p => p.workId === stop.placementId) : null}
+                    {@const photo = placement ? getPhotoInfo(placement.photoId) : null}
                     <div class="route-stop-card">
                       <div class="stop-index">{idx + 1}</div>
                       <div class="stop-visual">{#if photo}<img src={photo.imageDataUrl} alt="" />{:else if wall}<div class="wall-thumb">🖼 {wall.placements.length}件</div>{/if}</div>
@@ -590,14 +611,14 @@
                         <div class="stop-title">{#if placement && photo}作品：{getPhotoSubjectName(photo.id)}{:else if wall}墙面：{wall.name}{/if}</div>
                         <label class="stop-narration"><span>解说词</span>
                           <textarea rows="2" placeholder="为这一站添加解说文字..." value={stop.narration || ''}
-                            on:input={(e) => gameStore.updateRouteStop(currentExhibition.id, idx, { narration: (e.target as HTMLTextAreaElement).value })} />
+                            on:input={(e) => gameStore.updateRouteStop(currentExhibition.id, idx, { narration: _textarea(e).value })} />
                         </label>
                         <div class="stop-settings">
                           <label><span>停留 {stop.dwellTime}秒</span>
-                            <input type="range" min="3" max="30" value={stop.dwellTime} on:input={(e) => gameStore.updateRouteStop(currentExhibition.id, idx, { dwellTime: Number((e.target as HTMLInputElement).value) })} />
+                            <input type="range" min="3" max="30" value={stop.dwellTime} on:input={(e) => gameStore.updateRouteStop(currentExhibition.id, idx, { dwellTime: Number(_input(e).value) })} />
                           </label>
                           <label><span>聚焦 {Math.round(stop.focusZoom * 100)}%</span>
-                            <input type="range" min="1" max="2" step="0.1" value={stop.focusZoom} on:input={(e) => gameStore.updateRouteStop(currentExhibition.id, idx, { focusZoom: Number((e.target as HTMLInputElement).value) })} />
+                            <input type="range" min="1" max="2" step="0.1" value={stop.focusZoom} on:input={(e) => gameStore.updateRouteStop(currentExhibition.id, idx, { focusZoom: Number(_input(e).value) })} />
                           </label>
                         </div>
                       </div>
@@ -730,7 +751,7 @@
                       {#if fb.comments}<div class="fb-comments">"{fb.comments}"</div>{/if}
                       {#if fb.favoriteWorkId && getPhotoInfo(fb.favoriteWorkId)}
                         <div class="fb-favorite"><span>❤️ 最爱：</span>
-                          <img src={getPhotoInfo(fb.favoriteWorkId)!.imageDataUrl} class="fav-thumb" />
+                          <img src={_photoUrl(fb.favoriteWorkId)} class="fav-thumb" />
                           <span>{getPhotoSubjectName(fb.favoriteWorkId)}</span>
                         </div>
                       {/if}
@@ -758,12 +779,7 @@
             </div>
             <div class="stats-detail-grid">
               <div class="detail-panel"><h4>维度评分</h4><div class="bar-chart">
-                {#each [
-                  { label: '策展水平', value: currentExhibition.statistics.avgCurationRating },
-                  { label: '作品丰富度', value: currentExhibition.statistics.avgVarietyRating },
-                  { label: '动线设计', value: currentExhibition.statistics.avgFlowRating },
-                  { label: '灯光氛围', value: currentExhibition.statistics.avgLightingRating }
-                ] as {label: string; value: number}[]}
+                {#each ratingDimensions as item}
                   <div class="bar-row"><div class="bar-label">{item.label}</div>
                     <div class="bar-track"><div class="bar-fill" style="width: {(item.value / 5) * 100}%" /></div>
                     <div class="bar-value">{item.value.toFixed(1)}</div>
@@ -797,7 +813,7 @@
                   {#if getPhotoInfo(item.photoId)}
                     <div class="rank-item">
                       <div class="rank-num rank-{rank + 1}">{rank + 1}</div>
-                      <img src={getPhotoInfo(item.photoId)!.imageDataUrl} class="rank-thumb" />
+                      <img src={_photoUrl(item.photoId)} class="rank-thumb" />
                       <div class="rank-info">
                         <div class="rank-name">{getPhotoSubjectName(item.photoId)}</div>
                         <div class="rank-meta"><span>⭐ {item.rating.toFixed(1)}</span><span>❤️ {item.mentions}次</span></div>
