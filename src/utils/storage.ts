@@ -1,4 +1,4 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 import { createInitialQuestSystemState } from './questSystem';
 import { createInitialReviewSystemState } from './reviewSystem';
@@ -35,7 +35,7 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
@@ -47,7 +47,8 @@ const KEY_MAP: Record<StorageKey, string> = {
   orders: 'darkroom_orders',
   quest_system: 'darkroom_quest_system',
   review_system: 'darkroom_review_system',
-  inventory_system: 'darkroom_inventory'
+  inventory_system: 'darkroom_inventory',
+  publication_system: 'darkroom_publication'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -278,6 +279,8 @@ function migrateData<T>(key: StorageKey, data: unknown, fromVersion: number): T 
       return data as T;
     case 'quest_system':
       return repairQuestSystem(data as QuestSystemState) as T;
+    case 'publication_system':
+      return data as T;
     default:
       return data as T;
   }
@@ -367,7 +370,7 @@ function validateAchievementState(data: unknown): data is AchievementState {
 }
 
 function validateData<T>(key: StorageKey, data: unknown): T | null {
-  if (!Array.isArray(data) && key !== 'tutorial' && key !== 'achievements' && key !== 'quest_system') {
+  if (!Array.isArray(data) && key !== 'tutorial' && key !== 'achievements' && key !== 'quest_system' && key !== 'review_system' && key !== 'inventory_system' && key !== 'publication_system') {
     return null;
   }
   
@@ -405,6 +408,9 @@ function validateData<T>(key: StorageKey, data: unknown): T | null {
     }
     case 'quest_system': {
       return validateQuestSystemState(data) ? (data as T) : null;
+    }
+    case 'publication_system': {
+      return validatePublicationState(data) ? (data as T) : null;
     }
     default:
       return null;
@@ -828,4 +834,65 @@ export function saveInventorySystem(state: InventorySystemState): boolean {
   const limited = enforceLimits('inventory_system', state) as InventorySystemState;
   const totalRecords = limited.stockInRecords.length + limited.consumeRecords.length + limited.scrapRecords.length;
   return saveWithBackup('inventory_system', limited, totalRecords);
+}
+
+function validatePublicationState(data: unknown): data is PublicationState {
+  if (typeof data !== 'object' || data === null) return false;
+  const p = data as Record<string, unknown>;
+  return (
+    Array.isArray(p.publications) &&
+    (p.activePublicationId === null || typeof p.activePublicationId === 'string') &&
+    typeof p.activeStep === 'string' &&
+    typeof p.selectFilter === 'object' && p.selectFilter !== null
+  );
+}
+
+export function repairPublicationSystem(state: PublicationState): PublicationState {
+  return {
+    publications: Array.isArray(state.publications) ? state.publications.filter(pub =>
+      pub && typeof pub.id === 'string' && typeof pub.title === 'string'
+    ) : [],
+    activePublicationId: state.activePublicationId || null,
+    activeStep: state.activeStep || 'select',
+    selectFilter: state.selectFilter || { subjectIds: [], grades: [], minScore: 0, maxScore: 100, sortBy: 'date_desc' }
+  };
+}
+
+export function createInitialPublicationState(): PublicationState {
+  return {
+    publications: [],
+    activePublicationId: null,
+    activeStep: 'select',
+    selectFilter: {
+      subjectIds: [],
+      grades: [],
+      minScore: 0,
+      maxScore: 100,
+      sortBy: 'date_desc'
+    }
+  };
+}
+
+export function loadSavedPublicationSystem(): { state: PublicationState; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<PublicationState>('publication_system', createInitialPublicationState());
+  const status: Partial<StorageStatus> = {
+    publicationSystemLoaded: result.success
+  };
+
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+
+  let state = result.data || createInitialPublicationState();
+  state = repairPublicationSystem(state);
+
+  return { state, status };
+}
+
+export function savePublicationSystem(state: PublicationState): boolean {
+  const limited = enforceLimits('publication_system', state) as PublicationState;
+  return saveWithBackup('publication_system', limited, limited.publications.length);
 }

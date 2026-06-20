@@ -650,11 +650,21 @@
                   color:{activePub.cover.style === 'minimal' ? '#2d1a12' : activePub.cover.style === 'magazine' ? '#e8e8e8' : '#e8dcc4'};
                 ">
                   {#if activePub.cover.coverPhotoId}
+                    {@const coverPubPhoto = activePub.photos.find(p => p.photoId === activePub.cover.coverPhotoId)}
                     {@const coverPhoto = processedPhotos.find(p => p.id === activePub.cover.coverPhotoId)}
-                    {#if coverPhoto}<img src={coverPhoto.imageDataUrl} alt="" class="cover-photo" />{/if}
+                    {#if coverPhoto}
+                      <div class="cover-photo-wrapper" style="clip-path:inset({coverPubPhoto?.crop.y || 0}% {100 - (coverPubPhoto?.crop.x || 0) - (coverPubPhoto?.crop.width || 100)}% {100 - (coverPubPhoto?.crop.y || 0) - (coverPubPhoto?.crop.height || 100)}% {coverPubPhoto?.crop.x || 0}%);">
+                        <img src={coverPhoto.imageDataUrl} alt="" class="cover-photo" />
+                      </div>
+                    {/if}
                   {:else if activePub.photos.length > 0}
-                    {@const firstPhoto = processedPhotos.find(p => p.id === activePub.photos[0]?.photoId)}
-                    {#if firstPhoto}<img src={firstPhoto.imageDataUrl} alt="" class="cover-photo" />{/if}
+                    {@const firstPubPhoto = activePub.photos[0]}
+                    {@const firstPhoto = processedPhotos.find(p => p.id === firstPubPhoto?.photoId)}
+                    {#if firstPhoto}
+                      <div class="cover-photo-wrapper" style="clip-path:inset({firstPubPhoto.crop.y}% {100 - firstPubPhoto.crop.x - firstPubPhoto.crop.width}% {100 - firstPubPhoto.crop.y - firstPubPhoto.crop.height}% {firstPubPhoto.crop.x}%);">
+                        <img src={firstPhoto.imageDataUrl} alt="" class="cover-photo" />
+                      </div>
+                    {/if}
                   {/if}
                   <h1 class="cover-title">{activePub.cover.title || '未命名'}</h1>
                   <p class="cover-subtitle">{activePub.cover.subtitle}</p>
@@ -726,11 +736,17 @@
                   <div class="summary-item"><span class="summary-label">作者</span><span class="summary-value">{activePub.authorName}</span></div>
                   <div class="summary-item"><span class="summary-label">作品数</span><span class="summary-value">{activePub.photos.length} 张</span></div>
                   <div class="summary-item"><span class="summary-label">页数</span><span class="summary-value">{activePub.pages.length} 页</span></div>
+                  <div class="summary-item"><span class="summary-label">已裁切</span><span class="summary-value">{activePub.photos.filter(p => p.crop.x !== 0 || p.crop.y !== 0 || p.crop.width !== 100 || p.crop.height !== 100).length} 张</span></div>
+                  <div class="summary-item"><span class="summary-label">已注释</span><span class="summary-value">{activePub.photos.filter(p => p.caption).length} 张</span></div>
                   <div class="summary-item"><span class="summary-label">封面风格</span><span class="summary-value">{coverStyleOptions.find(c => c.key === activePub.cover.style)?.label || activePub.cover.style}</span></div>
                   <div class="summary-item"><span class="summary-label">创建时间</span><span class="summary-value">{formatDate(activePub.createdAt)}</span></div>
+                  <div class="summary-item"><span class="summary-label">最近编辑</span><span class="summary-value">{formatDate(activePub.updatedAt)}</span></div>
                   {#if activePub.exportedAt}
                     <div class="summary-item"><span class="summary-label">上次导出</span><span class="summary-value">{formatDate(activePub.exportedAt)}</span></div>
                   {/if}
+                </div>
+                <div class="save-status">
+                  <span class="save-indicator">💾 编辑已自动保存至本地</span>
                 </div>
               </div>
               <div class="export-actions">
@@ -1122,9 +1138,12 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     text-align: center; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
   }
+  .cover-photo-wrapper {
+    width: 80%; max-width: 180px; margin-bottom: 24px;
+    border-radius: 6px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
   .cover-photo {
-    width: 80%; max-width: 180px; aspect-ratio: 3 / 4; object-fit: cover;
-    border-radius: 6px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block;
   }
   .cover-title { font-size: 20px; margin: 0 0 8px; letter-spacing: 2px; }
   .cover-subtitle { font-size: 12px; opacity: 0.8; margin: 0 0 6px; }
@@ -1164,6 +1183,8 @@
   }
   .summary-title { font-size: 18px; color: #e8c890; margin: 0 0 16px; }
   .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .save-status { margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(139, 90, 43, 0.15); text-align: center; }
+  .save-indicator { font-size: 12px; color: #6a8a5a; }
   .summary-item { display: flex; flex-direction: column; gap: 2px; }
   .summary-label { font-size: 11px; color: #7a6a55; }
   .summary-value { font-size: 14px; color: #c8a878; font-weight: 500; }

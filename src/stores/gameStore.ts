@@ -31,7 +31,9 @@ import {
   loadSavedReviewSystem,
   saveReviewSystem,
   loadSavedInventorySystem,
-  saveInventorySystem
+  saveInventorySystem,
+  loadSavedPublicationSystem,
+  savePublicationSystem
 } from '../utils/storage';
 import {
   createInitialQuestSystemState,
@@ -410,6 +412,11 @@ function createInitialPublicationState(): PublicationState {
   };
 }
 
+function savePublicationAndReturn<T>(newState: T, publicationSystem: PublicationState): T {
+  savePublicationSystem(publicationSystem);
+  return newState;
+}
+
 function matchFilmsForOrder(requirements: OrderRequirements): FilmMatch[] {
   const matches: FilmMatch[] = [];
   
@@ -574,6 +581,7 @@ function createInitialGameState(): GameState {
   const questSystemResult = loadSavedQuestSystem();
   const reviewSystemResult = loadSavedReviewSystem();
   const inventorySystemResult = loadSavedInventorySystem();
+  const publicationSystemResult = loadSavedPublicationSystem();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -588,6 +596,7 @@ function createInitialGameState(): GameState {
   storageStatus.questSystemLoaded = questSystemResult.status.questSystemLoaded || false;
   storageStatus.reviewSystemLoaded = reviewSystemResult.status.reviewSystemLoaded || false;
   storageStatus.inventorySystemLoaded = inventorySystemResult.status.inventorySystemLoaded || false;
+  storageStatus.publicationSystemLoaded = publicationSystemResult.status.publicationSystemLoaded || false;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
@@ -597,7 +606,8 @@ function createInitialGameState(): GameState {
     ordersResult.status.migrationPerformed ||
     questSystemResult.status.migrationPerformed ||
     reviewSystemResult.status.migrationPerformed ||
-    inventorySystemResult.status.migrationPerformed);
+    inventorySystemResult.status.migrationPerformed ||
+    publicationSystemResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
     tutorialResult.status.recoveryPerformed ||
@@ -606,7 +616,8 @@ function createInitialGameState(): GameState {
     ordersResult.status.recoveryPerformed ||
     questSystemResult.status.recoveryPerformed ||
     reviewSystemResult.status.recoveryPerformed ||
-    inventorySystemResult.status.recoveryPerformed);
+    inventorySystemResult.status.recoveryPerformed ||
+    publicationSystemResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
@@ -718,7 +729,7 @@ function createInitialGameState(): GameState {
     questSystem: questSystemResult.state,
     reviewSystem: reviewSystemResult.state,
     inventorySystem: inventorySystemResult.state,
-    publicationSystem: createInitialPublicationState()
+    publicationSystem: publicationSystemResult.state
   };
 }
 
@@ -2994,18 +3005,24 @@ function createGameStore() {
           }
         };
       });
+      if (newId) {
+        const unsubscribe = subscribe(s => { savePublicationSystem(s.publicationSystem); });
+        unsubscribe();
+      }
       return newId;
     },
 
     setActivePublication: (publicationId: string | null) => update(state => {
       const pub = state.publicationSystem.publications.find(p => p.id === publicationId);
+      const newPubSystem = {
+        ...state.publicationSystem,
+        activePublicationId: publicationId,
+        activeStep: pub?.step || 'select'
+      };
+      savePublicationSystem(newPubSystem);
       return {
         ...state,
-        publicationSystem: {
-          ...state.publicationSystem,
-          activePublicationId: publicationId,
-          activeStep: pub?.step || 'select'
-        }
+        publicationSystem: newPubSystem
       };
     }),
 
@@ -3016,14 +3033,9 @@ function createGameStore() {
       const newPubs = state.publicationSystem.publications.map(p =>
         p.id === activePublicationId ? { ...p, step, updatedAt: now } : p
       );
-      return {
-        ...state,
-        publicationSystem: {
-          ...state.publicationSystem,
-          publications: newPubs,
-          activeStep: step
-        }
-      };
+      const newPubSystem = { ...state.publicationSystem, publications: newPubs, activeStep: step };
+      savePublicationSystem(newPubSystem);
+      return { ...state, publicationSystem: newPubSystem };
     }),
 
     addPhotoToPublication: (photoId: string) => update(state => {
@@ -3041,7 +3053,9 @@ function createGameStore() {
         };
         return { ...p, photos: [...p.photos, newPubPhoto], updatedAt: now };
       });
-      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+      const newPubSystem = { ...state.publicationSystem, publications: newPubs };
+      savePublicationSystem(newPubSystem);
+      return { ...state, publicationSystem: newPubSystem };
     }),
 
     removePhotoFromPublication: (photoId: string) => update(state => {
@@ -3053,7 +3067,9 @@ function createGameStore() {
         const newPhotos = p.photos.filter(pp => pp.photoId !== photoId).map((pp, i) => ({ ...pp, pageSlot: i }));
         return { ...p, photos: newPhotos, updatedAt: now };
       });
-      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+      const newPubSystem = { ...state.publicationSystem, publications: newPubs };
+      savePublicationSystem(newPubSystem);
+      return { ...state, publicationSystem: newPubSystem };
     }),
 
     reorderPublicationPhotos: (photoIds: string[]) => update(state => {
@@ -3068,7 +3084,9 @@ function createGameStore() {
         });
         return { ...p, photos: reordered, updatedAt: now };
       });
-      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+      const newPubSystem = { ...state.publicationSystem, publications: newPubs };
+      savePublicationSystem(newPubSystem);
+      return { ...state, publicationSystem: newPubSystem };
     }),
 
     updatePublicationPhotoCrop: (photoId: string, crop: Partial<PublicationCrop>) => update(state => {
@@ -3083,7 +3101,9 @@ function createGameStore() {
           updatedAt: now
         };
       });
-      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+      const newPubSystem = { ...state.publicationSystem, publications: newPubs };
+      savePublicationSystem(newPubSystem);
+      return { ...state, publicationSystem: newPubSystem };
     }),
 
     updatePublicationPhotoCaption: (photoId: string, caption: string) => update(state => {
@@ -3098,7 +3118,9 @@ function createGameStore() {
           updatedAt: now
         };
       });
-      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+      const newPubSystem = { ...state.publicationSystem, publications: newPubs };
+      savePublicationSystem(newPubSystem);
+      return { ...state, publicationSystem: newPubSystem };
     }),
 
     updatePublicationPages: (pages: PublicationPage[]) => update(state => {
@@ -3109,7 +3131,9 @@ function createGameStore() {
         if (p.id !== activePublicationId) return p;
         return { ...p, pages, updatedAt: now };
       });
-      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+      const newPubSystem = { ...state.publicationSystem, publications: newPubs };
+      savePublicationSystem(newPubSystem);
+      return { ...state, publicationSystem: newPubSystem };
     }),
 
     updatePublicationCover: (cover: Partial<PublicationCover>) => update(state => {
@@ -3120,16 +3144,19 @@ function createGameStore() {
         if (p.id !== activePublicationId) return p;
         return { ...p, cover: { ...p.cover, ...cover }, updatedAt: now };
       });
-      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+      const newPubSystem = { ...state.publicationSystem, publications: newPubs };
+      savePublicationSystem(newPubSystem);
+      return { ...state, publicationSystem: newPubSystem };
     }),
 
-    updatePublicationSelectFilter: (filter: Partial<PublicationSelectFilter>) => update(state => ({
-      ...state,
-      publicationSystem: {
+    updatePublicationSelectFilter: (filter: Partial<PublicationSelectFilter>) => update(state => {
+      const newPubSystem = {
         ...state.publicationSystem,
         selectFilter: { ...state.publicationSystem.selectFilter, ...filter }
-      }
-    })),
+      };
+      savePublicationSystem(newPubSystem);
+      return { ...state, publicationSystem: newPubSystem };
+    }),
 
     exportPublication: (publicationId: string, format: 'json' | 'html' = 'html'): string | null => {
       let result: string | null = null;
@@ -3163,20 +3190,23 @@ function createGameStore() {
           const newPubs = state.publicationSystem.publications.map(p =>
             p.id === publicationId ? { ...p, exportedAt: now, updatedAt: now } : p
           );
-          return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+          const newPubSystem = { ...state.publicationSystem, publications: newPubs };
+          savePublicationSystem(newPubSystem);
+          return { ...state, publicationSystem: newPubSystem };
         });
       }
       return result;
     },
 
-    deletePublication: (publicationId: string) => update(state => ({
-      ...state,
-      publicationSystem: {
+    deletePublication: (publicationId: string) => update(state => {
+      const newPubSystem = {
         ...state.publicationSystem,
         publications: state.publicationSystem.publications.filter(p => p.id !== publicationId),
         activePublicationId: state.publicationSystem.activePublicationId === publicationId ? null : state.publicationSystem.activePublicationId
-      }
-    }))
+      };
+      savePublicationSystem(newPubSystem);
+      return { ...state, publicationSystem: newPubSystem };
+    })
   };
 }
 
@@ -3561,7 +3591,11 @@ function generatePublicationHtml(
   pub: Publication,
   photos: { photoId: string; caption: string; crop: PublicationCrop; imageUrl: string; score: number; grade: string }[]
 ): string {
-  const coverPhoto = photos.length > 0 ? photos[0].imageUrl : '';
+  const coverPhotoData = pub.cover.coverPhotoId
+    ? photos.find(p => p.photoId === pub.cover.coverPhotoId)
+    : photos[0];
+  const coverPhotoUrl = coverPhotoData?.imageUrl || '';
+  const coverCrop = coverPhotoData?.crop;
   const dateStr = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
 
   const coverStyles: Record<string, string> = {
@@ -3581,15 +3615,43 @@ function generatePublicationHtml(
     feature_plus_strip: 'grid-template-columns:2fr 1fr;'
   };
 
+  function cropStyle(crop: PublicationCrop): string {
+    if (crop.x === 0 && crop.y === 0 && crop.width === 100 && crop.height === 100) {
+      return '';
+    }
+    const top = crop.y;
+    const right = 100 - crop.x - crop.width;
+    const bottom = 100 - crop.y - crop.height;
+    const left = crop.x;
+    return `clip-path:inset(${top}% ${right}% ${bottom}% ${left}%);`;
+  }
+
+  function coverCropAttr(crop: PublicationCrop | undefined): string {
+    if (!crop || (crop.x === 0 && crop.y === 0 && crop.width === 100 && crop.height === 100)) {
+      return '';
+    }
+    const top = crop.y;
+    const right = 100 - crop.x - crop.width;
+    const bottom = 100 - crop.y - crop.height;
+    const left = crop.x;
+    return `clip-path:inset(${top}% ${right}% ${bottom}% ${left}%);`;
+  }
+
   let pagesHtml = '';
   pub.pages.forEach((page, pageIdx) => {
     const layoutStyle = pageLayouts[page.layout] || pageLayouts.full;
     const pagePhotos = page.photoIds.map(id => photos.find(p => p.photoId === id)).filter(Boolean);
-    const cellsHtml = pagePhotos.map(p => `
+    const cellsHtml = pagePhotos.map(p => {
+      const cs = cropStyle(p!.crop);
+      const imgStyle = cs
+        ? `width:${100 * 100 / p!.crop.width}%;height:${100 * 100 / p!.crop.height}%;margin-left:-${p!.crop.x * 100 / p!.crop.width}%;margin-top:-${p!.crop.y * 100 / p!.crop.height}%;object-fit:cover;display:block;max-width:none;`
+        : 'width:100%;height:100%;object-fit:cover;display:block;';
+      return `
       <div style="position:relative;overflow:hidden;border-radius:4px;">
-        <img src="${p!.imageUrl}" style="width:100%;height:100%;object-fit:cover;display:block;" alt="" />
+        <img src="${p!.imageUrl}" style="${imgStyle}" alt="" />
         ${p!.caption ? `<p style="position:absolute;bottom:0;left:0;right:0;margin:0;padding:8px 12px;background:rgba(0,0,0,0.6);color:#e8dcc4;font-size:12px;">${p!.caption}</p>` : ''}
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     pagesHtml += `
       <div style="page-break-after:always;min-height:100vh;display:flex;flex-direction:column;padding:40px;">
@@ -3602,16 +3664,22 @@ function generatePublicationHtml(
 
   if (pagesHtml === '' && photos.length > 0) {
     photos.forEach((p, i) => {
+      const cs = cropStyle(p.crop);
+      const imgStyle = cs
+        ? `max-width:none;width:${100 * 100 / p.crop.width}%;height:${100 * 100 / p.crop.height}%;margin-left:-${p.crop.x * 100 / p.crop.width}%;margin-top:-${p.crop.y * 100 / p.crop.height}%;object-fit:cover;border-radius:4px;`
+        : 'max-width:100%;max-height:80vh;object-fit:contain;border-radius:4px;';
       pagesHtml += `
         <div style="page-break-after:always;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:40px;">
-          <div style="flex:1;display:flex;align-items:center;justify-content:center;">
-            <img src="${p.imageUrl}" style="max-width:100%;max-height:80vh;object-fit:contain;border-radius:4px;" alt="" />
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+            <img src="${p.imageUrl}" style="${imgStyle}" alt="" />
           </div>
           ${p.caption ? `<p style="text-align:center;color:#8a7a5a;font-size:14px;margin-top:16px;font-style:italic;">${p.caption}</p>` : ''}
           <div style="text-align:right;font-size:10px;color:#888;margin-top:16px;">${i + 1}</div>
         </div>`;
     });
   }
+
+  const coverImgCrop = coverCropAttr(coverCrop);
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -3623,7 +3691,7 @@ function generatePublicationHtml(
 </head>
 <body style="margin:0;padding:0;background:#1a0f0a;font-family:Georgia,serif;">
   <div style="${coverStyles[pub.cover.style] || coverStyles.classic}min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:60px;page-break-after:always;">
-    ${coverPhoto ? `<img src="${coverPhoto}" style="width:60%;max-width:400px;aspect-ratio:3/4;object-fit:cover;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.4);margin-bottom:40px;" alt="" />` : ''}
+    ${coverPhotoUrl ? `<div style="width:60%;max-width:400px;aspect-ratio:3/4;overflow:hidden;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.4);margin-bottom:40px;"><img src="${coverPhotoUrl}" style="width:100%;height:100%;object-fit:cover;display:block;${coverImgCrop}" alt="" /></div>` : ''}
     <h1 style="font-size:36px;margin:0 0 12px;letter-spacing:4px;">${pub.cover.title}</h1>
     <p style="font-size:16px;opacity:0.8;margin:0 0 8px;">${pub.cover.subtitle}</p>
     ${pub.cover.showDate ? `<p style="font-size:12px;opacity:0.5;margin:0;">${dateStr}</p>` : ''}

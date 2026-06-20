@@ -343,6 +343,7 @@ export interface StorageStatus {
   questSystemLoaded?: boolean;
   reviewSystemLoaded?: boolean;
   inventorySystemLoaded?: boolean;
+  publicationSystemLoaded?: boolean;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -357,6 +358,7 @@ export interface StorageStatus {
     orders: number;
     reviewSystem?: number;
     inventorySystem?: number;
+    publicationSystem?: number;
   };
 }
 
