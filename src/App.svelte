@@ -24,6 +24,7 @@
   import FilmLab from './components/FilmLab.svelte';
   import ReviewPanel from './components/ReviewPanel.svelte';
   import FilmInventory from './components/FilmInventory.svelte';
+  import PublicationDesk from './components/PublicationDesk.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -42,6 +43,7 @@
   let showFilmLab = false;
   let showReview = false;
   let showInventory = false;
+  let showPublication = false;
 
   function goToOrderScoring() {
     if (currentOrder) {
@@ -545,6 +547,16 @@
         {/if}
       </button>
       <button
+        class="header-btn publication"
+        on:click={() => { showPublication = true; }}
+        title="作品出版编辑台"
+      >
+        <span>📖</span>
+        {#if $gameStore.publicationSystem.publications.length > 0}
+          <span class="badge">{$gameStore.publicationSystem.publications.length}</span>
+        {/if}
+      </button>
+      <button
         class="header-btn help"
         on:click={() => { gameStore.resetTutorial(); }}
         title="重新开始教程"
@@ -731,6 +743,10 @@
 
   {#if showInventory}
     <FilmInventory on:close={() => { showInventory = false; }} />
+  {/if}
+
+  {#if showPublication}
+    <PublicationDesk onClose={() => { showPublication = false; }} />
   {/if}
 
   <footer class="app-footer">

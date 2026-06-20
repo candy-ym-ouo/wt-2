@@ -274,6 +274,7 @@ export interface GameState {
   questSystem: QuestSystemState;
   reviewSystem: ReviewSystemState;
   inventorySystem: InventorySystemState;
+  publicationSystem: PublicationState;
 }
 
 export type TutorialUnlockCondition = 
@@ -1170,4 +1171,70 @@ export type InventoryRecordUnion = StockInRecord | StockConsumeRecord | StockScr
 export interface InventoryRecordWithType {
   type: 'stock_in' | 'consume' | 'scrap';
   record: InventoryRecordUnion;
+}
+
+export type PublicationStep = 'select' | 'crop' | 'annotate' | 'layout' | 'cover' | 'export';
+
+export interface PublicationCrop {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  aspectRatio: 'free' | '3:2' | '4:3' | '1:1' | '16:9';
+}
+
+export interface PublicationPhoto {
+  photoId: string;
+  crop: PublicationCrop;
+  caption: string;
+  pageSlot: number;
+}
+
+export type PageLayoutTemplate = 'full' | 'half_h' | 'half_v' | 'thirds' | 'quarter' | 'feature_plus_strip';
+
+export interface PublicationPage {
+  id: string;
+  layout: PageLayoutTemplate;
+  photoIds: string[];
+}
+
+export type CoverStyle = 'minimal' | 'classic' | 'artistic' | 'darkroom' | 'magazine';
+
+export interface PublicationCover {
+  style: CoverStyle;
+  title: string;
+  subtitle: string;
+  coverPhotoId: string | null;
+  backgroundColor: string;
+  showDate: boolean;
+}
+
+export interface Publication {
+  id: string;
+  title: string;
+  authorName: string;
+  photos: PublicationPhoto[];
+  pages: PublicationPage[];
+  cover: PublicationCover;
+  step: PublicationStep;
+  createdAt: number;
+  updatedAt: number;
+  exportedAt?: number;
+}
+
+export type PublicationExportFormat = 'json' | 'html';
+
+export interface PublicationState {
+  publications: Publication[];
+  activePublicationId: string | null;
+  activeStep: PublicationStep;
+  selectFilter: PublicationSelectFilter;
+}
+
+export interface PublicationSelectFilter {
+  subjectIds: string[];
+  grades: string[];
+  minScore: number;
+  maxScore: number;
+  sortBy: 'date_desc' | 'date_asc' | 'score_desc' | 'score_asc';
 }

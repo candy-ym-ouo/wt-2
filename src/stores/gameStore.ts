@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
@@ -395,6 +395,21 @@ function createInitialFilmLabState(): FilmLabState {
   };
 }
 
+function createInitialPublicationState(): PublicationState {
+  return {
+    publications: [],
+    activePublicationId: null,
+    activeStep: 'select',
+    selectFilter: {
+      subjectIds: [],
+      grades: [],
+      minScore: 0,
+      maxScore: 100,
+      sortBy: 'date_desc'
+    }
+  };
+}
+
 function matchFilmsForOrder(requirements: OrderRequirements): FilmMatch[] {
   const matches: FilmMatch[] = [];
   
@@ -702,7 +717,8 @@ function createInitialGameState(): GameState {
     filmLab: createInitialFilmLabState(),
     questSystem: questSystemResult.state,
     reviewSystem: reviewSystemResult.state,
-    inventorySystem: inventorySystemResult.state
+    inventorySystem: inventorySystemResult.state,
+    publicationSystem: createInitialPublicationState()
   };
 }
 
@@ -2943,7 +2959,224 @@ function createGameStore() {
       const newInventorySystem = { ...state.inventorySystem, showAlertBadge: false };
       saveInventorySystem(newInventorySystem);
       return { ...state, inventorySystem: newInventorySystem };
-    })
+    }),
+
+    createPublication: (title: string, authorName: string): string | null => {
+      let newId: string | null = null;
+      update(state => {
+        const now = Date.now();
+        const newPublication: Publication = {
+          id: generateId(),
+          title,
+          authorName,
+          photos: [],
+          pages: [],
+          cover: {
+            style: 'classic',
+            title,
+            subtitle: authorName,
+            coverPhotoId: null,
+            backgroundColor: '#1a0f0a',
+            showDate: true
+          },
+          step: 'select',
+          createdAt: now,
+          updatedAt: now
+        };
+        newId = newPublication.id;
+        return {
+          ...state,
+          publicationSystem: {
+            ...state.publicationSystem,
+            publications: [...state.publicationSystem.publications, newPublication],
+            activePublicationId: newId,
+            activeStep: 'select'
+          }
+        };
+      });
+      return newId;
+    },
+
+    setActivePublication: (publicationId: string | null) => update(state => {
+      const pub = state.publicationSystem.publications.find(p => p.id === publicationId);
+      return {
+        ...state,
+        publicationSystem: {
+          ...state.publicationSystem,
+          activePublicationId: publicationId,
+          activeStep: pub?.step || 'select'
+        }
+      };
+    }),
+
+    setPublicationStep: (step: PublicationStep) => update(state => {
+      const { activePublicationId } = state.publicationSystem;
+      if (!activePublicationId) return state;
+      const now = Date.now();
+      const newPubs = state.publicationSystem.publications.map(p =>
+        p.id === activePublicationId ? { ...p, step, updatedAt: now } : p
+      );
+      return {
+        ...state,
+        publicationSystem: {
+          ...state.publicationSystem,
+          publications: newPubs,
+          activeStep: step
+        }
+      };
+    }),
+
+    addPhotoToPublication: (photoId: string) => update(state => {
+      const { activePublicationId } = state.publicationSystem;
+      if (!activePublicationId) return state;
+      const now = Date.now();
+      const newPubs = state.publicationSystem.publications.map(p => {
+        if (p.id !== activePublicationId) return p;
+        if (p.photos.some(pp => pp.photoId === photoId)) return p;
+        const newPubPhoto: PublicationPhoto = {
+          photoId,
+          crop: { x: 0, y: 0, width: 100, height: 100, aspectRatio: 'free' },
+          caption: '',
+          pageSlot: p.photos.length
+        };
+        return { ...p, photos: [...p.photos, newPubPhoto], updatedAt: now };
+      });
+      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+    }),
+
+    removePhotoFromPublication: (photoId: string) => update(state => {
+      const { activePublicationId } = state.publicationSystem;
+      if (!activePublicationId) return state;
+      const now = Date.now();
+      const newPubs = state.publicationSystem.publications.map(p => {
+        if (p.id !== activePublicationId) return p;
+        const newPhotos = p.photos.filter(pp => pp.photoId !== photoId).map((pp, i) => ({ ...pp, pageSlot: i }));
+        return { ...p, photos: newPhotos, updatedAt: now };
+      });
+      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+    }),
+
+    reorderPublicationPhotos: (photoIds: string[]) => update(state => {
+      const { activePublicationId } = state.publicationSystem;
+      if (!activePublicationId) return state;
+      const now = Date.now();
+      const newPubs = state.publicationSystem.publications.map(p => {
+        if (p.id !== activePublicationId) return p;
+        const reordered = photoIds.map((id, i) => {
+          const existing = p.photos.find(pp => pp.photoId === id);
+          return existing ? { ...existing, pageSlot: i } : { photoId: id, crop: { x: 0, y: 0, width: 100, height: 100, aspectRatio: 'free' as const }, caption: '', pageSlot: i };
+        });
+        return { ...p, photos: reordered, updatedAt: now };
+      });
+      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+    }),
+
+    updatePublicationPhotoCrop: (photoId: string, crop: Partial<PublicationCrop>) => update(state => {
+      const { activePublicationId } = state.publicationSystem;
+      if (!activePublicationId) return state;
+      const now = Date.now();
+      const newPubs = state.publicationSystem.publications.map(p => {
+        if (p.id !== activePublicationId) return p;
+        return {
+          ...p,
+          photos: p.photos.map(pp => pp.photoId === photoId ? { ...pp, crop: { ...pp.crop, ...crop } } : pp),
+          updatedAt: now
+        };
+      });
+      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+    }),
+
+    updatePublicationPhotoCaption: (photoId: string, caption: string) => update(state => {
+      const { activePublicationId } = state.publicationSystem;
+      if (!activePublicationId) return state;
+      const now = Date.now();
+      const newPubs = state.publicationSystem.publications.map(p => {
+        if (p.id !== activePublicationId) return p;
+        return {
+          ...p,
+          photos: p.photos.map(pp => pp.photoId === photoId ? { ...pp, caption } : pp),
+          updatedAt: now
+        };
+      });
+      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+    }),
+
+    updatePublicationPages: (pages: PublicationPage[]) => update(state => {
+      const { activePublicationId } = state.publicationSystem;
+      if (!activePublicationId) return state;
+      const now = Date.now();
+      const newPubs = state.publicationSystem.publications.map(p => {
+        if (p.id !== activePublicationId) return p;
+        return { ...p, pages, updatedAt: now };
+      });
+      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+    }),
+
+    updatePublicationCover: (cover: Partial<PublicationCover>) => update(state => {
+      const { activePublicationId } = state.publicationSystem;
+      if (!activePublicationId) return state;
+      const now = Date.now();
+      const newPubs = state.publicationSystem.publications.map(p => {
+        if (p.id !== activePublicationId) return p;
+        return { ...p, cover: { ...p.cover, ...cover }, updatedAt: now };
+      });
+      return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+    }),
+
+    updatePublicationSelectFilter: (filter: Partial<PublicationSelectFilter>) => update(state => ({
+      ...state,
+      publicationSystem: {
+        ...state.publicationSystem,
+        selectFilter: { ...state.publicationSystem.selectFilter, ...filter }
+      }
+    })),
+
+    exportPublication: (publicationId: string, format: 'json' | 'html' = 'html'): string | null => {
+      let result: string | null = null;
+      const unsubscribe = subscribe(state => {
+        const pub = state.publicationSystem.publications.find(p => p.id === publicationId);
+        if (!pub) return;
+
+        const photos = pub.photos.map(pp => {
+          const photo = state.processedPhotos.find(p => p.id === pp.photoId);
+          return {
+            photoId: pp.photoId,
+            caption: pp.caption,
+            crop: pp.crop,
+            imageUrl: photo?.imageDataUrl || '',
+            score: photo?.score || 0,
+            grade: photo?.details.grade || ''
+          };
+        });
+
+        if (format === 'json') {
+          result = JSON.stringify({ ...pub, photos }, null, 2);
+        } else {
+          result = generatePublicationHtml(pub, photos);
+        }
+      });
+      unsubscribe();
+
+      if (result) {
+        update(state => {
+          const now = Date.now();
+          const newPubs = state.publicationSystem.publications.map(p =>
+            p.id === publicationId ? { ...p, exportedAt: now, updatedAt: now } : p
+          );
+          return { ...state, publicationSystem: { ...state.publicationSystem, publications: newPubs } };
+        });
+      }
+      return result;
+    },
+
+    deletePublication: (publicationId: string) => update(state => ({
+      ...state,
+      publicationSystem: {
+        ...state.publicationSystem,
+        publications: state.publicationSystem.publications.filter(p => p.id !== publicationId),
+        activePublicationId: state.publicationSystem.activePublicationId === publicationId ? null : state.publicationSystem.activePublicationId
+      }
+    }))
   };
 }
 
@@ -3323,3 +3556,79 @@ export const statistics = derived(
 );
 
 export { computeAchievementProgress, calculateCurrentStreak };
+
+function generatePublicationHtml(
+  pub: Publication,
+  photos: { photoId: string; caption: string; crop: PublicationCrop; imageUrl: string; score: number; grade: string }[]
+): string {
+  const coverPhoto = photos.length > 0 ? photos[0].imageUrl : '';
+  const dateStr = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const coverStyles: Record<string, string> = {
+    minimal: 'background:#faf8f5;color:#2d1a12;font-family:Georgia,serif;',
+    classic: `background:${pub.cover.backgroundColor};color:#e8dcc4;font-family:Georgia,serif;`,
+    artistic: 'background:linear-gradient(135deg,#2d1a12,#4a2c1a);color:#e8c890;font-family:Georgia,serif;',
+    darkroom: 'background:#0d0604;color:#c8a878;font-family:Courier New,monospace;',
+    magazine: 'background:#1a1a2e;color:#e8e8e8;font-family:Helvetica,Arial,sans-serif;'
+  };
+
+  const pageLayouts: Record<string, string> = {
+    full: 'grid-template-columns:1fr;',
+    half_h: 'grid-template-columns:1fr 1fr;',
+    half_v: 'grid-template-columns:1fr 1fr;',
+    thirds: 'grid-template-columns:1fr 1fr 1fr;',
+    quarter: 'grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;',
+    feature_plus_strip: 'grid-template-columns:2fr 1fr;'
+  };
+
+  let pagesHtml = '';
+  pub.pages.forEach((page, pageIdx) => {
+    const layoutStyle = pageLayouts[page.layout] || pageLayouts.full;
+    const pagePhotos = page.photoIds.map(id => photos.find(p => p.photoId === id)).filter(Boolean);
+    const cellsHtml = pagePhotos.map(p => `
+      <div style="position:relative;overflow:hidden;border-radius:4px;">
+        <img src="${p!.imageUrl}" style="width:100%;height:100%;object-fit:cover;display:block;" alt="" />
+        ${p!.caption ? `<p style="position:absolute;bottom:0;left:0;right:0;margin:0;padding:8px 12px;background:rgba(0,0,0,0.6);color:#e8dcc4;font-size:12px;">${p!.caption}</p>` : ''}
+      </div>`).join('');
+
+    pagesHtml += `
+      <div style="page-break-after:always;min-height:100vh;display:flex;flex-direction:column;padding:40px;">
+        <div style="flex:1;display:grid;${layoutStyle}gap:12px;align-content:center;">
+          ${cellsHtml || '<p style="color:#888;text-align:center;grid-column:1/-1;">空白页</p>'}
+        </div>
+        <div style="text-align:right;font-size:10px;color:#888;margin-top:16px;">${pageIdx + 1}</div>
+      </div>`;
+  });
+
+  if (pagesHtml === '' && photos.length > 0) {
+    photos.forEach((p, i) => {
+      pagesHtml += `
+        <div style="page-break-after:always;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:40px;">
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;">
+            <img src="${p.imageUrl}" style="max-width:100%;max-height:80vh;object-fit:contain;border-radius:4px;" alt="" />
+          </div>
+          ${p.caption ? `<p style="text-align:center;color:#8a7a5a;font-size:14px;margin-top:16px;font-style:italic;">${p.caption}</p>` : ''}
+          <div style="text-align:right;font-size:10px;color:#888;margin-top:16px;">${i + 1}</div>
+        </div>`;
+    });
+  }
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>${pub.title}</title>
+<style>@media print{body{margin:0;}}</style>
+</head>
+<body style="margin:0;padding:0;background:#1a0f0a;font-family:Georgia,serif;">
+  <div style="${coverStyles[pub.cover.style] || coverStyles.classic}min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:60px;page-break-after:always;">
+    ${coverPhoto ? `<img src="${coverPhoto}" style="width:60%;max-width:400px;aspect-ratio:3/4;object-fit:cover;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.4);margin-bottom:40px;" alt="" />` : ''}
+    <h1 style="font-size:36px;margin:0 0 12px;letter-spacing:4px;">${pub.cover.title}</h1>
+    <p style="font-size:16px;opacity:0.8;margin:0 0 8px;">${pub.cover.subtitle}</p>
+    ${pub.cover.showDate ? `<p style="font-size:12px;opacity:0.5;margin:0;">${dateStr}</p>` : ''}
+  </div>
+  ${pagesHtml}
+</body>
+</html>`;
+}
