@@ -279,6 +279,7 @@ export interface GameState {
   curriculumSystem: CurriculumSystemState;
   consignmentMarket: ConsignmentMarketState;
   exhibitionSystem: ExhibitionState;
+  darkroomCalibration: DarkroomCalibrationState;
 }
 
 export type TutorialUnlockCondition = 
@@ -351,6 +352,7 @@ export interface StorageStatus {
   curriculumSystemLoaded?: boolean;
   consignmentMarketLoaded?: boolean;
   exhibitionSystemLoaded?: boolean;
+  darkroomCalibrationLoaded?: boolean;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -369,6 +371,7 @@ export interface StorageStatus {
     curriculumSystem?: number;
     consignmentMarket?: number;
     exhibitionSystem?: number;
+    darkroomCalibration?: number;
   };
 }
 
@@ -1904,5 +1907,161 @@ export interface Exhibition {
   totalViews: number;
 }
 
+export type EnlargerLightSource = 'tungsten' | 'led' | 'cold_cathode' | 'condenser' | 'diffusion';
+export type EnlargerStatus = 'idle' | 'warming' | 'ready' | 'calibrating';
+export type TimerMode = 'manual' | 'auto_advance' | 'programmed';
+export type TempControllerStatus = 'off' | 'heating' | 'cooling' | 'stable';
+export type CalibrationStatus = 'uncalibrated' | 'calibrating' | 'calibrated' | 'drift_detected';
+export type CalibrationTab = 'enlarger' | 'temperature' | 'timer' | 'deviation';
+
+export interface EnlargerProfile {
+  id: string;
+  name: string;
+  lightSource: EnlargerLightSource;
+  lensFocalLength: number;
+  baseExposure: number;
+  colorFiltration: {
+    cyan: number;
+    magenta: number;
+    yellow: number;
+  };
+  focusOffset: number;
+  columnHeight: number;
+  status: EnlargerStatus;
+  warmUpSeconds: number;
+  lampHours: number;
+  notes?: string;
+}
+
+export interface EnlargerCalibrationRecord {
+  id: string;
+  enlargerId: string;
+  timestamp: number;
+  measuredBaseExposure: number;
+  measuredFiltration: { cyan: number; magenta: number; yellow: number };
+  focusCalibration: number;
+  lampOutputPercent: number;
+  uniformityScore: number;
+  status: CalibrationStatus;
+  adjustments: {
+    field: string;
+    before: number;
+    after: number;
+  }[];
+  notes?: string;
+}
+
+export interface TempZone {
+  id: string;
+  name: string;
+  targetTemp: number;
+  actualTemp: number;
+  tolerance: number;
+  status: TempControllerStatus;
+  sensorId: string;
+  heaterWattage: number;
+}
+
+export interface TempCalibrationRecord {
+  id: string;
+  timestamp: number;
+  zones: {
+    zoneId: string;
+    measuredTemp: number;
+    targetTemp: number;
+    deviation: number;
+    correction: number;
+  }[];
+  ambientTemp: number;
+  status: CalibrationStatus;
+  notes?: string;
+}
+
+export interface TimerProgram {
+  id: string;
+  name: string;
+  steps: TimerStep[];
+  totalDuration: number;
+  loopCount: number;
+}
+
+export interface TimerStep {
+  id: string;
+  label: string;
+  duration: number;
+  action: 'develop' | 'stop' | 'fix' | 'wash' | 'agitate' | 'wait' | 'pour' | 'drain';
+  agitationPattern?: 'continuous' | 'intermittent_10s' | 'intermittent_30s' | 'first_10s_then_rest' | 'none';
+}
+
+export interface TimerCalibrationRecord {
+  id: string;
+  timestamp: number;
+  measuredDriftMs: number;
+  stepsChecked: number;
+  stepsPassed: number;
+  worstDriftMs: number;
+  status: CalibrationStatus;
+  notes?: string;
+}
+
+export interface DeviationRecord {
+  id: string;
+  photoId: string;
+  timestamp: number;
+  enlargerId: string;
+  tempZoneId: string;
+  timerProgramId: string;
+  enlargerDeviations: {
+    param: string;
+    label: string;
+    expected: number;
+    actual: number;
+    deviation: number;
+    impact: number;
+  }[];
+  tempDeviations: {
+    zoneName: string;
+    expected: number;
+    actual: number;
+    deviation: number;
+    impact: number;
+  }[];
+  timerDeviations: {
+    stepLabel: string;
+    expectedDuration: number;
+    actualDuration: number;
+    deviation: number;
+    impact: number;
+  }[];
+  totalScoreImpact: number;
+  rootCause: string;
+  suggestion: string;
+}
+
+export interface CalibrationStatistics {
+  totalCalibrations: number;
+  avgEnlargerDrift: number;
+  avgTempDeviation: number;
+  avgTimerDriftMs: number;
+  lastCalibrationAt: number | null;
+  calibrationHealthScore: number;
+  deviationTrend: 'improving' | 'stable' | 'worsening';
+  recentDeviationImpact: number;
+}
+
+export interface DarkroomCalibrationState {
+  enlargers: EnlargerProfile[];
+  tempZones: TempZone[];
+  timerPrograms: TimerProgram[];
+  enlargerCalibrations: EnlargerCalibrationRecord[];
+  tempCalibrations: TempCalibrationRecord[];
+  timerCalibrations: TimerCalibrationRecord[];
+  deviations: DeviationRecord[];
+  activeTab: CalibrationTab;
+  selectedEnlargerId: string | null;
+  selectedTempZoneId: string | null;
+  selectedTimerProgramId: string | null;
+  statistics: CalibrationStatistics;
+}
 
 

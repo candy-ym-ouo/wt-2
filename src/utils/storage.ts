@@ -1,4 +1,4 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState, CurriculumSystemState, ConsignmentMarketState, ExhibitionState } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState, CurriculumSystemState, ConsignmentMarketState, ExhibitionState, DarkroomCalibrationState } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 import { createInitialQuestSystemState } from './questSystem';
 import { createInitialReviewSystemState } from './reviewSystem';
@@ -42,7 +42,7 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system' | 'curriculum_system' | 'consignment_market' | 'exhibition_system';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system' | 'curriculum_system' | 'consignment_market' | 'exhibition_system' | 'darkroom_calibration';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
@@ -58,7 +58,8 @@ const KEY_MAP: Record<StorageKey, string> = {
   publication_system: 'darkroom_publication',
   curriculum_system: 'darkroom_curriculum',
   consignment_market: 'darkroom_consignment_market',
-  exhibition_system: 'darkroom_exhibition_system'
+  exhibition_system: 'darkroom_exhibition_system',
+  darkroom_calibration: 'darkroom_calibration'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -390,7 +391,7 @@ function validateCurriculumSystemState(data: unknown): data is CurriculumSystemS
 }
 
 function validateData<T>(key: StorageKey, data: unknown): T | null {
-  if (!Array.isArray(data) && key !== 'tutorial' && key !== 'achievements' && key !== 'quest_system' && key !== 'review_system' && key !== 'inventory_system' && key !== 'publication_system' && key !== 'curriculum_system') {
+  if (!Array.isArray(data) && key !== 'tutorial' && key !== 'achievements' && key !== 'quest_system' && key !== 'review_system' && key !== 'inventory_system' && key !== 'publication_system' && key !== 'curriculum_system' && key !== 'darkroom_calibration') {
     return null;
   }
   
@@ -437,6 +438,9 @@ function validateData<T>(key: StorageKey, data: unknown): T | null {
     }
     case 'exhibition_system': {
       return validateExhibitionState(data) ? (data as T) : null;
+    }
+    case 'darkroom_calibration': {
+      return validateDarkroomCalibrationState(data) ? (data as T) : null;
     }
     default:
       return null;
@@ -1252,4 +1256,151 @@ export function saveExhibitionSystem(state: ExhibitionState): boolean {
   const limited = enforceLimits('exhibition_system', state) as ExhibitionState;
   const itemCount = limited.exhibitions.reduce((sum, exh) => sum + exh.feedbacks.length + exh.walls.length + exh.groups.length, 0);
   return saveWithBackup('exhibition_system', limited, itemCount);
+}
+
+function validateDarkroomCalibrationState(data: unknown): data is DarkroomCalibrationState {
+  if (typeof data !== 'object' || data === null) return false;
+  const c = data as Record<string, unknown>;
+  return (
+    Array.isArray(c.enlargers) &&
+    Array.isArray(c.tempZones) &&
+    Array.isArray(c.timerPrograms) &&
+    typeof c.activeTab === 'string' &&
+    typeof c.statistics === 'object' && c.statistics !== null
+  );
+}
+
+export function createInitialDarkroomCalibrationState(): DarkroomCalibrationState {
+  const now = Date.now();
+  const defaultEnlargerId = 'enlarger_default_' + now;
+  const defaultZoneId = 'zone_dev_' + now;
+  const defaultTimerId = 'timer_std_' + now;
+
+  return {
+    enlargers: [
+      {
+        id: defaultEnlargerId,
+        name: '主放大机',
+        lightSource: 'condenser',
+        lensFocalLength: 50,
+        baseExposure: 0.5,
+        colorFiltration: { cyan: 0, magenta: 30, yellow: 45 },
+        focusOffset: 0,
+        columnHeight: 60,
+        status: 'idle',
+        warmUpSeconds: 30,
+        lampHours: 0,
+        notes: ''
+      }
+    ],
+    tempZones: [
+      {
+        id: defaultZoneId,
+        name: '显影液温控',
+        targetTemp: 20,
+        actualTemp: 20,
+        tolerance: 0.5,
+        status: 'stable',
+        sensorId: 'sensor_dev_1',
+        heaterWattage: 300
+      },
+      {
+        id: 'zone_stop_' + now,
+        name: '停显液温控',
+        targetTemp: 20,
+        actualTemp: 20,
+        tolerance: 1.0,
+        status: 'stable',
+        sensorId: 'sensor_stop_1',
+        heaterWattage: 150
+      },
+      {
+        id: 'zone_fix_' + now,
+        name: '定影液温控',
+        targetTemp: 20,
+        actualTemp: 20,
+        tolerance: 1.0,
+        status: 'stable',
+        sensorId: 'sensor_fix_1',
+        heaterWattage: 150
+      }
+    ],
+    timerPrograms: [
+      {
+        id: defaultTimerId,
+        name: '标准D-76程序',
+        steps: [
+          { id: 'step_presoak', label: '预浸', duration: 30000, action: 'wait', agitationPattern: 'none' },
+          { id: 'step_develop', label: '显影', duration: 420000, action: 'develop', agitationPattern: 'intermittent_30s' },
+          { id: 'step_stop', label: '停显', duration: 30000, action: 'stop', agitationPattern: 'continuous' },
+          { id: 'step_fix', label: '定影', duration: 240000, action: 'fix', agitationPattern: 'intermittent_30s' },
+          { id: 'step_wash', label: '水洗', duration: 300000, action: 'wash', agitationPattern: 'none' }
+        ],
+        totalDuration: 1020000,
+        loopCount: 1
+      }
+    ],
+    enlargerCalibrations: [],
+    tempCalibrations: [],
+    timerCalibrations: [],
+    deviations: [],
+    activeTab: 'enlarger',
+    selectedEnlargerId: defaultEnlargerId,
+    selectedTempZoneId: defaultZoneId,
+    selectedTimerProgramId: defaultTimerId,
+    statistics: {
+      totalCalibrations: 0,
+      avgEnlargerDrift: 0,
+      avgTempDeviation: 0,
+      avgTimerDriftMs: 0,
+      lastCalibrationAt: null,
+      calibrationHealthScore: 100,
+      deviationTrend: 'stable',
+      recentDeviationImpact: 0
+    }
+  };
+}
+
+export function repairDarkroomCalibration(state: DarkroomCalibrationState): DarkroomCalibrationState {
+  const initial = createInitialDarkroomCalibrationState();
+  if (!state) return initial;
+
+  return {
+    enlargers: Array.isArray(state.enlargers) && state.enlargers.length > 0 ? state.enlargers : initial.enlargers,
+    tempZones: Array.isArray(state.tempZones) && state.tempZones.length > 0 ? state.tempZones : initial.tempZones,
+    timerPrograms: Array.isArray(state.timerPrograms) && state.timerPrograms.length > 0 ? state.timerPrograms : initial.timerPrograms,
+    enlargerCalibrations: Array.isArray(state.enlargerCalibrations) ? state.enlargerCalibrations : [],
+    tempCalibrations: Array.isArray(state.tempCalibrations) ? state.tempCalibrations : [],
+    timerCalibrations: Array.isArray(state.timerCalibrations) ? state.timerCalibrations : [],
+    deviations: Array.isArray(state.deviations) ? state.deviations : [],
+    activeTab: typeof state.activeTab === 'string' ? state.activeTab : initial.activeTab,
+    selectedEnlargerId: state.selectedEnlargerId || initial.selectedEnlargerId,
+    selectedTempZoneId: state.selectedTempZoneId || initial.selectedTempZoneId,
+    selectedTimerProgramId: state.selectedTimerProgramId || initial.selectedTimerProgramId,
+    statistics: state.statistics || initial.statistics
+  };
+}
+
+export function loadSavedDarkroomCalibration(): { state: DarkroomCalibrationState; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<DarkroomCalibrationState>('darkroom_calibration', createInitialDarkroomCalibrationState());
+  const status: Partial<StorageStatus> = {
+    darkroomCalibrationLoaded: result.success
+  };
+
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+
+  let state = result.data || createInitialDarkroomCalibrationState();
+  state = repairDarkroomCalibration(state);
+
+  return { state, status };
+}
+
+export function saveDarkroomCalibration(state: DarkroomCalibrationState): boolean {
+  const itemCount = state.enlargerCalibrations.length + state.tempCalibrations.length + state.timerCalibrations.length + state.deviations.length;
+  return saveWithBackup('darkroom_calibration', state, itemCount);
 }

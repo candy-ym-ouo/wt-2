@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus, ExhibitionState, Exhibition, ExhibitionWorkGroup, ExhibitionWall, ExhibitionWorkPlacement, ExhibitionTheme, ExhibitionRouteStop, VisitorFeedback, ExhibitionCuratorTab, ExhibitionStatus } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus, ExhibitionState, Exhibition, ExhibitionWorkGroup, ExhibitionWall, ExhibitionWorkPlacement, ExhibitionTheme, ExhibitionRouteStop, VisitorFeedback, ExhibitionCuratorTab, ExhibitionStatus, DarkroomCalibrationState, EnlargerProfile, TempZone, TimerProgram, TimerStep, EnlargerCalibrationRecord, TempCalibrationRecord, TimerCalibrationRecord, DeviationRecord, CalibrationTab, CalibrationStatistics } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES, DEFAULT_WORKSHOP_STATE, createBlankTemplate } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
@@ -38,7 +38,10 @@ import {
   saveConsignmentMarket,
   createInitialExhibitionState,
   loadSavedExhibitionSystem,
-  saveExhibitionSystem
+  saveExhibitionSystem,
+  createInitialDarkroomCalibrationState,
+  loadSavedDarkroomCalibration,
+  saveDarkroomCalibration
 } from '../utils/storage';
 import {
   createInitialQuestSystemState,
@@ -671,6 +674,7 @@ function createInitialGameState(): GameState {
   const curriculumSystemResult = loadSavedCurriculumSystem();
   const consignmentMarketResult = loadSavedConsignmentMarket();
   const exhibitionSystemResult = loadSavedExhibitionSystem();
+  const darkroomCalibrationResult = loadSavedDarkroomCalibration();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -689,6 +693,7 @@ function createInitialGameState(): GameState {
   storageStatus.curriculumSystemLoaded = curriculumSystemResult.status.curriculumSystemLoaded || false;
   storageStatus.consignmentMarketLoaded = consignmentMarketResult.status.consignmentMarketLoaded || false;
   storageStatus.exhibitionSystemLoaded = exhibitionSystemResult.status.exhibitionSystemLoaded || false;
+  storageStatus.darkroomCalibrationLoaded = darkroomCalibrationResult.status.darkroomCalibrationLoaded || false;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
@@ -702,7 +707,8 @@ function createInitialGameState(): GameState {
     publicationSystemResult.status.migrationPerformed ||
     curriculumSystemResult.status.migrationPerformed ||
     consignmentMarketResult.status.migrationPerformed ||
-    exhibitionSystemResult.status.migrationPerformed);
+    exhibitionSystemResult.status.migrationPerformed ||
+    darkroomCalibrationResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
     tutorialResult.status.recoveryPerformed ||
@@ -715,7 +721,8 @@ function createInitialGameState(): GameState {
     publicationSystemResult.status.recoveryPerformed ||
     curriculumSystemResult.status.recoveryPerformed ||
     consignmentMarketResult.status.recoveryPerformed ||
-    exhibitionSystemResult.status.recoveryPerformed);
+    exhibitionSystemResult.status.recoveryPerformed ||
+    darkroomCalibrationResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
@@ -759,13 +766,14 @@ function createInitialGameState(): GameState {
     storageStatus.corruptedItems.orders +
     (storageStatus.corruptedItems.reviewSystem || 0) +
     (storageStatus.corruptedItems.inventorySystem || 0) +
-    (storageStatus.corruptedItems.exhibitionSystem || 0);
+    (storageStatus.corruptedItems.exhibitionSystem || 0) +
+    (storageStatus.corruptedItems.darkroomCalibration || 0);
   if (corruptedCount > 0) {
     warnings.push({
       type: 'corrupted',
       message: `发现 ${corruptedCount} 个损坏数据项，已自动清理`,
       timestamp: now,
-      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个, 订单: ${storageStatus.corruptedItems.orders} 个, 评审: ${storageStatus.corruptedItems.reviewSystem || 0} 个, 库存: ${storageStatus.corruptedItems.inventorySystem || 0} 个, 展览: ${storageStatus.corruptedItems.exhibitionSystem || 0} 个`
+      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个, 订单: ${storageStatus.corruptedItems.orders} 个, 评审: ${storageStatus.corruptedItems.reviewSystem || 0} 个, 库存: ${storageStatus.corruptedItems.inventorySystem || 0} 个, 展览: ${storageStatus.corruptedItems.exhibitionSystem || 0} 个, 校准: ${storageStatus.corruptedItems.darkroomCalibration || 0} 个`
     });
   }
   
@@ -832,7 +840,8 @@ function createInitialGameState(): GameState {
     subjectWorkshop: createInitialSubjectWorkshopState(),
     curriculumSystem: curriculumSystemResult.state,
     consignmentMarket: consignmentMarketResult.state,
-    exhibitionSystem: exhibitionSystemResult.state
+    exhibitionSystem: exhibitionSystemResult.state,
+    darkroomCalibration: darkroomCalibrationResult.state
   };
 }
 
@@ -1011,6 +1020,40 @@ function checkAndUnlockAchievements(state: GameState): AchievementState {
   };
   saveAchievements(newState);
   return newState;
+}
+
+function updateCalibrationStats(cal: DarkroomCalibrationState, now: number): CalibrationStatistics {
+  const enlargerCals = cal.enlargerCalibrations;
+  const tempCals = cal.tempCalibrations;
+  const timerCals = cal.timerCalibrations;
+  const deviations = cal.deviations;
+  const avgEnlargerDrift = enlargerCals.length > 0
+    ? enlargerCals.reduce((s, c) => s + Math.abs(c.measuredBaseExposure - (cal.enlargers.find(e => e.id === c.enlargerId)?.baseExposure || 0.5)), 0) / enlargerCals.length
+    : 0;
+  const avgTempDeviation = tempCals.length > 0
+    ? tempCals.reduce((s, c) => s + c.zones.reduce((zs, z) => zs + Math.abs(z.deviation), 0) / Math.max(1, c.zones.length), 0) / tempCals.length
+    : 0;
+  const avgTimerDriftMs = timerCals.length > 0
+    ? timerCals.reduce((s, c) => s + Math.abs(c.measuredDriftMs), 0) / timerCals.length
+    : 0;
+  const recentDeviationImpact = deviations.slice(0, 10).reduce((s, d) => s + d.totalScoreImpact, 0) / Math.max(1, Math.min(10, deviations.length));
+  const healthPenalty = avgEnlargerDrift * 200 + avgTempDeviation * 30 + avgTimerDriftMs * 0.05;
+  const calibrationHealthScore = Math.max(0, Math.min(100, 100 - healthPenalty));
+  const recent = deviations.slice(0, 5);
+  const older = deviations.slice(5, 10);
+  const recentAvg = recent.length > 0 ? recent.reduce((s, d) => s + d.totalScoreImpact, 0) / recent.length : 0;
+  const olderAvg = older.length > 0 ? older.reduce((s, d) => s + d.totalScoreImpact, 0) / older.length : 0;
+  const deviationTrend: 'improving' | 'stable' | 'worsening' = recentAvg < olderAvg * 0.8 ? 'improving' : recentAvg > olderAvg * 1.2 ? 'worsening' : 'stable';
+  return {
+    totalCalibrations: enlargerCals.length + tempCals.length + timerCals.length,
+    avgEnlargerDrift,
+    avgTempDeviation,
+    avgTimerDriftMs,
+    lastCalibrationAt: now,
+    calibrationHealthScore,
+    deviationTrend,
+    recentDeviationImpact
+  };
 }
 
 function createGameStore() {
@@ -4663,6 +4706,241 @@ function createGameStore() {
       const newSystemState = { ...state.exhibitionSystem, exhibitions: newExhibitions };
       saveExhibitionSystem(newSystemState);
       return { ...state, exhibitionSystem: newSystemState };
+    }),
+
+    setCalibrationTab: (tab: CalibrationTab) => update(state => ({
+      ...state,
+      darkroomCalibration: { ...state.darkroomCalibration, activeTab: tab }
+    })),
+
+    selectEnlarger: (enlargerId: string | null) => update(state => ({
+      ...state,
+      darkroomCalibration: { ...state.darkroomCalibration, selectedEnlargerId: enlargerId }
+    })),
+
+    selectTempZone: (zoneId: string | null) => update(state => ({
+      ...state,
+      darkroomCalibration: { ...state.darkroomCalibration, selectedTempZoneId: zoneId }
+    })),
+
+    selectTimerProgram: (programId: string | null) => update(state => ({
+      ...state,
+      darkroomCalibration: { ...state.darkroomCalibration, selectedTimerProgramId: programId }
+    })),
+
+    addEnlarger: (enlarger: EnlargerProfile) => update(state => {
+      const newCal = { ...state.darkroomCalibration, enlargers: [...state.darkroomCalibration.enlargers, enlarger] };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    updateEnlarger: (enlargerId: string, updates: Partial<EnlargerProfile>) => update(state => {
+      const newEnlargers = state.darkroomCalibration.enlargers.map(e =>
+        e.id === enlargerId ? { ...e, ...updates } : e
+      );
+      const newCal = { ...state.darkroomCalibration, enlargers: newEnlargers };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    deleteEnlarger: (enlargerId: string) => update(state => {
+      if (state.darkroomCalibration.enlargers.length <= 1) return state;
+      const newEnlargers = state.darkroomCalibration.enlargers.filter(e => e.id !== enlargerId);
+      const newCal = {
+        ...state.darkroomCalibration,
+        enlargers: newEnlargers,
+        selectedEnlargerId: state.darkroomCalibration.selectedEnlargerId === enlargerId
+          ? newEnlargers[0]?.id || null
+          : state.darkroomCalibration.selectedEnlargerId
+      };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    updateTempZone: (zoneId: string, updates: Partial<TempZone>) => update(state => {
+      const newZones = state.darkroomCalibration.tempZones.map(z =>
+        z.id === zoneId ? { ...z, ...updates } : z
+      );
+      const newCal = { ...state.darkroomCalibration, tempZones: newZones };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    addTempZone: (zone: TempZone) => update(state => {
+      const newCal = { ...state.darkroomCalibration, tempZones: [...state.darkroomCalibration.tempZones, zone] };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    deleteTempZone: (zoneId: string) => update(state => {
+      if (state.darkroomCalibration.tempZones.length <= 1) return state;
+      const newZones = state.darkroomCalibration.tempZones.filter(z => z.id !== zoneId);
+      const newCal = {
+        ...state.darkroomCalibration,
+        tempZones: newZones,
+        selectedTempZoneId: state.darkroomCalibration.selectedTempZoneId === zoneId
+          ? newZones[0]?.id || null
+          : state.darkroomCalibration.selectedTempZoneId
+      };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    addTimerProgram: (program: TimerProgram) => update(state => {
+      const newCal = { ...state.darkroomCalibration, timerPrograms: [...state.darkroomCalibration.timerPrograms, program] };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    updateTimerProgram: (programId: string, updates: Partial<TimerProgram>) => update(state => {
+      const newPrograms = state.darkroomCalibration.timerPrograms.map(p =>
+        p.id === programId ? { ...p, ...updates, totalDuration: (updates.steps || p.steps).reduce((s, st) => s + st.duration, 0) } : p
+      );
+      const newCal = { ...state.darkroomCalibration, timerPrograms: newPrograms };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    deleteTimerProgram: (programId: string) => update(state => {
+      if (state.darkroomCalibration.timerPrograms.length <= 1) return state;
+      const newPrograms = state.darkroomCalibration.timerPrograms.filter(p => p.id !== programId);
+      const newCal = {
+        ...state.darkroomCalibration,
+        timerPrograms: newPrograms,
+        selectedTimerProgramId: state.darkroomCalibration.selectedTimerProgramId === programId
+          ? newPrograms[0]?.id || null
+          : state.darkroomCalibration.selectedTimerProgramId
+      };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    runEnlargerCalibration: (enlargerId: string) => update(state => {
+      const enlarger = state.darkroomCalibration.enlargers.find(e => e.id === enlargerId);
+      if (!enlarger) return state;
+      const now = Date.now();
+      const drift = (Math.random() - 0.5) * 0.06;
+      const measuredExposure = Math.max(0, Math.min(1, enlarger.baseExposure + drift));
+      const measuredFiltration = {
+        cyan: Math.max(0, enlarger.colorFiltration.cyan + (Math.random() - 0.5) * 4),
+        magenta: Math.max(0, enlarger.colorFiltration.magenta + (Math.random() - 0.5) * 4),
+        yellow: Math.max(0, enlarger.colorFiltration.yellow + (Math.random() - 0.5) * 4)
+      };
+      const uniformity = 85 + Math.random() * 15;
+      const lampOutput = 90 + Math.random() * 10;
+      const adjustments: { field: string; before: number; after: number }[] = [];
+      if (Math.abs(measuredExposure - enlarger.baseExposure) > 0.02) {
+        adjustments.push({ field: 'baseExposure', before: enlarger.baseExposure, after: measuredExposure });
+      }
+      const calibration: EnlargerCalibrationRecord = {
+        id: 'ecal_' + generateId(),
+        enlargerId,
+        timestamp: now,
+        measuredBaseExposure: measuredExposure,
+        measuredFiltration,
+        focusCalibration: enlarger.focusOffset + (Math.random() - 0.5) * 0.5,
+        lampOutputPercent: lampOutput,
+        uniformityScore: uniformity,
+        status: Math.abs(drift) < 0.03 ? 'calibrated' : 'drift_detected',
+        adjustments,
+        notes: ''
+      };
+      let updatedEnlargers = state.darkroomCalibration.enlargers;
+      if (calibration.status === 'drift_detected') {
+        updatedEnlargers = state.darkroomCalibration.enlargers.map(e =>
+          e.id === enlargerId
+            ? { ...e, baseExposure: measuredExposure, colorFiltration: measuredFiltration, lampHours: e.lampHours + 0.1 }
+            : e
+        );
+      }
+      const newCalibrations = [calibration, ...state.darkroomCalibration.enlargerCalibrations].slice(0, 50);
+      const newCal = {
+        ...state.darkroomCalibration,
+        enlargers: updatedEnlargers,
+        enlargerCalibrations: newCalibrations,
+        statistics: updateCalibrationStats(state.darkroomCalibration, now)
+      };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    runTempCalibration: () => update(state => {
+      const now = Date.now();
+      const zones = state.darkroomCalibration.tempZones.map(z => {
+        const deviation = (Math.random() - 0.5) * z.tolerance * 3;
+        const measuredTemp = z.targetTemp + deviation;
+        return {
+          zoneId: z.id,
+          measuredTemp,
+          targetTemp: z.targetTemp,
+          deviation,
+          correction: -deviation
+        };
+      });
+      const allWithinTolerance = zones.every(z => Math.abs(z.deviation) <= state.darkroomCalibration.tempZones.find(tz => tz.id === z.zoneId)!.tolerance);
+      const calibration: TempCalibrationRecord = {
+        id: 'tcal_' + generateId(),
+        timestamp: now,
+        zones,
+        ambientTemp: 20 + (Math.random() - 0.5) * 4,
+        status: allWithinTolerance ? 'calibrated' : 'drift_detected',
+        notes: ''
+      };
+      const updatedZones = state.darkroomCalibration.tempZones.map(z => {
+        const zoneResult = zones.find(zr => zr.zoneId === z.id);
+        if (zoneResult) {
+          return { ...z, actualTemp: zoneResult.measuredTemp, status: Math.abs(zoneResult.deviation) <= z.tolerance ? 'stable' as const : (zoneResult.deviation > 0 ? 'cooling' as const : 'heating' as const) };
+        }
+        return z;
+      });
+      const newCalibrations = [calibration, ...state.darkroomCalibration.tempCalibrations].slice(0, 50);
+      const newCal = {
+        ...state.darkroomCalibration,
+        tempZones: updatedZones,
+        tempCalibrations: newCalibrations,
+        statistics: updateCalibrationStats(state.darkroomCalibration, now)
+      };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    runTimerCalibration: (programId: string) => update(state => {
+      const now = Date.now();
+      const program = state.darkroomCalibration.timerPrograms.find(p => p.id === programId);
+      if (!program) return state;
+      const measuredDriftMs = (Math.random() - 0.5) * 500;
+      const stepsChecked = program.steps.length;
+      const stepsPassed = program.steps.filter(() => Math.random() > 0.15).length;
+      const worstDriftMs = Math.abs(measuredDriftMs) * (1 + Math.random() * 2);
+      const calibration: TimerCalibrationRecord = {
+        id: 'rcal_' + generateId(),
+        timestamp: now,
+        measuredDriftMs,
+        stepsChecked,
+        stepsPassed,
+        worstDriftMs,
+        status: Math.abs(measuredDriftMs) < 100 ? 'calibrated' : 'drift_detected',
+        notes: ''
+      };
+      const newCalibrations = [calibration, ...state.darkroomCalibration.timerCalibrations].slice(0, 50);
+      const newCal = {
+        ...state.darkroomCalibration,
+        timerCalibrations: newCalibrations,
+        statistics: updateCalibrationStats(state.darkroomCalibration, now)
+      };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
+    }),
+
+    addDeviationRecord: (deviation: DeviationRecord) => update(state => {
+      const newDeviations = [deviation, ...state.darkroomCalibration.deviations].slice(0, 100);
+      const newCal = {
+        ...state.darkroomCalibration,
+        deviations: newDeviations,
+        statistics: updateCalibrationStats(state.darkroomCalibration, Date.now())
+      };
+      saveDarkroomCalibration(newCal);
+      return { ...state, darkroomCalibration: newCal };
     })
   };
 }

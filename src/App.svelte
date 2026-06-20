@@ -28,6 +28,7 @@
   import SubjectWorkshop from './components/SubjectWorkshop.svelte';
   import ConsignmentMarket from './components/ConsignmentMarket.svelte';
   import ExhibitionCurator from './components/ExhibitionCurator.svelte';
+  import DarkroomCalibration from './components/DarkroomCalibration.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -50,6 +51,7 @@
   let showWorkshop = false;
   let showConsignmentMarket = false;
   let showExhibitionCurator = false;
+  let showDarkroomCalibration = false;
 
   function goToOrderScoring() {
     if (currentOrder) {
@@ -590,6 +592,13 @@
         {/if}
       </button>
       <button
+        class="header-btn calibration"
+        on:click={() => { showDarkroomCalibration = true; }}
+        title="暗房设备校准"
+      >
+        <span>🔧</span>
+      </button>
+      <button
         class="header-btn help"
         on:click={() => { gameStore.resetTutorial(); }}
         title="重新开始教程"
@@ -792,6 +801,10 @@
 
   {#if showExhibitionCurator}
     <ExhibitionCurator onClose={() => { showExhibitionCurator = false; }} />
+  {/if}
+
+  {#if showDarkroomCalibration}
+    <DarkroomCalibration onClose={() => { showDarkroomCalibration = false; }} />
   {/if}
 
   <footer class="app-footer">
