@@ -30,6 +30,7 @@
   import ExhibitionCurator from './components/ExhibitionCurator.svelte';
   import DarkroomCalibration from './components/DarkroomCalibration.svelte';
   import PhotoChallenge from './components/PhotoChallenge.svelte';
+  import FilmGuide from './components/FilmGuide.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -54,6 +55,7 @@
   let showExhibitionCurator = false;
   let showDarkroomCalibration = false;
   let showChallenge = false;
+  let showFilmGuide = false;
 
   function goToOrderScoring() {
     if (currentOrder) {
@@ -611,6 +613,13 @@
         <span>🔧</span>
       </button>
       <button
+        class="header-btn guide"
+        on:click={() => { showFilmGuide = true; }}
+        title="胶片知识图鉴"
+      >
+        <span>📖</span>
+      </button>
+      <button
         class="header-btn help"
         on:click={() => { gameStore.resetTutorial(); }}
         title="重新开始教程"
@@ -821,6 +830,10 @@
 
   {#if showChallenge}
     <PhotoChallenge on:close={() => { showChallenge = false; }} />
+  {/if}
+
+  {#if showFilmGuide}
+    <FilmGuide on:close={() => { showFilmGuide = false; }} />
   {/if}
 
   <footer class="app-footer">

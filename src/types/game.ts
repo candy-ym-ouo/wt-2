@@ -281,6 +281,7 @@ export interface GameState {
   exhibitionSystem: ExhibitionState;
   darkroomCalibration: DarkroomCalibrationState;
   challengeSystem: ChallengeState;
+  filmGuide: FilmGuideState;
 }
 
 export type TutorialUnlockCondition = 
@@ -2310,6 +2311,70 @@ export interface ChallengeReview {
     score: number;
     comment: string;
   }[];
+}
+
+export type FilmGuideTab = 'overview' | 'attributes' | 'subjects' | 'samples' | 'develop' | 'practice';
+
+export interface FilmAttributeProfile {
+  contrast: { value: number; label: string; description: string };
+  saturation: { value: number; label: string; description: string };
+  grain: { value: number; label: string; description: string };
+  iso: { value: number; label: string; description: string };
+  latitude: { value: number; label: string; description: string };
+  sharpness: { value: number; label: string; description: string };
+}
+
+export interface FilmSubjectSuitability {
+  subjectId: string;
+  subjectName: string;
+  sceneType: string;
+  matchScore: number;
+  reasons: string[];
+}
+
+export interface FilmDevSuggestion {
+  processType: FilmProcessType;
+  developer: string;
+  temperature: number;
+  timeMinutes: number;
+  dilution: string;
+  agitation: string;
+  notes: string;
+  tips: string[];
+}
+
+export interface FilmPracticeEntry {
+  id: string;
+  title: string;
+  description: string;
+  subjectId: string;
+  targetStyle: TargetStyle;
+  targetScore: number;
+  tips: string[];
+  difficulty: DifficultyLevel;
+}
+
+export interface FilmKnowledgeEntry {
+  filmId: string;
+  filmName: string;
+  summary: string;
+  characteristics: string[];
+  attributeProfile: FilmAttributeProfile;
+  subjectSuitabilities: FilmSubjectSuitability[];
+  devSuggestions: FilmDevSuggestion[];
+  practiceEntries: FilmPracticeEntry[];
+  tips: string[];
+  pros: string[];
+  cons: string[];
+}
+
+export interface FilmGuideState {
+  activeTab: FilmGuideTab;
+  selectedFilmId: string | null;
+  searchKeyword: string;
+  filterColor: 'all' | 'bw' | 'color';
+  filterSceneType: string;
+  viewedFilmIds: string[];
 }
 
 

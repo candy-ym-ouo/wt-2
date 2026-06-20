@@ -1,4 +1,4 @@
-import type { FilmStock, PhotoSubject, TutorialStep, DevParams, ParamPreset, AchievementDefinition, AchievementLine } from '../types/game';
+import type { FilmStock, PhotoSubject, TutorialStep, DevParams, ParamPreset, AchievementDefinition, AchievementLine, FilmKnowledgeEntry, FilmGuideState } from '../types/game';
 
 export const FILM_STOCKS: FilmStock[] = [
   {
@@ -2703,3 +2703,305 @@ export const LEARNING_MILESTONES: LearningMilestone[] = [
     reward: { type: 'title', value: '优等生' }
   }
 ];
+
+export const FILM_KNOWLEDGE_ENTRIES: FilmKnowledgeEntry[] = [
+  {
+    filmId: 'hp5',
+    filmName: '伊尔福 HP5+',
+    summary: '伊尔福经典中速黑白胶片，宽容度极高，颗粒细腻，层次丰富，是入门与进阶皆宜的全能型胶片。',
+    characteristics: ['高宽容度', '细腻颗粒', '丰富层次', '全能适用'],
+    attributeProfile: {
+      contrast: { value: 0.65, label: '中等偏高', description: '反差适中偏强，暗部与亮部过渡自然，可显影时微调' },
+      saturation: { value: 0, label: '黑白', description: '纯黑白胶片，无色彩饱和度，依靠影调层次表现' },
+      grain: { value: 0.5, label: '中等', description: 'ISO 400下颗粒适中，推感至1600颗粒明显增加但仍有韵味' },
+      iso: { value: 400, label: '中高速', description: '标称ISO 400，可在ISO 200-1600间灵活调整' },
+      latitude: { value: 0.8, label: '极宽', description: '宽容度极高，过曝2档仍可保留亮部细节，非常适合初学者' },
+      sharpness: { value: 0.6, label: '良好', description: '锐度中等偏上，在标准显影条件下细节表现不错' }
+    },
+    subjectSuitabilities: [
+      { subjectId: 'portrait_01', subjectName: '窗边的少女', sceneType: 'portrait', matchScore: 0.85, reasons: ['细腻颗粒适合人像', '中等反差保留肤色层次', '宽容度高不易失误'] },
+      { subjectId: 'street_01', subjectName: '雨中街角', sceneType: 'street', matchScore: 0.78, reasons: ['高宽容度应对复杂光线', '黑白表现雨天氛围'] },
+      { subjectId: 'landscape_01', subjectName: '山间晨雾', sceneType: 'landscape', matchScore: 0.7, reasons: ['层次丰富适合雾景', '但色彩表现不如彩色胶片'] },
+      { subjectId: 'still_life_01', subjectName: '茶与旧书', sceneType: 'still_life', matchScore: 0.75, reasons: ['层次丰富表现质感', '黑白增添文艺气息'] },
+      { subjectId: 'night_01', subjectName: '都市夜景', sceneType: 'night', matchScore: 0.55, reasons: ['ISO 400在弱光下可能不足', '建议推感至1600使用'] }
+    ],
+    devSuggestions: [
+      {
+        processType: 'bw',
+        developer: 'ID-11 / D-76',
+        temperature: 20,
+        timeMinutes: 7.5,
+        dilution: '1+1',
+        agitation: '每30秒搅拌10秒',
+        notes: '标准显影组合，反差适中，颗粒细腻',
+        tips: ['1+1稀释可获得更细腻的颗粒', '原液使用反差略高']
+      },
+      {
+        processType: 'bw',
+        developer: 'HC-110',
+        temperature: 20,
+        timeMinutes: 6,
+        dilution: 'B (1+31)',
+        agitation: '每30秒搅拌10秒',
+        notes: '稀释B使用，颗粒更细，锐度略增',
+        tips: ['推感至1600时使用稀释H延长显影时间', 'HC-110保存性极好']
+      },
+      {
+        processType: 'bw',
+        developer: 'Perceptol',
+        temperature: 20,
+        timeMinutes: 9,
+        dilution: '原液',
+        agitation: '每60秒搅拌10秒',
+        notes: '超微粒显影，颗粒极细，但感光度降低约1档',
+        tips: ['配合ISO 200拍摄可获得极细腻效果', '适合需要精细放大的人像']
+      }
+    ],
+    practiceEntries: [
+      { id: 'hp5_practice_01', title: '标准曝光练习', description: '使用HP5+在标准ISO 400下拍摄人像，体验其高宽容度特性', subjectId: 'portrait_01', targetStyle: 'soft', targetScore: 70, tips: ['曝光宁过勿欠', '注意暗部层次保留', '显影使用D-76 1+1标准时间'], difficulty: 2 },
+      { id: 'hp5_practice_02', title: '推感夜景挑战', description: '将HP5+推感至ISO 1600拍摄夜景，控制显影补偿', subjectId: 'night_01', targetStyle: 'dramatic', targetScore: 60, tips: ['显影时间延长30-50%', '接受颗粒增加的艺术效果', '利用高反差营造氛围'], difficulty: 4 }
+    ],
+    tips: ['HP5+是最适合初学者的胶片之一，宽容度高不易失误', '推感至1600时显影时间需延长，颗粒会增加但画面更有力量感', '使用D-76 1+1是最经典稳妥的显影组合'],
+    pros: ['高宽容度', '颗粒细腻', '层次丰富', '推感性能好', '显影兼容性广'],
+    cons: ['非彩色', 'ISO 400在弱光下仍有限', '推感后颗粒增加明显']
+  },
+  {
+    filmId: 'delta3200',
+    filmName: '伊尔福 Delta 3200',
+    summary: '高速黑白胶片，专为弱光摄影设计，颗粒粗犷有力，富有戏剧性，是夜景和低光环境的首选。',
+    characteristics: ['超高速', '粗颗粒', '戏剧氛围', '弱光利器'],
+    attributeProfile: {
+      contrast: { value: 0.75, label: '高', description: '反差偏高，暗部压暗明显，亮部层次保留好' },
+      saturation: { value: 0, label: '黑白', description: '纯黑白胶片，无色彩表现' },
+      grain: { value: 0.85, label: '粗粝', description: '大颗粒是标志性特征，也是其艺术魅力所在' },
+      iso: { value: 3200, label: '超高速', description: '标称ISO 3200，实际感光度约ISO 1000-1250，可在ISO 800-12500范围使用' },
+      latitude: { value: 0.6, label: '中等', description: '宽容度中等，过曝1档内可控，欠曝后暗部损失较快' },
+      sharpness: { value: 0.4, label: '中等偏低', description: '大颗粒影响锐度，但在合适场景下这种柔化反而增加氛围感' }
+    },
+    subjectSuitabilities: [
+      { subjectId: 'night_01', subjectName: '都市夜景', sceneType: 'night', matchScore: 0.95, reasons: ['超高速适合弱光', '高反差契合夜景', '粗颗粒增添戏剧性'] },
+      { subjectId: 'street_01', subjectName: '雨中街角', sceneType: 'street', matchScore: 0.82, reasons: ['弱光下仍有表现力', '粗颗粒适合街头纪实', '反差营造氛围'] },
+      { subjectId: 'portrait_01', subjectName: '窗边的少女', sceneType: 'portrait', matchScore: 0.45, reasons: ['颗粒粗犷不适合传统人像', '但可用于艺术风格人像'] },
+      { subjectId: 'landscape_01', subjectName: '山间晨雾', sceneType: 'landscape', matchScore: 0.35, reasons: ['颗粒损失风光细节', '反差过高不适合柔美风光'] },
+      { subjectId: 'still_life_01', subjectName: '茶与旧书', sceneType: 'still_life', matchScore: 0.4, reasons: ['颗粒影响质感表现', '除非追求特殊艺术效果'] }
+    ],
+    devSuggestions: [
+      {
+        processType: 'bw',
+        developer: 'ID-11 / D-76',
+        temperature: 20,
+        timeMinutes: 11,
+        dilution: '原液',
+        agitation: '每30秒搅拌10秒',
+        notes: '标准显影，在ISO 3200下的基础时间',
+        tips: ['适当减少显影时间可降低反差和颗粒', '减感至1600时显影时间减至约8分钟']
+      },
+      {
+        processType: 'bw',
+        developer: 'Microphen',
+        temperature: 20,
+        timeMinutes: 13,
+        dilution: '原液',
+        agitation: '每30秒搅拌10秒',
+        notes: '增感显影液，在保持速度的同时颗粒略细',
+        tips: ['Microphen可改善Delta 3200的颗粒表现', '适合需要推感但又想控制颗粒时使用']
+      }
+    ],
+    practiceEntries: [
+      { id: 'delta3200_practice_01', title: '弱光人像', description: '在弱光环境下用Delta 3200拍摄人像，感受粗颗粒的艺术表现力', subjectId: 'portrait_01', targetStyle: 'dramatic', targetScore: 55, tips: ['利用环境光而非闪光', '控制显影减少颗粒', '追求戏剧效果而非细腻'], difficulty: 4 },
+      { id: 'delta3200_practice_02', title: '夜间街头纪实', description: '使用Delta 3200捕捉夜间街头瞬间，体验高速胶片的优势', subjectId: 'night_01', targetStyle: 'dramatic', targetScore: 65, tips: ['利用霓虹灯光源', '接受粗颗粒的艺术效果', '关注光影对比'], difficulty: 3 }
+    ],
+    tips: ['Delta 3200的颗粒不是缺陷而是特色，拥抱它', '在光线足够时考虑用低速胶片，Delta 3200留给真正弱光场景', '适当减少显影时间可以在一定程度上控制颗粒和反差'],
+    pros: ['超高速弱光利器', '粗颗粒艺术感', '高反差戏剧效果', '纪实摄影首选'],
+    cons: ['颗粒粗大', '锐度偏低', '宽容度有限', '不适合风光和细腻人像']
+  },
+  {
+    filmId: 'portra400',
+    filmName: '柯达 Portra 400',
+    summary: '专业人像彩色负片，肤色表现卓越，色彩自然柔和，宽容度极高，是影楼和户外人像的经典选择。',
+    characteristics: ['肤色出色', '色彩自然', '高宽容度', '人像首选'],
+    attributeProfile: {
+      contrast: { value: 0.55, label: '中等偏低', description: '低反差柔和，肤色过渡自然，后期可灵活调整' },
+      saturation: { value: 0.6, label: '中等', description: '色彩饱和度适中偏柔和，肤色表现温暖自然' },
+      grain: { value: 0.35, label: '细腻', description: 'ISO 400下颗粒极细，放大后仍有良好表现' },
+      iso: { value: 400, label: '中高速', description: '标称ISO 400，可在ISO 100-1600范围灵活使用' },
+      latitude: { value: 0.9, label: '极宽', description: '宽容度极高，过曝5档仍可还原，是宽容度最出色的彩色胶片之一' },
+      sharpness: { value: 0.7, label: '良好', description: '锐度良好，配合细腻颗粒，人像细节丰富' }
+    },
+    subjectSuitabilities: [
+      { subjectId: 'portrait_01', subjectName: '窗边的少女', sceneType: 'portrait', matchScore: 0.95, reasons: ['肤色表现卓越', '低反差柔和自然', '颗粒细腻', '宽容度极高'] },
+      { subjectId: 'portrait_02', subjectName: '逆光剪影', sceneType: 'portrait', matchScore: 0.9, reasons: ['逆光下肤色仍有表现', '高宽容度保留暗部', '暖色调自然'] },
+      { subjectId: 'still_life_01', subjectName: '茶与旧书', sceneType: 'still_life', matchScore: 0.8, reasons: ['色彩柔和适合静物', '质感表现好', '低反差表现细节'] },
+      { subjectId: 'street_01', subjectName: '雨中街角', sceneType: 'street', matchScore: 0.72, reasons: ['高宽容度应对复杂光', '色彩自然不夸张', '但街头可能需要更大反差'] },
+      { subjectId: 'landscape_01', subjectName: '山间晨雾', sceneType: 'landscape', matchScore: 0.65, reasons: ['色彩偏柔和不够浓郁', '风光需要更高饱和度', '但层次表现优秀'] }
+    ],
+    devSuggestions: [
+      {
+        processType: 'c41',
+        developer: 'C-41 套药',
+        temperature: 38,
+        timeMinutes: 3.25,
+        dilution: '成品套药',
+        agitation: '每15秒搅拌2-3秒',
+        notes: '标准C-41工艺，温度控制至关重要',
+        tips: ['温度偏差控制在±0.3°C以内', '预热水浴至38°C', '搅拌轻柔均匀避免气泡']
+      }
+    ],
+    practiceEntries: [
+      { id: 'portra400_practice_01', title: '自然光人像', description: '用Portra 400拍摄窗边自然光人像，体验其肤色表现力', subjectId: 'portrait_01', targetStyle: 'soft', targetScore: 75, tips: ['曝光可过1档获得更亮肤色', 'C-41显影温控是关键', '注意白平衡偏暖'], difficulty: 2 },
+      { id: 'portra400_practice_02', title: '逆光挑战', description: '用Portra 400的高宽容度应对逆光场景，保留暗部细节', subjectId: 'portrait_02', targetStyle: 'warm', targetScore: 70, tips: ['信任胶片的宽容度', '不要因逆光而大幅过曝', 'C-41标准工艺即可'], difficulty: 3 }
+    ],
+    tips: ['Portra 400过曝1档肤色更亮更美，不用担心过曝', 'C-41显影温度是生命线，38°C±0.3°C', '偏暖的色调适合绝大多数人像场景'],
+    pros: ['肤色表现顶级', '宽容度极高', '颗粒细腻', '推感性能好', '色彩自然柔和'],
+    cons: ['色彩不够浓郁', '反差偏低', '不适合高饱和度风光', 'C-41温控要求高']
+  },
+  {
+    filmId: 'ektar100',
+    filmName: '柯达 Ektar 100',
+    summary: '细颗粒彩色负片，色彩饱和度极高，锐度出色，是风光和商业摄影的彩色利器。',
+    characteristics: ['超细颗粒', '高饱和度', '高锐度', '风光利器'],
+    attributeProfile: {
+      contrast: { value: 0.7, label: '高', description: '反差偏高，色彩鲜明，画面通透感强' },
+      saturation: { value: 0.85, label: '极高', description: '色彩饱和度极高，色彩浓郁鲜艳，尤以红蓝表现突出' },
+      grain: { value: 0.2, label: '极细', description: 'ISO 100下颗粒极细，几乎不可见，放大品质优秀' },
+      iso: { value: 100, label: '低速', description: '标称ISO 100，建议严格按标称使用，推感性能差' },
+      latitude: { value: 0.55, label: '中等偏低', description: '宽容度有限，过曝超过1.5档难以恢复，曝光需精准' },
+      sharpness: { value: 0.85, label: '极高', description: '锐度极高，配合细颗粒，细节表现力极强' }
+    },
+    subjectSuitabilities: [
+      { subjectId: 'landscape_01', subjectName: '山间晨雾', sceneType: 'landscape', matchScore: 0.92, reasons: ['高饱和度表现自然色彩', '极细颗粒保留细节', '高锐度风光必备'] },
+      { subjectId: 'still_life_01', subjectName: '茶与旧书', sceneType: 'still_life', matchScore: 0.85, reasons: ['高锐度表现质感', '饱和色彩突出静物', '细颗粒放大品质好'] },
+      { subjectId: 'portrait_01', subjectName: '窗边的少女', sceneType: 'portrait', matchScore: 0.5, reasons: ['肤色偏红过于饱和', '反差偏高不够柔和', '非人像首选'] },
+      { subjectId: 'night_01', subjectName: '都市夜景', sceneType: 'night', matchScore: 0.3, reasons: ['ISO 100在夜景几乎不可用', '必须三脚架长曝光', '宽容度不足应对高反差'] },
+      { subjectId: 'street_01', subjectName: '雨中街角', sceneType: 'street', matchScore: 0.55, reasons: ['ISO 100需充足光线', '色彩鲜艳但街头可能偏过', '反差偏高'] }
+    ],
+    devSuggestions: [
+      {
+        processType: 'c41',
+        developer: 'C-41 套药',
+        temperature: 38,
+        timeMinutes: 3.25,
+        dilution: '成品套药',
+        agitation: '每15秒搅拌2-3秒',
+        notes: '标准C-41工艺，Ektar对温度和搅拌特别敏感',
+        tips: ['温度控制比Portra更严格', '搅拌过度会增加反差和颗粒', 'Ektar对曝光准确度要求高']
+      }
+    ],
+    practiceEntries: [
+      { id: 'ektar100_practice_01', title: '风光色彩捕捉', description: '用Ektar 100拍摄风光场景，体验其超高的色彩饱和度', subjectId: 'landscape_01', targetStyle: 'vivid', targetScore: 70, tips: ['曝光宁欠勿过', '注意高光不要溢出', 'C-41标准工艺即可'], difficulty: 3 },
+      { id: 'ektar100_practice_02', title: '静物质感表现', description: '用Ektar 100的锐度和色彩表现静物细节', subjectId: 'still_life_01', targetStyle: 'vivid', targetScore: 72, tips: ['精准曝光是关键', '利用高锐度捕捉细节', '色彩饱和但不要过曝'], difficulty: 2 }
+    ],
+    tips: ['Ektar 100曝光欠0.5档色彩更浓郁', '不适合推感，严格按ISO 100使用', '肤色会偏红偏饱和，人像慎用'],
+    pros: ['极细颗粒', '高饱和度', '锐度极高', '风光色彩出色', '放大品质优秀'],
+    cons: ['宽容度有限', '不适合人像', '弱光几乎不可用', '推感性能差', '肤色偏红']
+  },
+  {
+    filmId: 'velvia50',
+    filmName: '富士 Velvia 50',
+    summary: '专业彩色反转片，色彩浓郁到极致，对比度高，是风光摄影的传奇胶片，被称为"风景之王"。',
+    characteristics: ['色彩极致', '高反差', '反转片', '风景之王'],
+    attributeProfile: {
+      contrast: { value: 0.8, label: '高', description: '反差很高，画面通透有力，暗部深黑，亮部明亮' },
+      saturation: { value: 0.95, label: '极致', description: '色彩饱和度极高，尤其是绿色和蓝色表现令人惊叹' },
+      grain: { value: 0.25, label: '极细', description: 'ISO 50下颗粒极细，与Ektar相当，反转片质感一流' },
+      iso: { value: 50, label: '超低速', description: '标称ISO 50，需要充足光线或三脚架，绝不可推感' },
+      latitude: { value: 0.35, label: '窄', description: '宽容度很窄，反转片特性决定曝光必须极其精准，过曝1档即报废' },
+      sharpness: { value: 0.9, label: '极高', description: '锐度极高，反转片特有的通透感让画面无比清晰' }
+    },
+    subjectSuitabilities: [
+      { subjectId: 'landscape_01', subjectName: '山间晨雾', sceneType: 'landscape', matchScore: 0.98, reasons: ['风光摄影传奇', '色彩极致表现自然', '锐度和反差通透有力'] },
+      { subjectId: 'portrait_02', subjectName: '逆光剪影', sceneType: 'portrait', matchScore: 0.75, reasons: ['日落暖色表现极好', '高反差强化剪影效果', '但宽容度窄暗部可能死黑'] },
+      { subjectId: 'still_life_01', subjectName: '茶与旧书', sceneType: 'still_life', matchScore: 0.7, reasons: ['色彩浓郁表现静物', '锐度极高', '但高饱和度可能过于夸张'] },
+      { subjectId: 'portrait_01', subjectName: '窗边的少女', sceneType: 'portrait', matchScore: 0.25, reasons: ['肤色严重偏色', '反差太高', '宽容度太窄极不适合人像'] },
+      { subjectId: 'night_01', subjectName: '都市夜景', sceneType: 'night', matchScore: 0.15, reasons: ['ISO 50完全不可用', '宽容度窄无法应对夜景反差', '反转片夜间极难控制'] }
+    ],
+    devSuggestions: [
+      {
+        processType: 'e6',
+        developer: 'E-6 套药',
+        temperature: 38,
+        timeMinutes: 6.5,
+        dilution: '成品套药',
+        agitation: '每15秒搅拌2-3秒',
+        notes: '标准E-6工艺，首显是最关键的步骤',
+        tips: ['首显时间精确到秒', '温度控制±0.2°C', '首显决定最终密度和反差', 'E-6比C-41更敏感']
+      }
+    ],
+    practiceEntries: [
+      { id: 'velvia50_practice_01', title: '极致风光', description: '用Velvia 50拍摄风光，体验反转片的色彩极致表现', subjectId: 'landscape_01', targetStyle: 'vivid', targetScore: 72, tips: ['曝光必须精确到0.5档以内', 'E-6首显是成败关键', '利用高反差营造通透感'], difficulty: 5 },
+      { id: 'velvia50_practice_02', title: '日落剪影', description: '用Velvia 50的高反差和高饱和度拍摄逆光剪影', subjectId: 'portrait_02', targetStyle: 'warm', targetScore: 65, tips: ['对天空测光', '暗部会完全死黑，利用这一点做剪影', '色彩会非常浓郁'], difficulty: 4 }
+    ],
+    tips: ['Velvia 50的宽容度极窄，曝光失误0.5档就可能有明显影响', '拍摄风光时可以欠0.3档让色彩更浓郁', '绝不可用于人像，肤色会严重偏色', 'E-6工艺比C-41更复杂敏感'],
+    pros: ['色彩极致', '锐度极高', '反差通透', '颗粒极细', '风光摄影无出其右'],
+    cons: ['宽容度极窄', '不适合人像', 'ISO 50需三脚架', 'E-6工艺复杂', '推感完全不可', '价格昂贵']
+  },
+  {
+    filmId: 'tri-x',
+    filmName: '柯达 Tri-X 400',
+    summary: '传奇黑白胶片，暗部层次丰富，颗粒有质感，是街头摄影的经典之选，影响了整个纪实摄影史。',
+    characteristics: ['传奇经典', '暗部丰富', '质感颗粒', '街头之魂'],
+    attributeProfile: {
+      contrast: { value: 0.7, label: '高', description: '反差偏高，但暗部层次保留极好，这是Tri-X的独特魅力' },
+      saturation: { value: 0, label: '黑白', description: '纯黑白胶片，以灰阶层次表现画面' },
+      grain: { value: 0.6, label: '中等偏粗', description: '颗粒比HP5+明显，但排列有质感，形成独特的Tri-X美学' },
+      iso: { value: 400, label: '中高速', description: '标称ISO 400，可在ISO 200-1600间使用，推感性能好' },
+      latitude: { value: 0.75, label: '宽', description: '宽容度较宽，暗部层次保留尤为出色' },
+      sharpness: { value: 0.55, label: '中等', description: '锐度中等，颗粒的存在略影响清晰度，但增加了画面质感' }
+    },
+    subjectSuitabilities: [
+      { subjectId: 'street_01', subjectName: '雨中街角', sceneType: 'street', matchScore: 0.95, reasons: ['街头摄影传奇', '暗部层次丰富', '颗粒有纪实感', '高反差营造氛围'] },
+      { subjectId: 'night_01', subjectName: '都市夜景', sceneType: 'night', matchScore: 0.82, reasons: ['暗部层次出色', '推感性能好', '高反差适合夜景', '颗粒增添力量感'] },
+      { subjectId: 'portrait_01', subjectName: '窗边的少女', sceneType: 'portrait', matchScore: 0.6, reasons: ['暗部层次适合侧光人像', '但颗粒偏粗', '高反差不够柔和'] },
+      { subjectId: 'still_life_01', subjectName: '茶与旧书', sceneType: 'still_life', matchScore: 0.55, reasons: ['黑白可表现质感', '但颗粒影响精细度', '反差偏高'] },
+      { subjectId: 'landscape_01', subjectName: '山间晨雾', sceneType: 'landscape', matchScore: 0.45, reasons: ['暗部层次好但颗粒影响风光', '黑白表现力不如彩色', '需精确曝光'] }
+    ],
+    devSuggestions: [
+      {
+        processType: 'bw',
+        developer: 'D-76 / ID-11',
+        temperature: 20,
+        timeMinutes: 7,
+        dilution: '1+1',
+        agitation: '每30秒搅拌10秒',
+        notes: '最经典的Tri-X显影组合，暗部层次保留最佳',
+        tips: ['1+1稀释颗粒更细', '原液使用反差更高', '适当减少搅拌可降低反差']
+      },
+      {
+        processType: 'bw',
+        developer: 'HC-110',
+        temperature: 20,
+        timeMinutes: 5.5,
+        dilution: 'B (1+31)',
+        agitation: '每30秒搅拌10秒',
+        notes: '快速显影选择，锐度略高',
+        tips: ['HC-110操作方便', '稀释B是常用选择', '可减少搅拌获得更丰富暗部']
+      },
+      {
+        processType: 'bw',
+        developer: 'Rodinal (R09)',
+        temperature: 20,
+        timeMinutes: 12,
+        dilution: '1+25',
+        agitation: '每60秒搅拌10秒',
+        notes: '经典组合，颗粒锐利，边界清晰，营造经典Tri-X颗粒感',
+        tips: ['1+50稀释可减少颗粒', 'Rodinal+Tri-X是经典纪实组合', '搅拌减少可获补偿效果']
+      }
+    ],
+    practiceEntries: [
+      { id: 'tri-x_practice_01', title: '街头纪实', description: '用Tri-X 400拍摄街头场景，体验传奇胶片的纪实魅力', subjectId: 'street_01', targetStyle: 'moody', targetScore: 72, tips: ['利用Tri-X的暗部层次', 'D-76 1+1是最稳妥选择', '接受并利用颗粒感'], difficulty: 3 },
+      { id: 'tri-x_practice_02', title: '高反差夜景', description: '用Tri-X拍摄夜景，利用其高反差和暗部层次特性', subjectId: 'night_01', targetStyle: 'dramatic', targetScore: 68, tips: ['推感至800-1600增加速度', '显影时间适当延长', '利用高反差营造戏剧性'], difficulty: 4 }
+    ],
+    tips: ['Tri-X的颗粒不是噪点而是质感，学会利用它', 'D-76 1+1是最经典的Tri-X显影组合', '暗部是Tri-X的灵魂，曝光宁过勿欠保留暗部层次', '推感至1600时颗粒显著增加，但画面更有力量'],
+    pros: ['暗部层次极佳', '推感性能好', '颗粒有质感', '纪实摄影经典', '显影选择丰富'],
+    cons: ['颗粒比HP5+粗', '反差偏高', '不够细腻', '非彩色']
+  }
+];
+
+export const DEFAULT_FILM_GUIDE_STATE: FilmGuideState = {
+  activeTab: 'overview',
+  selectedFilmId: null,
+  searchKeyword: '',
+  filterColor: 'all',
+  filterSceneType: 'all',
+  viewedFilmIds: []
+};

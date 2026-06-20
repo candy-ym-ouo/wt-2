@@ -1,6 +1,6 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus, ExhibitionState, Exhibition, ExhibitionWorkGroup, ExhibitionWall, ExhibitionWorkPlacement, ExhibitionTheme, ExhibitionRouteStop, VisitorFeedback, ExhibitionCuratorTab, ExhibitionStatus, DarkroomCalibrationState, EnlargerProfile, TempZone, TimerProgram, TimerStep, EnlargerCalibrationRecord, TempCalibrationRecord, TimerCalibrationRecord, DeviationRecord, CalibrationTab, CalibrationStatistics, ChallengeState, ChallengeDefinition, ChallengeTab, ChallengeFilter, ChallengeTeam, ChallengeSubmission, ChallengeSeason, ChallengeParticipationResult, ChallengeReview, ReviewResult, ChallengeTheme, ChallengeStatus, ChallengeRegistration, TeamRole, ChallengeLeaderboardEntry, ChallengeTeamLeaderboardEntry, ChallengeAwardResult } from '../types/game';
-import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES, DEFAULT_WORKSHOP_STATE, createBlankTemplate } from '../data/gameData';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus, ExhibitionState, Exhibition, ExhibitionWorkGroup, ExhibitionWall, ExhibitionWorkPlacement, ExhibitionTheme, ExhibitionRouteStop, VisitorFeedback, ExhibitionCuratorTab, ExhibitionStatus, DarkroomCalibrationState, EnlargerProfile, TempZone, TimerProgram, TimerStep, EnlargerCalibrationRecord, TempCalibrationRecord, TimerCalibrationRecord, DeviationRecord, CalibrationTab, CalibrationStatistics, ChallengeState, ChallengeDefinition, ChallengeTab, ChallengeFilter, ChallengeTeam, ChallengeSubmission, ChallengeSeason, ChallengeParticipationResult, ChallengeReview, ReviewResult, ChallengeTheme, ChallengeStatus, ChallengeRegistration, TeamRole, ChallengeLeaderboardEntry, ChallengeTeamLeaderboardEntry, ChallengeAwardResult, FilmGuideState, FilmGuideTab } from '../types/game';
+import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES, DEFAULT_WORKSHOP_STATE, createBlankTemplate, DEFAULT_FILM_GUIDE_STATE } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
 import {
@@ -895,7 +895,8 @@ function createInitialGameState(): GameState {
     consignmentMarket: consignmentMarketResult.state,
     exhibitionSystem: exhibitionSystemResult.state,
     darkroomCalibration: darkroomCalibrationResult.state,
-    challengeSystem: challengeSystemResult.state
+    challengeSystem: challengeSystemResult.state,
+    filmGuide: { ...DEFAULT_FILM_GUIDE_STATE }
   };
 }
 
@@ -5487,7 +5488,51 @@ function createGameStore() {
       const newChallengeSystem = createInitialChallengeSystemState();
       saveChallengeSystem(newChallengeSystem);
       return { ...state, challengeSystem: newChallengeSystem };
-    })
+    }),
+
+    setFilmGuideTab: (tab: FilmGuideTab) => update(state => ({
+      ...state,
+      filmGuide: { ...state.filmGuide, activeTab: tab }
+    })),
+
+    selectFilmGuideFilm: (filmId: string | null) => update(state => {
+      const viewed = state.filmGuide.viewedFilmIds.includes(filmId || '')
+        ? state.filmGuide.viewedFilmIds
+        : filmId ? [...state.filmGuide.viewedFilmIds, filmId] : state.filmGuide.viewedFilmIds;
+      return {
+        ...state,
+        filmGuide: { ...state.filmGuide, selectedFilmId: filmId, viewedFilmIds: viewed }
+      };
+    }),
+
+    setFilmGuideSearch: (keyword: string) => update(state => ({
+      ...state,
+      filmGuide: { ...state.filmGuide, searchKeyword: keyword }
+    })),
+
+    setFilmGuideFilterColor: (color: 'all' | 'bw' | 'color') => update(state => ({
+      ...state,
+      filmGuide: { ...state.filmGuide, filterColor: color }
+    })),
+
+    setFilmGuideFilterSceneType: (sceneType: string) => update(state => ({
+      ...state,
+      filmGuide: { ...state.filmGuide, filterSceneType: sceneType }
+    })),
+
+    startFilmGuidePractice: (filmId: string, subjectId: string) => {
+      update(state => ({
+        ...state,
+        filmGuide: { ...state.filmGuide, selectedFilmId: filmId }
+      }));
+      const subject = PHOTO_SUBJECTS.find(s => s.id === subjectId);
+      if (subject) {
+        const selectEvent = new CustomEvent('select', { detail: subjectId });
+        document.dispatchEvent(selectEvent);
+      }
+      const filmEvent = new CustomEvent('selectFilm', { detail: filmId });
+      document.dispatchEvent(filmEvent);
+    }
   };
 }
 
