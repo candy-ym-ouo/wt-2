@@ -2208,12 +2208,55 @@ export interface ChallengeFilter {
   seasonId: string | null;
 }
 
+export interface ChallengeTeamLeaderboardEntry {
+  rank: number;
+  teamId: string;
+  teamName: string;
+  teamAvatarColor: string;
+  members: { userId: string; userName: string }[];
+  totalScore: number;
+  bestScore: number;
+  avgScore: number;
+  submissionCount: number;
+  challengeCount: number;
+  badges: string[];
+}
+
+export interface ChallengeAwardResult {
+  challengeId: string;
+  challengeTitle: string;
+  winners: {
+    rank: number;
+    userId: string;
+    userName: string;
+    teamId: string | null;
+    teamName: string | null;
+    score: number;
+    prize: {
+      rank: number;
+      title: string;
+      description: string;
+      points: number;
+      badge?: string;
+      titleReward?: string;
+    };
+  }[];
+  participantsAward: {
+    userId: string;
+    userName: string;
+    points: number;
+  }[];
+  finalizedAt: number;
+}
+
 export interface ChallengeState {
   challenges: ChallengeDefinition[];
   seasons: ChallengeSeason[];
   teams: ChallengeTeam[];
   registrations: ChallengeRegistration[];
   submissions: ChallengeSubmission[];
+  invites: TeamInvite[];
+  awards: ChallengeAwardResult[];
   activeTab: ChallengeTab;
   selectedChallengeId: string | null;
   selectedTeamId: string | null;
@@ -2224,6 +2267,7 @@ export interface ChallengeState {
   leaderboardFilter: {
     seasonId: string | null;
     sortBy: 'total_score' | 'best_score' | 'avg_score' | 'submissions';
+    viewMode: 'individual' | 'team';
   };
   developTimer: {
     challengeId: string | null;

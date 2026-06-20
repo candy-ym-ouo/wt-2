@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus, ExhibitionState, Exhibition, ExhibitionWorkGroup, ExhibitionWall, ExhibitionWorkPlacement, ExhibitionTheme, ExhibitionRouteStop, VisitorFeedback, ExhibitionCuratorTab, ExhibitionStatus, DarkroomCalibrationState, EnlargerProfile, TempZone, TimerProgram, TimerStep, EnlargerCalibrationRecord, TempCalibrationRecord, TimerCalibrationRecord, DeviationRecord, CalibrationTab, CalibrationStatistics, ChallengeState, ChallengeDefinition, ChallengeTab, ChallengeFilter, ChallengeTeam, ChallengeSubmission, ChallengeSeason, ChallengeParticipationResult, ChallengeReview, ReviewResult, ChallengeTheme, ChallengeStatus, ChallengeRegistration, TeamRole, ChallengeLeaderboardEntry } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus, ExhibitionState, Exhibition, ExhibitionWorkGroup, ExhibitionWall, ExhibitionWorkPlacement, ExhibitionTheme, ExhibitionRouteStop, VisitorFeedback, ExhibitionCuratorTab, ExhibitionStatus, DarkroomCalibrationState, EnlargerProfile, TempZone, TimerProgram, TimerStep, EnlargerCalibrationRecord, TempCalibrationRecord, TimerCalibrationRecord, DeviationRecord, CalibrationTab, CalibrationStatistics, ChallengeState, ChallengeDefinition, ChallengeTab, ChallengeFilter, ChallengeTeam, ChallengeSubmission, ChallengeSeason, ChallengeParticipationResult, ChallengeReview, ReviewResult, ChallengeTheme, ChallengeStatus, ChallengeRegistration, TeamRole, ChallengeLeaderboardEntry, ChallengeTeamLeaderboardEntry, ChallengeAwardResult } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES, DEFAULT_WORKSHOP_STATE, createBlankTemplate } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
@@ -187,7 +187,26 @@ import {
   getActiveChallenges,
   updateChallengeStatuses,
   formatTimeRemaining,
-  getTimeStatus
+  getTimeStatus,
+  sendTeamInvite,
+  acceptTeamInvite,
+  declineTeamInvite,
+  getPendingInvites,
+  getSentInvites,
+  expireOldInvites,
+  advanceChallengeTheme,
+  getThemeSchedule,
+  autoAdvanceTheme,
+  finalizeAndAwardChallenge,
+  updateSeasonBadgesFromAward,
+  getAwardsForChallenge,
+  getUserAwards,
+  calculateTeamLeaderboard,
+  getSeasonTotalPoints,
+  getUserBadges,
+  getChallengeWinners,
+  canSubmitToChallenge,
+  getChallengeProgress
 } from '../utils/challengeSystem';
 
 function createInitialStageState(): StageState {
@@ -5266,6 +5285,199 @@ function createGameStore() {
       let result: ChallengeTheme | null = null;
       const unsubscribe = subscribe(state => {
         result = getCurrentTheme(state.challengeSystem, challengeId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    sendChallengeTeamInvite: (teamId: string, inviteeId: string, inviteeName: string) => update(state => {
+      const result = sendTeamInvite(state.challengeSystem, teamId, inviteeId, inviteeName);
+      if (!result.success || !result.invite) return state;
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        invites: [...state.challengeSystem.invites, result.invite]
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    acceptChallengeTeamInvite: (inviteId: string) => update(state => {
+      const result = acceptTeamInvite(state.challengeSystem, inviteId);
+      if (!result.success || !result.teamId) return state;
+
+      const team = state.challengeSystem.teams.find(t => t.id === result.teamId);
+      if (!team) return state;
+
+      const updatedTeam = {
+        ...team,
+        members: [
+          ...team.members,
+          {
+            userId: state.challengeSystem.currentUserId,
+            userName: state.challengeSystem.currentUserName,
+            role: 'member' as TeamRole,
+            joinedAt: Date.now()
+          }
+        ]
+      };
+
+      const newInvites = state.challengeSystem.invites.map(i =>
+        i.id === inviteId ? { ...i, status: 'accepted' as const } : i
+      );
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        teams: state.challengeSystem.teams.map(t => t.id === result.teamId ? updatedTeam : t),
+        invites: newInvites
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    declineChallengeTeamInvite: (inviteId: string) => update(state => {
+      const result = declineTeamInvite(state.challengeSystem, inviteId);
+      if (!result.success) return state;
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        invites: state.challengeSystem.invites.map(i =>
+          i.id === inviteId ? { ...i, status: 'declined' as const } : i
+        )
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    refreshChallengeInvites: () => update(state => {
+      const newChallengeSystem = expireOldInvites(state.challengeSystem);
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    advanceChallengeTheme: (challengeId: string) => update(state => {
+      const result = advanceChallengeTheme(state.challengeSystem, challengeId);
+      if (!result.success) return state;
+
+      const challenge = state.challengeSystem.challenges.find(c => c.id === challengeId);
+      if (!challenge) return state;
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        challenges: state.challengeSystem.challenges.map(c =>
+          c.id === challengeId ? { ...c, currentThemeIndex: challenge.currentThemeIndex + 1 } : c
+        )
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    autoAdvanceChallengeThemes: () => update(state => {
+      let newChallengeSystem = state.challengeSystem;
+      state.challengeSystem.challenges.forEach(c => {
+        newChallengeSystem = autoAdvanceTheme(newChallengeSystem, c.id);
+      });
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    finalizeAndAwardChallenge: (challengeId: string) => update(state => {
+      const result = finalizeAndAwardChallenge(state.challengeSystem, challengeId);
+      if (!result.success || !result.award) return state;
+
+      const submissionMap = new Map(finalizeSubmissionScores(state.challengeSystem, challengeId).map(s => [s.id, s]));
+
+      let newChallengeSystem = {
+        ...state.challengeSystem,
+        submissions: state.challengeSystem.submissions.map(s =>
+          submissionMap.has(s.id) ? submissionMap.get(s.id)! : s
+        ),
+        awards: [...state.challengeSystem.awards, result.award!],
+        challenges: state.challengeSystem.challenges.map(c =>
+          c.id === challengeId ? { ...c, status: 'completed' as ChallengeStatus } : c
+        )
+      };
+
+      newChallengeSystem = updateSeasonBadgesFromAward(newChallengeSystem, result.award!);
+
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    setChallengeLeaderboardViewMode: (viewMode: 'individual' | 'team') => update(state => {
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        leaderboardFilter: { ...state.challengeSystem.leaderboardFilter, viewMode }
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    getTeamLeaderboard: (seasonId?: string, sortBy?: 'total_score' | 'best_score' | 'avg_score' | 'submissions'): ChallengeTeamLeaderboardEntry[] => {
+      let result: ChallengeTeamLeaderboardEntry[] = [];
+      const unsubscribe = subscribe(state => {
+        result = calculateTeamLeaderboard(
+          state.challengeSystem,
+          seasonId || state.challengeSystem.leaderboardFilter.seasonId,
+          sortBy || state.challengeSystem.leaderboardFilter.sortBy
+        );
+      });
+      unsubscribe();
+      return result;
+    },
+
+    getChallengeAwards: (challengeId: string) => {
+      let result: ReturnType<typeof getAwardsForChallenge> = null;
+      const unsubscribe = subscribe(state => {
+        result = getAwardsForChallenge(state.challengeSystem, challengeId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    getMyChallengeAwards: () => {
+      let result: ReturnType<typeof getUserAwards> = [];
+      const unsubscribe = subscribe(state => {
+        result = getUserAwards(state.challengeSystem, state.challengeSystem.currentUserId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    getMyBadges: () => {
+      let result: ReturnType<typeof getUserBadges> = [];
+      const unsubscribe = subscribe(state => {
+        result = getUserBadges(state.challengeSystem, state.challengeSystem.currentUserId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    canSubmitToCurrentChallenge: (challengeId: string): boolean => {
+      let result = false;
+      const unsubscribe = subscribe(state => {
+        result = canSubmitToChallenge(state.challengeSystem, challengeId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    getChallengeProgressInfo: (challengeId: string) => {
+      let result: ReturnType<typeof getChallengeProgress> | null = null;
+      const unsubscribe = subscribe(state => {
+        result = getChallengeProgress(state.challengeSystem, challengeId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    getChallengeThemeSchedule: (challengeId: string) => {
+      let result: ReturnType<typeof getThemeSchedule> = [];
+      const unsubscribe = subscribe(state => {
+        const challenge = getChallengeById(state.challengeSystem, challengeId);
+        if (challenge) {
+          result = getThemeSchedule(challenge);
+        }
       });
       unsubscribe();
       return result;

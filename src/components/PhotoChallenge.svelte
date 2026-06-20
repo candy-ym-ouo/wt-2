@@ -14,7 +14,15 @@
     getUserTeam,
     isUserRegistered,
     getAvailableTeams,
-    updateChallengeStatuses
+    updateChallengeStatuses,
+    getPendingInvites,
+    getSentInvites,
+    getThemeSchedule,
+    calculateTeamLeaderboard,
+    getAwardsForChallenge,
+    getUserBadges,
+    getChallengeProgress,
+    getSeasonTotalPoints
   } from '../utils/challengeSystem';
   import { REVIEW_DIMENSIONS } from '../utils/reviewSystem';
   import { generateBaseScene, applyDevelopment, renderToCanvas, type RenderedImageData } from '../utils/renderEngine';
@@ -33,7 +41,10 @@
     ProcessedPhoto,
     DevParams,
     PhotoSubject,
-    FilmStock
+    FilmStock,
+    TeamInvite,
+    ChallengeAwardResult,
+    ChallengeTeamLeaderboardEntry
   } from '../types/game';
 
   const dispatch = createEventDispatcher<{ close: void }>();
@@ -80,7 +91,20 @@
          (!s.reviews || s.reviews.filter(r => r.reviewerId === challengeSystem.currentUserId).length === 0)
   );
 
+  $: pendingInvites = getPendingInvites(challengeSystem);
+  $: sentInvites = getSentInvites(challengeSystem);
+  $: teamLeaderboard = calculateTeamLeaderboard(
+    challengeSystem,
+    leaderboardFilter.seasonId,
+    leaderboardFilter.sortBy
+  );
+  $: myBadges = getUserBadges(challengeSystem, challengeSystem.currentUserId);
+
   let showDetailModal = false;
+  let showInviteModal = false;
+  let showAwardModal = false;
+  let inviteeName = '';
+  let selectedAward: ChallengeAwardResult | null = null;
   let showTeamModal = false;
   let showDevelopModal = false;
   let showReviewModal = false;
@@ -119,8 +143,57 @@
 
   onMount(() => {
     gameStore.refreshChallengeStatuses();
+    gameStore.refreshChallengeInvites();
+    gameStore.autoAdvanceChallengeThemes();
     startTimer();
   });
+
+  function openInviteModal() {
+    inviteeName = '';
+    showInviteModal = true;
+  }
+
+  function closeInviteModal() {
+    showInviteModal = false;
+    inviteeName = '';
+  }
+
+  function handleSendInvite() {
+    if (!userTeam || !inviteeName.trim()) return;
+    const inviteeId = 'user_' + inviteeName.trim().replace(/\s+/g, '_').toLowerCase() + '_' + generateId();
+    gameStore.sendChallengeTeamInvite(userTeam.id, inviteeId, inviteeName.trim());
+    closeInviteModal();
+  }
+
+  function handleAcceptInvite(inviteId: string) {
+    gameStore.acceptChallengeTeamInvite(inviteId);
+  }
+
+  function handleDeclineInvite(inviteId: string) {
+    gameStore.declineChallengeTeamInvite(inviteId);
+  }
+
+  function handleLeaderboardViewModeChange(viewMode: 'individual' | 'team') {
+    gameStore.setChallengeLeaderboardViewMode(viewMode);
+  }
+
+  function handleViewAward(challengeId: string) {
+    const award = getAwardsForChallenge(challengeSystem, challengeId);
+    if (award) {
+      selectedAward = award;
+      showAwardModal = true;
+    }
+  }
+
+  function closeAwardModal() {
+    showAwardModal = false;
+    selectedAward = null;
+  }
+
+  function handleFinalizeAndAward(challengeId: string) {
+    gameStore.setSelectedChallenge(challengeId);
+    gameStore.finalizeAndAwardChallenge(challengeId);
+  }
 
   function startTimer() {
     if (timerInterval) clearInterval(timerInterval);
@@ -559,6 +632,41 @@
       </div>
     {:else if activeTab === 'registration'}
       <div class="registration-panel">
+        {#if pendingInvites.length > 0}
+          <div class="invite-notifications">
+            <h3>📬 邀请通知</h3>
+            <div class="invite-list">
+              {#each pendingInvites as invite}
+                {@const challenge = getChallengeById(challengeSystem, invite.challengeId)}
+                {@const team = challengeSystem.teams.find(t => t.id === invite.teamId)}
+                <div class="invite-item">
+                  <div class="invite-info">
+                    <div class="invite-title">
+                      <span class="inviter">👤 {invite.inviterName}</span>
+                      邀请你加入
+                      <span class="invite-team">👥 {team?.name || '未知队伍'}</span>
+                    </div>
+                    <div class="invite-meta">
+                      {challenge?.icon} {challenge?.title || '未知赛事'}
+                      <span class="invite-time">
+                        · {formatDateTime(invite.sentAt)}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="invite-actions">
+                    <button class="primary-btn small" on:click={() => handleAcceptInvite(invite.id)}>
+                      接受
+                    </button>
+                    <button class="secondary-btn small" on:click={() => handleDeclineInvite(invite.id)}>
+                      拒绝
+                    </button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
         <div class="my-registrations">
           <h3>我的报名</h3>
           {#if myRegistrations.length > 0}
@@ -625,6 +733,7 @@
                       </div>
                       <div class="team-actions">
                         {#if userTeam.leaderId === challengeSystem.currentUserId && !userTeam.isLocked}
+                          <button class="secondary-btn" on:click={openInviteModal}>邀请成员</button>
                           <button class="secondary-btn" on:click={handleLockTeam}>锁定队伍</button>
                         {/if}
                         {#if userTeam.leaderId !== challengeSystem.currentUserId}
@@ -844,7 +953,23 @@
                 }}>
                   结算成绩
                 </button>
+                <button class="primary-btn" on:click={() => handleFinalizeAndAward(challenge.id)}>
+                  🏆 结算并颁奖
+                </button>
               </div>
+            {/if}
+            {#if challenge.status === 'completed'}
+              {#if getAwardsForChallenge(challengeSystem, challenge.id)}
+                <div class="finalize-item awarded">
+                  <span>{challenge.icon} {challenge.title}</span>
+                  <span class="finalize-status awarded-status">
+                    🏆 已颁奖
+                  </span>
+                  <button class="secondary-btn" on:click={() => handleViewAward(challenge.id)}>
+                    查看获奖
+                  </button>
+                </div>
+              {/if}
             {/if}
           {/each}
         </div>
@@ -872,8 +997,36 @@
                 <option value="submissions">参赛次数</option>
               </select>
             </div>
+            <div class="filter-group">
+              <label>视图：</label>
+              <div class="view-toggle">
+                <button
+                  class={leaderboardFilter.viewMode === 'individual' ? 'toggle-btn active' : 'toggle-btn'}
+                  on:click={() => handleLeaderboardViewModeChange('individual')}
+                >
+                  👤 个人榜
+                </button>
+                <button
+                  class={leaderboardFilter.viewMode === 'team' ? 'toggle-btn active' : 'toggle-btn'}
+                  on:click={() => handleLeaderboardViewModeChange('team')}
+                >
+                  👥 队伍榜
+                </button>
+              </div>
+            </div>
           </div>
         </div>
+
+        {#if myBadges.length > 0}
+          <div class="my-badges">
+            <h4>🏅 我的荣誉</h4>
+            <div class="badges-row">
+              {#each myBadges as badge}
+                <span class="award-badge" title={badge.title}>{badge.badge}</span>
+              {/each}
+            </div>
+          </div>
+        {/if}
 
         {#if challengeSystem.seasons.length > 0}
           <div class="season-list">
@@ -897,61 +1050,116 @@
           </div>
         {/if}
 
-        {#if leaderboard.length > 0}
-          <div class="leaderboard-table">
-            <h4>
-              {leaderboardFilter.seasonId
-                ? `${getSeasonName(leaderboardFilter.seasonId)} 排行榜`
-                : '总排行榜'}
-            </h4>
-            <table>
-              <thead>
-                <tr>
-                  <th>排名</th>
-                  <th>摄影师</th>
-                  <th>队伍</th>
-                  <th>总积分</th>
-                  <th>最高得分</th>
-                  <th>平均得分</th>
-                  <th>参赛次数</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each leaderboard as entry, index}
-                  <tr class:me={entry.userId === challengeSystem.currentUserId}>
-                    <td class="rank">
-                      {#if index < 3}
-                        <span class="rank-medal">
-                          {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
-                        </span>
-                      {:else}
-                        {entry.rank}
-                      {/if}
-                    </td>
-                    <td class="player">
-                      <span class="player-name">{entry.userName}</span>
-                      {#if entry.badges && entry.badges.length > 0}
-                        <span class="player-badges">
-                          {#each entry.badges as badge}
-                            <span class="badge">{badge}</span>
-                          {/each}
-                        </span>
-                      {/if}
-                    </td>
-                    <td>{entry.teamName || '-'}</td>
-                    <td class="score">{Math.round(entry.totalScore)}</td>
-                    <td class="score">{Math.round(entry.bestScore)}</td>
-                    <td class="score">{Math.round(entry.avgScore)}</td>
-                    <td>{entry.submissionCount}</td>
+        {#if leaderboardFilter.viewMode === 'individual'}
+          {#if leaderboard.length > 0}
+            <div class="leaderboard-table">
+              <h4>
+                {leaderboardFilter.seasonId
+                  ? `${getSeasonName(leaderboardFilter.seasonId)} 个人排行榜`
+                  : '个人总排行榜'}
+              </h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th>排名</th>
+                    <th>摄影师</th>
+                    <th>队伍</th>
+                    <th>总积分</th>
+                    <th>最高得分</th>
+                    <th>平均得分</th>
+                    <th>参赛次数</th>
                   </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {#each leaderboard as entry, index}
+                    <tr class:me={entry.userId === challengeSystem.currentUserId}>
+                      <td class="rank">
+                        {#if index < 3}
+                          <span class="rank-medal">
+                            {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                          </span>
+                        {:else}
+                          {entry.rank}
+                        {/if}
+                      </td>
+                      <td class="player">
+                        <span class="player-name">{entry.userName}</span>
+                        {#if entry.badges && entry.badges.length > 0}
+                          <span class="player-badges">
+                            {#each entry.badges as badge}
+                              <span class="badge">{badge}</span>
+                            {/each}
+                          </span>
+                        {/if}
+                      </td>
+                      <td>{entry.teamName || '-'}</td>
+                      <td class="score">{Math.round(entry.totalScore)}</td>
+                      <td class="score">{Math.round(entry.bestScore)}</td>
+                      <td class="score">{Math.round(entry.avgScore)}</td>
+                      <td>{entry.submissionCount}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {:else}
+            <div class="empty-state">
+              <p>暂无排行数据</p>
+            </div>
+          {/if}
         {:else}
-          <div class="empty-state">
-            <p>暂无排行数据</p>
-          </div>
+          {#if teamLeaderboard.length > 0}
+            <div class="leaderboard-table">
+              <h4>
+                {leaderboardFilter.seasonId
+                  ? `${getSeasonName(leaderboardFilter.seasonId)} 队伍排行榜`
+                  : '队伍总排行榜'}
+              </h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th>排名</th>
+                    <th>队伍</th>
+                    <th>成员</th>
+                    <th>总积分</th>
+                    <th>最高得分</th>
+                    <th>平均得分</th>
+                    <th>参赛次数</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each teamLeaderboard as entry, index}
+                    <tr>
+                      <td class="rank">
+                        {#if index < 3}
+                          <span class="rank-medal">
+                            {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                          </span>
+                        {:else}
+                          {entry.rank}
+                        {/if}
+                      </td>
+                      <td class="team-cell">
+                        <span class="team-avatar small" style="background: {entry.teamAvatarColor}">
+                          {entry.teamName.charAt(0)}
+                        </span>
+                        <span class="team-name-cell">{entry.teamName}</span>
+                      </td>
+                      <td>{entry.members.length}</td>
+                      <td class="score">{Math.round(entry.totalScore)}</td>
+                      <td class="score">{Math.round(entry.bestScore)}</td>
+                      <td class="score">{Math.round(entry.avgScore)}</td>
+                      <td>{entry.submissionCount}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {:else}
+            <div class="empty-state">
+              <p>暂无队伍排行数据</p>
+            </div>
+          {/if}
         {/if}
       </div>
     {/if}
@@ -1347,6 +1555,108 @@
           <button class="secondary-btn" on:click={closeReviewModal}>取消</button>
           <button class="primary-btn" on:click={handleSubmitReview}>
             提交评审
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showInviteModal && userTeam}
+    <div class="modal-overlay" on:click={closeInviteModal}>
+      <div class="modal small" on:click|stopPropagation>
+        <div class="modal-header">
+          <h3>邀请成员加入 {userTeam.name}</h3>
+          <button class="close-btn" on:click={closeInviteModal}>×</button>
+        </div>
+        <div class="modal-content">
+          <div class="form-group">
+            <label>被邀请人昵称 *</label>
+            <input
+              type="text"
+              bind:value={inviteeName}
+              placeholder="请输入好友昵称"
+              maxlength={20}
+            />
+          </div>
+          <p class="form-hint">邀请将发送给该用户，对方接受后即可加入队伍</p>
+        </div>
+        <div class="modal-footer">
+          <button class="secondary-btn" on:click={closeInviteModal}>取消</button>
+          <button class="primary-btn" disabled={!inviteeName.trim()} on:click={handleSendInvite}>
+            发送邀请
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if showAwardModal && selectedAward}
+    <div class="modal-overlay" on:click={closeAwardModal}>
+      <div class="modal large" on:click|stopPropagation>
+        <div class="modal-header">
+          <h3>🏆 {selectedAward.challengeTitle} - 获奖名单</h3>
+          <button class="close-btn" on:click={closeAwardModal}>×</button>
+        </div>
+        <div class="modal-content">
+          {#if selectedAward.winners.length > 0}
+            <div class="award-podium">
+              {#each selectedAward.winners.slice(0, 3) as award, idx}
+                <div class="podium-place" class:first={idx === 0} class:second={idx === 1} class:third={idx === 2}>
+                  <div class="podium-medal">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</div>
+                  <div class="podium-rank">第{award.rank}名</div>
+                  <div class="podium-name">{award.userName}</div>
+                  <div class="podium-score">{Math.round(award.score)} 分</div>
+                  {#if award.teamName}
+                    <div class="podium-team">👥 {award.teamName}</div>
+                  {/if}
+                  <div class="podium-prize">{award.prize.title} (+{award.prize.points}积分)</div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          {#if selectedAward.winners.length > 3}
+            <div class="other-winners">
+              <h4>其他获奖者</h4>
+              <div class="winners-list">
+                {#each selectedAward.winners.slice(3) as winner}
+                  <div class="winner-item">
+                    <span class="winner-rank">#{winner.rank}</span>
+                    <span class="winner-name">{winner.userName}</span>
+                    <span class="winner-score">{Math.round(winner.score)} 分</span>
+                    <span class="winner-prize">{winner.prize.title}</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if selectedAward.participantsAward && selectedAward.participantsAward.length > 0}
+            <div class="participants-award">
+              <h4>参与奖 ({selectedAward.participantsAward.length} 人)</h4>
+              <div class="participants-list">
+                {#each selectedAward.participantsAward.slice(0, 10) as pa}
+                  <span class="participant-item">👤 {pa.userName} (+{pa.points}分)</span>
+                {/each}
+                {#if selectedAward.participantsAward.length > 10}
+                  <span class="participant-item">... 还有 {selectedAward.participantsAward.length - 10} 人</span>
+                {/if}
+              </div>
+            </div>
+          {/if}
+
+          <div class="award-stats">
+            <h4>参赛统计</h4>
+            <div class="award-stats-grid">
+              <div>� 获奖人数：{selectedAward.winners.length} 人</div>
+              <div>🎯 参与人数：{selectedAward.participantsAward.length} 人</div>
+              <div>📅 颁奖时间：{formatDateTime(selectedAward.finalizedAt)}</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="primary-btn" on:click={closeAwardModal}>
+            关闭
           </button>
         </div>
       </div>
@@ -2827,5 +3137,344 @@
     font-size: 28px;
     font-weight: 700;
     color: #ffd700;
+  }
+
+  .invite-notifications {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    border: 1px solid rgba(102, 126, 234, 0.3);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+
+  .invite-notifications h3 {
+    margin: 0 0 12px 0;
+    font-size: 15px;
+  }
+
+  .invite-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .invite-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 12px 14px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .invite-info {
+    flex: 1;
+  }
+
+  .invite-title {
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .inviter {
+    color: #667eea;
+  }
+
+  .invite-team {
+    color: #f1c40f;
+  }
+
+  .invite-meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .invite-time {
+    margin-left: 8px;
+  }
+
+  .invite-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .view-toggle {
+    display: flex;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .toggle-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .toggle-btn.active {
+    background: #667eea;
+    border-color: #667eea;
+    color: #fff;
+  }
+
+  .my-badges {
+    background: rgba(241, 196, 15, 0.08);
+    border: 1px solid rgba(241, 196, 15, 0.2);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+  }
+
+  .my-badges h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+  }
+
+  .badges-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .award-badge {
+    font-size: 24px;
+    padding: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+  }
+
+  .team-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .team-name-cell {
+    font-weight: 500;
+  }
+
+  .team-avatar.small {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  .finalize-item.awarded {
+    background: rgba(46, 204, 113, 0.08);
+    border: 1px solid rgba(46, 204, 113, 0.2);
+  }
+
+  .awarded-status {
+    color: #2ecc71;
+    font-weight: 500;
+  }
+
+  .form-hint {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0;
+  }
+
+  .award-podium {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 24px;
+    margin-bottom: 32px;
+    padding: 20px 0;
+  }
+
+  .podium-place {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 20px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    min-width: 140px;
+  }
+
+  .podium-place.first {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.2) 0%, rgba(255, 215, 0, 0.05) 100%);
+    border: 2px solid rgba(255, 215, 0, 0.4);
+    transform: translateY(-20px);
+  }
+
+  .podium-place.second {
+    background: linear-gradient(135deg, rgba(192, 192, 192, 0.2) 0%, rgba(192, 192, 192, 0.05) 100%);
+    border: 2px solid rgba(192, 192, 192, 0.3);
+    transform: translateY(-10px);
+  }
+
+  .podium-place.third {
+    background: linear-gradient(135deg, rgba(205, 127, 50, 0.2) 0%, rgba(205, 127, 50, 0.05) 100%);
+    border: 2px solid rgba(205, 127, 50, 0.3);
+  }
+
+  .podium-medal {
+    font-size: 40px;
+  }
+
+  .podium-rank {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 600;
+  }
+
+  .podium-name {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .podium-score {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffd700;
+  }
+
+  .podium-team {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .podium-prize {
+    font-size: 10px;
+    color: #667eea;
+    margin-top: 4px;
+  }
+
+  .other-winners {
+    margin-bottom: 24px;
+  }
+
+  .other-winners h4 {
+    margin: 0 0 12px 0;
+    font-size: 15px;
+  }
+
+  .winners-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .winner-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+
+  .winner-rank {
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    min-width: 30px;
+  }
+
+  .winner-name {
+    flex: 1;
+    font-weight: 500;
+  }
+
+  .winner-score {
+    color: #ffd700;
+    font-weight: 600;
+    min-width: 60px;
+  }
+
+  .winner-prize {
+    color: rgba(255, 255, 255, 0.5);
+    min-width: 100px;
+  }
+
+  .participants-award {
+    margin-bottom: 24px;
+  }
+
+  .participants-award h4 {
+    margin: 0 0 12px 0;
+    font-size: 15px;
+  }
+
+  .participants-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .participant-item {
+    font-size: 11px;
+    padding: 4px 10px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 12px;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .special-awards {
+    margin-bottom: 24px;
+  }
+
+  .special-awards h4 {
+    margin: 0 0 12px 0;
+    font-size: 15px;
+  }
+
+  .special-awards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .special-award-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+  }
+
+  .special-award-name {
+    font-weight: 600;
+    font-size: 13px;
+    min-width: 100px;
+  }
+
+  .special-award-user {
+    color: #667eea;
+    font-size: 13px;
+    min-width: 100px;
+  }
+
+  .special-award-desc {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .award-stats h4 {
+    margin: 0 0 12px 0;
+    font-size: 15px;
+  }
+
+  .award-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+  }
+
+  .award-stats-grid > div {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 12px;
   }
 </style>

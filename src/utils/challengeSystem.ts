@@ -17,7 +17,10 @@ import type {
   DevParams,
   ProcessedPhoto,
   PhotoSubject,
-  FilmStock
+  FilmStock,
+  TeamInvite,
+  ChallengeAwardResult,
+  ChallengeTeamLeaderboardEntry
 } from '../types/game';
 import { PHOTO_SUBJECTS, FILM_STOCKS } from '../data/gameData';
 import { generateId, clamp } from './math';
@@ -41,6 +44,8 @@ export function createInitialChallengeSystemState(): ChallengeState {
     teams: mockTeams,
     registrations: [],
     submissions: mockSubmissions,
+    invites: [],
+    awards: [],
     activeTab: 'browse',
     selectedChallengeId: null,
     selectedTeamId: null,
@@ -55,7 +60,8 @@ export function createInitialChallengeSystemState(): ChallengeState {
     },
     leaderboardFilter: {
       seasonId: null,
-      sortBy: 'total_score'
+      sortBy: 'total_score',
+      viewMode: 'individual'
     },
     developTimer: {
       challengeId: null,
@@ -1040,4 +1046,526 @@ export function createMockTeams(challenges: ChallengeDefinition[]): ChallengeTea
   });
   
   return teams;
+}
+
+export function sendTeamInvite(
+  state: ChallengeState,
+  teamId: string,
+  inviteeId: string,
+  inviteeName: string
+): { success: boolean; message: string; invite?: TeamInvite } {
+  const team = state.teams.find(t => t.id === teamId);
+  if (!team) {
+    return { success: false, message: '队伍不存在' };
+  }
+
+  if (team.leaderId !== state.currentUserId) {
+    return { success: false, message: '只有队长可以发送邀请' };
+  }
+
+  if (team.isLocked) {
+    return { success: false, message: '队伍已锁定，无法发送邀请' };
+  }
+
+  if (team.members.length >= team.maxMembers) {
+    return { success: false, message: '队伍已满' };
+  }
+
+  if (team.members.some(m => m.userId === inviteeId)) {
+    return { success: false, message: '该用户已是队伍成员' };
+  }
+
+  const existingInvite = state.invites.find(
+    i => i.teamId === teamId && i.inviteeId === inviteeId && i.status === 'pending'
+  );
+  if (existingInvite) {
+    return { success: false, message: '已向该用户发送过邀请' };
+  }
+
+  const challenge = state.challenges.find(c => c.id === team.challengeId);
+  if (challenge && challenge.status !== 'registration') {
+    return { success: false, message: '报名阶段已结束，无法发送邀请' };
+  }
+
+  const invite: TeamInvite = {
+    id: 'invite_' + generateId(),
+    teamId,
+    challengeId: team.challengeId,
+    inviterId: state.currentUserId,
+    inviterName: state.currentUserName,
+    inviteeId,
+    inviteeName,
+    sentAt: Date.now(),
+    status: 'pending'
+  };
+
+  return { success: true, message: '邀请已发送', invite };
+}
+
+export function acceptTeamInvite(
+  state: ChallengeState,
+  inviteId: string
+): { success: boolean; message: string; teamId?: string } {
+  const invite = state.invites.find(i => i.id === inviteId);
+  if (!invite) {
+    return { success: false, message: '邀请不存在' };
+  }
+
+  if (invite.inviteeId !== state.currentUserId) {
+    return { success: false, message: '您不是该邀请的接收者' };
+  }
+
+  if (invite.status !== 'pending') {
+    return { success: false, message: '该邀请已失效' };
+  }
+
+  const team = state.teams.find(t => t.id === invite.teamId);
+  if (!team) {
+    return { success: false, message: '队伍不存在' };
+  }
+
+  if (team.isLocked) {
+    return { success: false, message: '队伍已锁定' };
+  }
+
+  if (team.members.length >= team.maxMembers) {
+    return { success: false, message: '队伍已满' };
+  }
+
+  const challenge = state.challenges.find(c => c.id === team.challengeId);
+  if (challenge && challenge.status !== 'registration') {
+    return { success: false, message: '报名阶段已结束' };
+  }
+
+  const userExistingTeam = state.teams.find(
+    t => t.challengeId === team.challengeId &&
+      t.members.some(m => m.userId === state.currentUserId)
+  );
+  if (userExistingTeam) {
+    return { success: false, message: '您已在该挑战赛中加入了其他队伍' };
+  }
+
+  return { success: true, message: '已接受邀请', teamId: team.id };
+}
+
+export function declineTeamInvite(
+  state: ChallengeState,
+  inviteId: string
+): { success: boolean; message: string } {
+  const invite = state.invites.find(i => i.id === inviteId);
+  if (!invite) {
+    return { success: false, message: '邀请不存在' };
+  }
+
+  if (invite.inviteeId !== state.currentUserId) {
+    return { success: false, message: '您不是该邀请的接收者' };
+  }
+
+  if (invite.status !== 'pending') {
+    return { success: false, message: '该邀请已处理' };
+  }
+
+  return { success: true, message: '已拒绝邀请' };
+}
+
+export function getPendingInvites(state: ChallengeState): TeamInvite[] {
+  return state.invites.filter(
+    i => i.inviteeId === state.currentUserId && i.status === 'pending'
+  );
+}
+
+export function getSentInvites(state: ChallengeState): TeamInvite[] {
+  return state.invites.filter(
+    i => i.inviterId === state.currentUserId
+  );
+}
+
+export function expireOldInvites(state: ChallengeState): ChallengeState {
+  const now = Date.now();
+  const expireThreshold = 3 * 24 * 60 * 60 * 1000;
+
+  const newInvites = state.invites.map(invite => {
+    if (invite.status === 'pending' && now - invite.sentAt > expireThreshold) {
+      return { ...invite, status: 'expired' as const };
+    }
+    return invite;
+  });
+
+  return { ...state, invites: newInvites };
+}
+
+export function advanceChallengeTheme(
+  state: ChallengeState,
+  challengeId: string
+): { success: boolean; message: string; newTheme?: ChallengeTheme } {
+  const challenge = state.challenges.find(c => c.id === challengeId);
+  if (!challenge) {
+    return { success: false, message: '挑战赛不存在' };
+  }
+
+  if (challenge.currentThemeIndex >= challenge.themes.length - 1) {
+    return { success: false, message: '已是最后一个主题' };
+  }
+
+  const newThemeIndex = challenge.currentThemeIndex + 1;
+  const newTheme = challenge.themes[newThemeIndex];
+
+  return { success: true, message: `已切换到主题：${newTheme.name}`, newTheme };
+}
+
+export function getThemeSchedule(challenge: ChallengeDefinition): {
+  theme: ChallengeTheme;
+  startDate: number;
+  endDate: number;
+  isCurrent: boolean;
+}[] {
+  const totalDuration = challenge.developEnd - challenge.developStart;
+  const themeDuration = totalDuration / challenge.themes.length;
+
+  return challenge.themes.map((theme, idx) => ({
+    theme,
+    startDate: challenge.developStart + idx * themeDuration,
+    endDate: challenge.developStart + (idx + 1) * themeDuration,
+    isCurrent: idx === challenge.currentThemeIndex
+  }));
+}
+
+export function autoAdvanceTheme(state: ChallengeState, challengeId: string): ChallengeState {
+  const challenge = state.challenges.find(c => c.id === challengeId);
+  if (!challenge) return state;
+
+  const schedule = getThemeSchedule(challenge);
+  const now = Date.now();
+
+  for (let i = 0; i < schedule.length; i++) {
+    if (now >= schedule[i].startDate && now < schedule[i].endDate) {
+      if (i !== challenge.currentThemeIndex) {
+        const newChallenges = state.challenges.map(c =>
+          c.id === challengeId ? { ...c, currentThemeIndex: i } : c
+        );
+        return { ...state, challenges: newChallenges };
+      }
+      break;
+    }
+  }
+
+  return state;
+}
+
+export function finalizeAndAwardChallenge(
+  state: ChallengeState,
+  challengeId: string
+): { success: boolean; message: string; award?: ChallengeAwardResult } {
+  const challenge = state.challenges.find(c => c.id === challengeId);
+  if (!challenge) {
+    return { success: false, message: '挑战赛不存在' };
+  }
+
+  if (challenge.status !== 'reviewing') {
+    return { success: false, message: '该挑战赛不在评审阶段' };
+  }
+
+  const finalizedSubmissions = finalizeSubmissionScores(state, challengeId);
+  if (finalizedSubmissions.length === 0) {
+    return { success: false, message: '暂无参赛作品' };
+  }
+
+  const winners = challenge.prizes
+    .map((prize, idx) => {
+      const submission = finalizedSubmissions[idx];
+      if (!submission) return null;
+      return {
+        rank: prize.rank,
+        userId: submission.userId,
+        userName: submission.userName,
+        teamId: submission.teamId,
+        teamName: submission.teamId
+          ? state.teams.find(t => t.id === submission.teamId)?.name || null
+          : null,
+        score: submission.finalScore ?? submission.score,
+        prize
+      };
+    })
+    .filter((w): w is NonNullable<typeof w> => w !== null);
+
+  const registeredUsers = state.registrations.filter(
+    r => r.challengeId === challengeId && r.status === 'registered'
+  );
+  const participantsAward = registeredUsers.map(r => ({
+    userId: r.userId,
+    userName: r.userName,
+    points: challenge.participationPoints
+  }));
+
+  const award: ChallengeAwardResult = {
+    challengeId,
+    challengeTitle: challenge.title,
+    winners,
+    participantsAward,
+    finalizedAt: Date.now()
+  };
+
+  return { success: true, message: '成绩已结算', award };
+}
+
+export function updateSeasonBadgesFromAward(
+  state: ChallengeState,
+  award: ChallengeAwardResult
+): ChallengeState {
+  const challenge = state.challenges.find(c => c.id === award.challengeId);
+  if (!challenge || !challenge.seasonId) return state;
+
+  const newSeasons = state.seasons.map(season => {
+    if (season.id !== challenge.seasonId) return season;
+
+    const newBadges = [...season.badges];
+    const newTotalPoints = { ...season.totalPoints };
+
+    award.winners.forEach(winner => {
+      if (winner.prize.badge && winner.prize.titleReward) {
+        newBadges.push({
+          userId: winner.userId,
+          badge: winner.prize.badge,
+          title: winner.prize.titleReward,
+          earnedAt: award.finalizedAt
+        });
+      }
+      newTotalPoints[winner.userId] = (newTotalPoints[winner.userId] || 0) + winner.prize.points;
+    });
+
+    award.participantsAward.forEach(p => {
+      newTotalPoints[p.userId] = (newTotalPoints[p.userId] || 0) + p.points;
+    });
+
+    return { ...season, badges: newBadges, totalPoints: newTotalPoints };
+  });
+
+  return { ...state, seasons: newSeasons };
+}
+
+export function getAwardsForChallenge(
+  state: ChallengeState,
+  challengeId: string
+): ChallengeAwardResult | null {
+  return state.awards.find(a => a.challengeId === challengeId) || null;
+}
+
+export function getUserAwards(
+  state: ChallengeState,
+  userId: string
+): ChallengeAwardResult[] {
+  return state.awards.filter(a =>
+    a.winners.some(w => w.userId === userId) ||
+    a.participantsAward.some(p => p.userId === userId)
+  );
+}
+
+export function calculateTeamLeaderboard(
+  state: ChallengeState,
+  seasonId: string | null = null,
+  sortBy: 'total_score' | 'best_score' | 'avg_score' | 'submissions' = 'total_score'
+): ChallengeTeamLeaderboardEntry[] {
+  let submissions = [...state.submissions];
+
+  if (seasonId) {
+    const seasonChallenges = state.seasons
+      .find(s => s.id === seasonId)
+      ?.challengeIds || [];
+    submissions = submissions.filter(s => seasonChallenges.includes(s.challengeId));
+  }
+
+  const teamSubmissions = submissions.filter(s => s.teamId !== null);
+
+  const teamStats: Record<string, {
+    teamId: string;
+    teamName: string;
+    teamAvatarColor: string;
+    members: { userId: string; userName: string }[];
+    scores: number[];
+    submissionCount: number;
+    challengeCount: number;
+    badges: string[];
+  }> = {};
+
+  teamSubmissions.forEach(submission => {
+    if (submission.reviewStatus !== 'accepted' && submission.reviewStatus !== 'pending') return;
+
+    const teamId = submission.teamId!;
+    if (!teamStats[teamId]) {
+      const team = state.teams.find(t => t.id === teamId);
+      if (!team) return;
+
+      teamStats[teamId] = {
+        teamId,
+        teamName: team.name,
+        teamAvatarColor: team.avatarColor,
+        members: team.members.map(m => ({ userId: m.userId, userName: m.userName })),
+        scores: [],
+        submissionCount: 0,
+        challengeCount: 0,
+        badges: []
+      };
+    }
+
+    const score = submission.finalScore ?? submission.score;
+    teamStats[teamId].scores.push(score);
+    teamStats[teamId].submissionCount++;
+  });
+
+  const challengeSet = new Set(teamSubmissions.map(s => s.challengeId));
+  Object.values(teamStats).forEach(stat => {
+    stat.challengeCount = challengeSet.size;
+  });
+
+  const entries: ChallengeTeamLeaderboardEntry[] = Object.values(teamStats).map(stat => {
+    const sortedScores = [...stat.scores].sort((a, b) => b - a);
+    return {
+      rank: 0,
+      teamId: stat.teamId,
+      teamName: stat.teamName,
+      teamAvatarColor: stat.teamAvatarColor,
+      members: stat.members,
+      totalScore: sortedScores.reduce((sum, s) => sum + s, 0),
+      bestScore: sortedScores[0] || 0,
+      avgScore: sortedScores.length > 0
+        ? sortedScores.reduce((sum, s) => sum + s, 0) / sortedScores.length
+        : 0,
+      submissionCount: stat.submissionCount,
+      challengeCount: stat.challengeCount,
+      badges: stat.badges
+    };
+  });
+
+  entries.sort((a, b) => {
+    switch (sortBy) {
+      case 'total_score':
+        return b.totalScore - a.totalScore;
+      case 'best_score':
+        return b.bestScore - a.bestScore;
+      case 'avg_score':
+        return b.avgScore - a.avgScore;
+      case 'submissions':
+        return b.submissionCount - a.submissionCount;
+      default:
+        return b.totalScore - a.totalScore;
+    }
+  });
+
+  return entries.map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+}
+
+export function getSeasonTotalPoints(
+  season: ChallengeSeason,
+  userId: string
+): number {
+  return season.totalPoints[userId] || 0;
+}
+
+export function getUserBadges(
+  state: ChallengeState,
+  userId: string
+): { badge: string; title: string; earnedAt: number; seasonName: string }[] {
+  const badges: { badge: string; title: string; earnedAt: number; seasonName: string }[] = [];
+
+  state.seasons.forEach(season => {
+    season.badges.forEach(b => {
+      if (b.userId === userId) {
+        badges.push({
+          badge: b.badge,
+          title: b.title,
+          earnedAt: b.earnedAt,
+          seasonName: season.name
+        });
+      }
+    });
+  });
+
+  return badges.sort((a, b) => b.earnedAt - a.earnedAt);
+}
+
+export function getChallengeWinners(
+  state: ChallengeState,
+  challengeId: string
+): ChallengeAwardResult['winners'] {
+  const award = state.awards.find(a => a.challengeId === challengeId);
+  return award?.winners || [];
+}
+
+export function canSubmitToChallenge(
+  state: ChallengeState,
+  challengeId: string
+): boolean {
+  const challenge = state.challenges.find(c => c.id === challengeId);
+  if (!challenge) return false;
+  if (challenge.status !== 'developing') return false;
+  if (!isUserRegistered(state, challengeId)) return false;
+
+  const userSubmissions = state.submissions.filter(
+    s => s.challengeId === challengeId && s.userId === state.currentUserId
+  );
+  if (userSubmissions.length >= 3) return false;
+
+  return true;
+}
+
+export function getChallengeProgress(
+  state: ChallengeState,
+  challengeId: string
+): {
+  registrationProgress: number;
+  developProgress: number;
+  reviewProgress: number;
+  overallProgress: number;
+  currentPhase: ChallengeStatus;
+} {
+  const challenge = state.challenges.find(c => c.id === challengeId);
+  if (!challenge) {
+    return {
+      registrationProgress: 0,
+      developProgress: 0,
+      reviewProgress: 0,
+      overallProgress: 0,
+      currentPhase: 'upcoming'
+    };
+  }
+
+  const now = Date.now();
+  const totalDuration = challenge.reviewEnd - challenge.registrationStart;
+  const elapsed = now - challenge.registrationStart;
+
+  const regDuration = challenge.registrationEnd - challenge.registrationStart;
+  const devDuration = challenge.developEnd - challenge.developStart;
+  const revDuration = challenge.reviewEnd - challenge.reviewStart;
+
+  let registrationProgress = 0;
+  let developProgress = 0;
+  let reviewProgress = 0;
+
+  if (now >= challenge.registrationStart) {
+    registrationProgress = now >= challenge.registrationEnd
+      ? 100
+      : Math.min(100, ((now - challenge.registrationStart) / regDuration) * 100);
+  }
+
+  if (now >= challenge.developStart) {
+    developProgress = now >= challenge.developEnd
+      ? 100
+      : Math.min(100, ((now - challenge.developStart) / devDuration) * 100);
+  }
+
+  if (now >= challenge.reviewStart) {
+    reviewProgress = now >= challenge.reviewEnd
+      ? 100
+      : Math.min(100, ((now - challenge.reviewStart) / revDuration) * 100);
+  }
+
+  const overallProgress = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
+
+  return {
+    registrationProgress,
+    developProgress,
+    reviewProgress,
+    overallProgress,
+    currentPhase: challenge.status
+  };
 }
