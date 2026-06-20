@@ -151,7 +151,8 @@ import {
   getMyCertificates,
   setActiveTab,
   setFilter,
-  toggleFavoriteWork
+  toggleFavoriteWork,
+  switchCurrentUser
 } from '../utils/consignmentSystem';
 
 function createInitialStageState(): StageState {
@@ -4009,7 +4010,25 @@ function createGameStore() {
         editingWorkId: workId,
         showCreateWork: workId !== null
       }
-    }))
+    })),
+
+    switchConsignmentUser: (userId: string, userType: 'artist' | 'buyer' | 'both') => update(state => {
+      const newState = switchCurrentUser(state.consignmentMarket, userId, userType);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    verifyConsignmentCertificate: (certificateId: string) => update(state => {
+      const newState = verifyCertificate(state.consignmentMarket, certificateId);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    }),
+
+    transferConsignmentCertificate: (certificateId: string, newOwnerId: string, newOwnerName: string) => update(state => {
+      const newState = transferCertificate(state.consignmentMarket, certificateId, newOwnerId, newOwnerName);
+      saveConsignmentMarket(newState);
+      return { ...state, consignmentMarket: newState };
+    })
   };
 }
 

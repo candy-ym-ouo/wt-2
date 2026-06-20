@@ -15,18 +15,23 @@
     TradeOrder,
     DigitalCertificate,
     ArtistInfo,
+    BuyerInfo,
     ConsignmentMarketTab,
     ConsignmentWorkStatus,
     TradeOrderStatus,
-    ConsignmentMarketFilter
+    ConsignmentMarketFilter,
+    ProcessedPhoto
   } from '../types/game';
+  import { PHOTO_SUBJECTS, FILM_STOCKS } from '../data/gameData';
 
   export let onClose: () => void;
 
   $: market = $gameStore.consignmentMarket;
+  $: processedPhotos = $gameStore.processedPhotos || [];
   $: activeTab = market.activeTab;
   $: works = market.works;
   $: artists = market.artists;
+  $: buyers = market.buyers;
   $: orders = market.orders;
   $: certificates = market.certificates;
   $: currentUserId = market.currentUserId;
@@ -47,6 +52,7 @@
   $: selectedCertificate = certificates.find(c => c.id === market.selectedCertificateId) || null;
 
   let showCreateDialog = false;
+  let newWorkPhotoId = '';
   let newWorkTitle = '';
   let newWorkDescription = '';
   let newWorkPrice = 500;
@@ -62,6 +68,8 @@
   let buyIncludeFrame = false;
   let buyShippingAddress = '';
   let buySpecialInstructions = '';
+
+  let showUserSwitcher = false;
 
   function inputValue(e: Event): string {
     return (e.target as HTMLInputElement).value;
@@ -108,37 +116,6 @@
     gameStore.selectConsignmentCertificate(null);
   }
 
-  function handleOpenCreateWork() {
-    showCreateDialog = true;
-    newWorkTitle = '';
-    newWorkDescription = '';
-    newWorkPrice = 500;
-    newWorkTotalEditions = 10;
-    newWorkCategory = '';
-    newWorkTags = '';
-    newWorkFrameOption = false;
-    newWorkFramePrice = 200;
-    newWorkShippingPrice = 50;
-  }
-
-  function handleCreateWork() {
-    if (!newWorkTitle.trim()) return;
-    const tags = newWorkTags.split(/[,，]/).map(t => t.trim()).filter(t => t);
-    gameStore.createConsignmentWork({
-      photoId: 'placeholder',
-      title: newWorkTitle.trim(),
-      description: newWorkDescription.trim(),
-      price: newWorkPrice,
-      totalEditions: newWorkTotalEditions,
-      category: newWorkCategory || undefined,
-      tags,
-      frameOption: newWorkFrameOption,
-      framePrice: newWorkFrameOption ? newWorkFramePrice : undefined,
-      shippingPrice: newWorkShippingPrice
-    });
-    showCreateDialog = false;
-  }
-
   function handleListWork(workId: string) {
     gameStore.listConsignmentWork(workId);
   }
@@ -162,17 +139,152 @@
     buyWork = null;
   }
 
+  function getPhotoById(photoId: string): ProcessedPhoto | undefined {
+    return processedPhotos.find(p => p.id === photoId);
+  }
+
+  function getPhotoSubjectName(subjectId: string): string {
+    return PHOTO_SUBJECTS.find(s => s.id === subjectId)?.name || '未知主题';
+  }
+
+  function getFilmName(filmId: string): string {
+    return FILM_STOCKS.find(f => f.id === filmId)?.name || '未知胶片';
+  }
+
+  function getCurrentUser(): { id: string; name: string; type: string } {
+    const artist = artists.find(a => a.id === currentUserId);
+    if (artist) return { id: artist.id, name: artist.name, type: '艺术家' };
+    const buyer = buyers.find(b => b.id === currentUserId);
+    if (buyer) return { id: buyer.id, name: buyer.name, type: '收藏家' };
+    return { id: currentUserId, name: '未知用户', type: currentUserType };
+  }
+
+  function handleSwitchUser(userId: string, userType: 'artist' | 'buyer' | 'both') {
+    gameStore.switchConsignmentUser(userId, userType);
+    showUserSwitcher = false;
+  }
+
+  function handleSelectPhoto(photoId: string) {
+    newWorkPhotoId = photoId;
+    const photo = getPhotoById(photoId);
+    if (photo && !newWorkTitle.trim()) {
+      newWorkTitle = getPhotoSubjectName(photo.subjectId);
+    }
+    if (photo && !newWorkTags.trim()) {
+      const subject = PHOTO_SUBJECTS.find(s => s.id === photo.subjectId);
+      if (subject) {
+        newWorkTags = subject.tags?.join('，') || '';
+      }
+    }
+  }
+
+  function handleOpenCreateWork() {
+    showCreateDialog = true;
+    newWorkPhotoId = processedPhotos.length > 0 ? processedPhotos[0].id : '';
+    newWorkTitle = '';
+    newWorkDescription = '';
+    newWorkPrice = 500;
+    newWorkTotalEditions = 10;
+    newWorkCategory = '';
+    newWorkTags = '';
+    newWorkFrameOption = false;
+    newWorkFramePrice = 200;
+    newWorkShippingPrice = 50;
+  }
+
+  function handleCreateWork() {
+    if (!newWorkTitle.trim()) return;
+    if (!newWorkPhotoId) {
+      alert('请先选择一张成片作为作品底图');
+      return;
+    }
+    const tags = newWorkTags.split(/[,，]/).map(t => t.trim()).filter(t => t);
+    gameStore.createConsignmentWork({
+      photoId: newWorkPhotoId,
+      title: newWorkTitle.trim(),
+      description: newWorkDescription.trim(),
+      price: newWorkPrice,
+      totalEditions: newWorkTotalEditions,
+      category: newWorkCategory || undefined,
+      tags,
+      frameOption: newWorkFrameOption,
+      framePrice: newWorkFrameOption ? newWorkFramePrice : undefined,
+      shippingPrice: newWorkShippingPrice
+    });
+    showCreateDialog = false;
+  }
+
   function handleConfirmBuy() {
     if (!buyWork) return;
+    const buyer = buyers.find(b => b.id === currentUserId);
+    if (!buyer) {
+      alert('请先切换到买家身份');
+      return;
+    }
+    if (!buyShippingAddress.trim()) {
+      alert('请填写收货地址');
+      return;
+    }
     gameStore.createTradeOrder({
       workId: buyWork.id,
-      buyerId: 'buyer_001',
+      buyerId: currentUserId,
       includeFrame: buyIncludeFrame,
       shippingAddress: buyShippingAddress,
       specialInstructions: buySpecialInstructions
     });
     showBuyDialog = false;
     buyWork = null;
+  }
+
+  function handleMarkOrderPaid(orderId: string) {
+    gameStore.updateTradeOrderStatus(orderId, 'paid');
+  }
+
+  function handleMarkOrderDelivered(orderId: string) {
+    gameStore.updateTradeOrderStatus(orderId, 'delivered');
+  }
+
+  function handleMarkOrderCompleted(orderId: string) {
+    gameStore.updateTradeOrderStatus(orderId, 'completed');
+  }
+
+  function getWorkPhoto(work: ConsignmentWork): { imageUrl: string; subjectName: string; filmName: string } | null {
+    const photo = getPhotoById(work.photoId);
+    if (photo) {
+      return {
+        imageUrl: photo.imageDataUrl,
+        subjectName: getPhotoSubjectName(photo.subjectId),
+        filmName: getFilmName(photo.filmId)
+      };
+    }
+    return null;
+  }
+
+  function isSeller(order: TradeOrder): boolean {
+    return order.sellerId === currentUserId;
+  }
+
+  function isBuyer(order: TradeOrder): boolean {
+    return order.buyerId === currentUserId;
+  }
+
+  function formatPrice(price: number): string {
+    return `¥${price.toLocaleString()}`;
+  }
+
+  function formatDate(timestamp: number): string {
+    const d = new Date(timestamp);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function toggleFavorite(workId: string, e: Event) {
+    e.stopPropagation();
+    gameStore.toggleFavoriteWork(workId);
+  }
+
+  function isFavorite(workId: string): boolean {
+    const buyer = market.buyers.find(b => b.id === currentUserId);
+    return buyer?.favoriteWorkIds.includes(workId) || false;
   }
 
   function handleUpdateOrderStatus(orderId: string, status: TradeOrderStatus) {
@@ -185,33 +297,6 @@
       gameStore.updateTradeOrderStatus(orderId, 'cancelled', { cancelReason: reason });
     }
   }
-
-  function formatPrice(price: number): string {
-    return `¥${price.toLocaleString()}`;
-  }
-
-  function formatDate(timestamp: number): string {
-    const d = new Date(timestamp);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-
-  function getArtistName(artistId: string): string {
-    return artists.find(a => a.id === artistId)?.name || '未知艺术家';
-  }
-
-  function getArtist(artistId: string): ArtistInfo | undefined {
-    return artists.find(a => a.id === artistId);
-  }
-
-  function toggleFavorite(workId: string, e: Event) {
-    e.stopPropagation();
-    gameStore.toggleFavoriteWork(workId);
-  }
-
-  function isFavorite(workId: string): boolean {
-    const buyer = market.buyers.find(b => b.id === currentUserId);
-    return buyer?.favoriteWorkIds.includes(workId) || false;
-  }
 </script>
 
 <div class="consignment-market-overlay" on:click={onClose}>
@@ -221,7 +306,50 @@
         <span class="title-icon">🏪</span>
         作品交易寄售
       </h2>
-      <button class="close-btn" on:click={onClose}>✕</button>
+      <div class="header-right">
+        <div class="user-switcher" on:click|stopPropagation>
+          <button class="current-user-btn" on:click={() => showUserSwitcher = !showUserSwitcher}>
+            <span class="user-avatar">👤</span>
+            <span class="user-info">
+              <span class="user-name">{getCurrentUser().name}</span>
+              <span class="user-type-tag">{getCurrentUser().type}</span>
+            </span>
+            <span class="dropdown-arrow">▼</span>
+          </button>
+          {#if showUserSwitcher}
+            <div class="user-switcher-dropdown">
+              <div class="switcher-section">
+                <div class="switcher-section-title">艺术家身份</div>
+                {#each artists as artist}
+                  <button
+                    class="switcher-option"
+                    class:active={currentUserId === artist.id}
+                    on:click={() => handleSwitchUser(artist.id, 'artist')}
+                  >
+                    <span class="switcher-name">{artist.name}</span>
+                    {#if artist.verified}<span class="verified-badge">✓</span>{/if}
+                    <span class="switcher-sub">作品 {artist.totalWorks} · 销售 {artist.totalSales}</span>
+                  </button>
+                {/each}
+              </div>
+              <div class="switcher-section">
+                <div class="switcher-section-title">收藏家/买家身份</div>
+                {#each buyers as buyer}
+                  <button
+                    class="switcher-option"
+                    class:active={currentUserId === buyer.id}
+                    on:click={() => handleSwitchUser(buyer.id, 'buyer')}
+                  >
+                    <span class="switcher-name">{buyer.name}</span>
+                    <span class="switcher-sub">购买 {buyer.totalPurchases} · 花费 ¥{buyer.totalSpent.toLocaleString()}</span>
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+        </div>
+        <button class="close-btn" on:click={onClose}>✕</button>
+      </div>
     </div>
 
     <div class="tabs">
@@ -279,17 +407,27 @@
 
           <div class="works-grid">
             {#each filteredWorks as work (work.id)}
+              {@const workPhoto = getWorkPhoto(work)}
               <div class="work-card" on:click={() => handleWorkClick(work)}>
                 <div class="work-image">
-                  <div class="work-placeholder">
-                    <span class="placeholder-icon">🖼️</span>
-                  </div>
+                  {#if workPhoto}
+                    <img src={workPhoto.imageUrl} alt={work.title} class="work-photo-img" />
+                  {:else}
+                    <div class="work-placeholder">
+                      <span class="placeholder-icon">🖼️</span>
+                    </div>
+                  {/if}
                   <div class="work-status-badge" style="background: {WORK_STATUS_COLORS[work.status]}">
                     {WORK_STATUS_LABELS[work.status]}
                   </div>
                   <button class="favorite-btn" on:click={(e) => toggleFavorite(work.id, e)}>
                     {isFavorite(work.id) ? '❤️' : '🤍'}
                   </button>
+                  {#if workPhoto}
+                    <div class="work-photo-meta">
+                      <span class="photo-meta-tag">{workPhoto.subjectName}</span>
+                    </div>
+                  {/if}
                 </div>
                 <div class="work-info">
                   <h3 class="work-title">{work.title}</h3>
@@ -357,11 +495,16 @@
           </div>
           <div class="works-list">
             {#each myWorks as work (work.id)}
+              {@const workPhoto = getWorkPhoto(work)}
               <div class="work-list-item">
                 <div class="work-list-image">
-                  <div class="work-placeholder small">
-                    <span class="placeholder-icon">🖼️</span>
-                  </div>
+                  {#if workPhoto}
+                    <img src={workPhoto.imageUrl} alt={work.title} class="work-list-photo" />
+                  {:else}
+                    <div class="work-placeholder small">
+                      <span class="placeholder-icon">🖼️</span>
+                    </div>
+                  {/if}
                 </div>
                 <div class="work-list-info">
                   <div class="work-list-header">
@@ -412,6 +555,8 @@
           </div>
           <div class="orders-list">
             {#each myOrders as order (order.id)}
+              {@const orderWork = works.find(w => w.id === order.workId)}
+              {@const orderPhoto = orderWork ? getWorkPhoto(orderWork) : null}
               <div class="order-card" on:click={() => handleOrderClick(order)}>
                 <div class="order-header">
                   <span class="order-number">订单 {order.orderNumber}</span>
@@ -421,7 +566,13 @@
                 </div>
                 <div class="order-body">
                   <div class="order-work-info">
-                    <div class="order-work-thumb">🖼️</div>
+                    <div class="order-work-thumb">
+                      {#if orderPhoto}
+                        <img src={orderPhoto.imageUrl} alt={order.workTitle} class="order-thumb-img" />
+                      {:else}
+                        🖼️
+                      {/if}
+                    </div>
                     <div class="order-work-details">
                       <h4>{order.workTitle}</h4>
                       <p>{order.sellerId === currentUserId ? '买家：' + order.buyerName : '卖家：' + order.sellerName}</p>
@@ -570,14 +721,23 @@
   </div>
 
   {#if selectedWork}
+    {@const detailPhoto = getWorkPhoto(selectedWork)}
     <div class="detail-overlay" on:click={handleCloseWorkDetail}>
       <div class="detail-panel" on:click|stopPropagation>
         <button class="close-btn" on:click={handleCloseWorkDetail}>✕</button>
         <div class="detail-content">
           <div class="detail-image">
-            <div class="work-placeholder large">
-              <span class="placeholder-icon">🖼️</span>
-            </div>
+            {#if detailPhoto}
+              <img src={detailPhoto.imageUrl} alt={selectedWork.title} class="detail-img" />
+              <div class="detail-photo-meta">
+                <span class="meta-pill">📷 {detailPhoto.subjectName}</span>
+                <span class="meta-pill">🎞️ {detailPhoto.filmName}</span>
+              </div>
+            {:else}
+              <div class="work-placeholder large">
+                <span class="placeholder-icon">🖼️</span>
+              </div>
+            {/if}
           </div>
           <div class="detail-info">
             <div class="detail-header">
@@ -770,6 +930,8 @@
   {/if}
 
   {#if selectedCertificate}
+    {@const certWork = works.find(w => w.id === selectedCertificate.workId)}
+    {@const certPhoto = certWork ? getWorkPhoto(certWork) : null}
     <div class="detail-overlay" on:click={handleCloseCertificateDetail}>
       <div class="detail-panel certificate-detail-panel" on:click|stopPropagation>
         <button class="close-btn" on:click={handleCloseCertificateDetail}>✕</button>
@@ -780,6 +942,11 @@
           </div>
           <div class="certificate-number-large">{selectedCertificate.certificateNumber}</div>
           <div class="certificate-content">
+            {#if certPhoto}
+              <div class="cert-work-image">
+                <img src={certPhoto.imageUrl} alt={selectedCertificate.workTitle} class="cert-work-img" />
+              </div>
+            {/if}
             <div class="cert-section">
               <h4>作品信息</h4>
               <div class="cert-info-row">
@@ -836,7 +1003,7 @@
           </div>
           {#if !selectedCertificate.verified}
             <div class="detail-actions">
-              <button class="primary-btn" on:click={() => gameStore.verifyCertificate(selectedCertificate.id)}>
+              <button class="primary-btn" on:click={() => gameStore.verifyConsignmentCertificate(selectedCertificate.id)}>
                 验证证书
               </button>
             </div>
@@ -848,8 +1015,38 @@
 
   {#if showCreateDialog}
     <div class="dialog-overlay" on:click={() => showCreateDialog = false}>
-      <div class="dialog-panel" on:click|stopPropagation>
+      <div class="dialog-panel large-dialog" on:click|stopPropagation>
         <h3>发布新作品</h3>
+        <div class="form-group">
+          <label>选择成片底图 *</label>
+          {#if processedPhotos.length === 0}
+            <div class="photo-empty-hint">
+              <span>⚠️</span>
+              <p>你还没有任何成片，先去暗房冲洗一些照片吧！</p>
+            </div>
+          {:else}
+            <div class="photo-picker">
+              {#each processedPhotos as photo (photo.id)}
+                <div
+                  class="photo-picker-item"
+                  class:selected={newWorkPhotoId === photo.id}
+                  on:click={() => handleSelectPhoto(photo.id)}
+                >
+                  <img src={photo.imageDataUrl} alt="成片" class="photo-picker-img" />
+                  <div class="photo-picker-info">
+                    <span class="photo-score" style="color: {photo.score >= 80 ? '#67c23a' : photo.score >= 60 ? '#e6a23c' : '#f56c6c'}">
+                      {photo.score}分
+                    </span>
+                    <span class="photo-subject">{getPhotoSubjectName(photo.subjectId)}</span>
+                  </div>
+                  {#if newWorkPhotoId === photo.id}
+                    <div class="photo-picker-check">✓</div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
         <div class="form-group">
           <label>作品标题 *</label>
           <input type="text" bind:value={newWorkTitle} placeholder="请输入作品标题" />
@@ -896,7 +1093,7 @@
         </div>
         <div class="dialog-actions">
           <button class="cancel-btn" on:click={() => showCreateDialog = false}>取消</button>
-          <button class="primary-btn" on:click={handleCreateWork} disabled={!newWorkTitle.trim()}>
+          <button class="primary-btn" on:click={handleCreateWork} disabled={!newWorkTitle.trim() || !newWorkPhotoId}>
             创建作品
           </button>
         </div>
@@ -905,14 +1102,19 @@
   {/if}
 
   {#if showBuyDialog && buyWork}
+    {@const buyPhoto = getWorkPhoto(buyWork)}
     <div class="dialog-overlay" on:click={handleCloseBuyDialog}>
       <div class="dialog-panel" on:click|stopPropagation>
         <h3>确认购买</h3>
         <div class="buy-work-info">
           <div class="buy-work-image">
-            <div class="work-placeholder medium">
-              <span class="placeholder-icon">🖼️</span>
-            </div>
+            {#if buyPhoto}
+              <img src={buyPhoto.imageUrl} alt={buyWork.title} class="buy-work-img" />
+            {:else}
+              <div class="work-placeholder medium">
+                <span class="placeholder-icon">🖼️</span>
+              </div>
+            {/if}
           </div>
           <div class="buy-work-details">
             <h4>{buyWork.title}</h4>
@@ -2346,5 +2548,331 @@
     .certificates-grid {
       grid-template-columns: 1fr;
     }
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .user-switcher {
+    position: relative;
+  }
+
+  .current-user-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(139, 90, 43, 0.15);
+    border: 1px solid rgba(139, 90, 43, 0.3);
+    border-radius: 8px;
+    cursor: pointer;
+    color: #d4c4a8;
+    font-size: 13px;
+    transition: all 0.2s ease;
+  }
+
+  .current-user-btn:hover {
+    background: rgba(139, 90, 43, 0.25);
+    border-color: rgba(139, 90, 43, 0.5);
+  }
+
+  .user-avatar {
+    font-size: 18px;
+  }
+
+  .user-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+  }
+
+  .user-name {
+    font-weight: 600;
+    color: #e8dcc8;
+    font-size: 13px;
+  }
+
+  .user-type-tag {
+    font-size: 10px;
+    color: #8a7a5a;
+    background: rgba(139, 90, 43, 0.2);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  .dropdown-arrow {
+    font-size: 10px;
+    color: #8a7a5a;
+    margin-left: 4px;
+  }
+
+  .user-switcher-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 260px;
+    background: #2a2318;
+    border: 1px solid rgba(139, 90, 43, 0.3);
+    border-radius: 10px;
+    padding: 8px;
+    z-index: 10;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  }
+
+  .switcher-section {
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(139, 90, 43, 0.15);
+  }
+
+  .switcher-section:last-child {
+    border-bottom: none;
+  }
+
+  .switcher-section-title {
+    font-size: 11px;
+    color: #8a7a5a;
+    padding: 4px 8px 8px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .switcher-option {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 10px 12px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    color: #d4c4a8;
+    transition: all 0.2s ease;
+  }
+
+  .switcher-option:hover {
+    background: rgba(139, 90, 43, 0.15);
+  }
+
+  .switcher-option.active {
+    background: rgba(139, 90, 43, 0.25);
+    border-color: rgba(139, 90, 43, 0.4);
+  }
+
+  .switcher-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e8dcc8;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .switcher-sub {
+    font-size: 11px;
+    color: #8a7a5a;
+  }
+
+  .verified-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    background: #409eff;
+    color: white;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .work-photo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .work-photo-meta {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    display: flex;
+    gap: 4px;
+  }
+
+  .photo-meta-tag {
+    background: rgba(0, 0, 0, 0.65);
+    color: #e8dcc8;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    backdrop-filter: blur(4px);
+  }
+
+  .work-list-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+
+  .photo-empty-hint {
+    padding: 24px;
+    background: rgba(230, 162, 60, 0.08);
+    border: 1px dashed rgba(230, 162, 60, 0.3);
+    border-radius: 8px;
+    text-align: center;
+    color: #e6a23c;
+  }
+
+  .photo-empty-hint span {
+    font-size: 28px;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .photo-empty-hint p {
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .photo-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 4px;
+  }
+
+  .photo-picker-item {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s ease;
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .photo-picker-item:hover {
+    border-color: rgba(139, 90, 43, 0.5);
+  }
+
+  .photo-picker-item.selected {
+    border-color: #d4a574;
+    box-shadow: 0 0 0 2px rgba(212, 165, 116, 0.25);
+  }
+
+  .photo-picker-img {
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+    display: block;
+  }
+
+  .photo-picker-info {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.85), transparent);
+    padding: 20px 8px 6px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 11px;
+  }
+
+  .photo-score {
+    font-weight: 700;
+  }
+
+  .photo-subject {
+    color: #c8b898;
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 70px;
+  }
+
+  .photo-picker-check {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 22px;
+    height: 22px;
+    background: #d4a574;
+    color: #1a1410;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+
+  .large-dialog {
+    max-width: 700px;
+  }
+
+  .buy-work-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+
+  .detail-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+  }
+
+  .detail-photo-meta {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    display: flex;
+    gap: 8px;
+  }
+
+  .meta-pill {
+    background: rgba(0, 0, 0, 0.7);
+    color: #e8dcc8;
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    backdrop-filter: blur(4px);
+  }
+
+  .order-thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+
+  .cert-work-image {
+    margin-bottom: 20px;
+    border-radius: 10px;
+    overflow: hidden;
+    aspect-ratio: 4/3;
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .cert-work-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 </style>

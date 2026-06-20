@@ -724,3 +724,31 @@ export function toggleFavoriteWork(state: ConsignmentMarketState, workId: string
     )
   };
 }
+
+export function switchCurrentUser(
+  state: ConsignmentMarketState,
+  userId: string,
+  userType: 'artist' | 'buyer' | 'both'
+): ConsignmentMarketState {
+  return {
+    ...state,
+    currentUserId: userId,
+    currentUserType: userType
+  };
+}
+
+export function getCurrentBuyer(state: ConsignmentMarketState): BuyerInfo | undefined {
+  return state.buyers.find(b => b.id === state.currentUserId);
+}
+
+export function getCurrentArtist(state: ConsignmentMarketState): ArtistInfo | undefined {
+  return state.artists.find(a => a.id === state.currentUserId);
+}
+
+export function getCurrentUserName(state: ConsignmentMarketState): string {
+  const artist = getCurrentArtist(state);
+  if (artist) return artist.name;
+  const buyer = getCurrentBuyer(state);
+  if (buyer) return buyer.name;
+  return '未知用户';
+}
