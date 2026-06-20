@@ -1,4 +1,4 @@
-import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState, CurriculumSystemState, ConsignmentMarketState, ExhibitionState, DarkroomCalibrationState } from '../types/game';
+import type { ProcessedPhoto, ParamPreset, TutorialState, DevParams, FavoriteInfo, PhotoCollection, AchievementState, DarkroomOrder, ScheduleSlot, StorageStatus, QuestSystemState, ReviewSystemState, InventorySystemState, PublicationState, CurriculumSystemState, ConsignmentMarketState, ExhibitionState, DarkroomCalibrationState, ChallengeState } from '../types/game';
 import { DEFAULT_PARAMS } from '../data/gameData';
 import { createInitialQuestSystemState } from './questSystem';
 import { createInitialReviewSystemState } from './reviewSystem';
@@ -18,6 +18,9 @@ export const MAX_CONSIGNMENT_ORDERS = 200;
 export const MAX_CERTIFICATES = 200;
 export const MAX_EXHIBITIONS = 20;
 export const MAX_EXHIBITION_FEEDBACKS = 200;
+export const MAX_CHALLENGES = 20;
+export const MAX_CHALLENGE_SUBMISSIONS = 100;
+export const MAX_CHALLENGE_TEAMS = 50;
 export const STORAGE_QUOTA_WARNING = 0.8;
 export const BACKUP_COUNT = 3;
 
@@ -42,7 +45,7 @@ export interface LoadResult<T> {
   fromVersion?: number;
 }
 
-export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system' | 'curriculum_system' | 'consignment_market' | 'exhibition_system' | 'darkroom_calibration';
+export type StorageKey = 'photos' | 'presets' | 'tutorial' | 'favorites' | 'collections' | 'achievements' | 'orders' | 'quest_system' | 'review_system' | 'inventory_system' | 'publication_system' | 'curriculum_system' | 'consignment_market' | 'exhibition_system' | 'darkroom_calibration' | 'challenge_system';
 
 const KEY_MAP: Record<StorageKey, string> = {
   photos: 'darkroom_photos',
@@ -59,7 +62,8 @@ const KEY_MAP: Record<StorageKey, string> = {
   curriculum_system: 'darkroom_curriculum',
   consignment_market: 'darkroom_consignment_market',
   exhibition_system: 'darkroom_exhibition_system',
-  darkroom_calibration: 'darkroom_calibration'
+  darkroom_calibration: 'darkroom_calibration',
+  challenge_system: 'darkroom_challenge_system'
 };
 
 function getBackupKey(key: StorageKey, index: number): string {
@@ -1403,4 +1407,67 @@ export function loadSavedDarkroomCalibration(): { state: DarkroomCalibrationStat
 export function saveDarkroomCalibration(state: DarkroomCalibrationState): boolean {
   const itemCount = state.enlargerCalibrations.length + state.tempCalibrations.length + state.timerCalibrations.length + state.deviations.length;
   return saveWithBackup('darkroom_calibration', state, itemCount);
+}
+
+import { createInitialChallengeSystemState } from './challengeSystem';
+
+function validateChallengeState(data: unknown): data is ChallengeState {
+  if (typeof data !== 'object' || data === null) return false;
+  const c = data as Record<string, unknown>;
+  return (
+    Array.isArray(c.challenges) &&
+    Array.isArray(c.seasons) &&
+    Array.isArray(c.teams) &&
+    Array.isArray(c.registrations) &&
+    Array.isArray(c.submissions) &&
+    typeof c.activeTab === 'string'
+  );
+}
+
+export function repairChallengeSystem(state: ChallengeState): ChallengeState {
+  const initial = createInitialChallengeSystemState();
+  if (!state) return initial;
+
+  return {
+    ...initial,
+    challenges: Array.isArray(state.challenges) ? state.challenges.slice(0, MAX_CHALLENGES) : initial.challenges,
+    seasons: Array.isArray(state.seasons) ? state.seasons : initial.seasons,
+    teams: Array.isArray(state.teams) ? state.teams.slice(0, MAX_CHALLENGE_TEAMS) : initial.teams,
+    registrations: Array.isArray(state.registrations) ? state.registrations : initial.registrations,
+    submissions: Array.isArray(state.submissions) ? state.submissions.slice(0, MAX_CHALLENGE_SUBMISSIONS) : initial.submissions,
+    activeTab: typeof state.activeTab === 'string' ? state.activeTab : initial.activeTab,
+    selectedChallengeId: state.selectedChallengeId || null,
+    selectedTeamId: state.selectedTeamId || null,
+    selectedSubmissionId: state.selectedSubmissionId || null,
+    currentUserId: state.currentUserId || initial.currentUserId,
+    currentUserName: state.currentUserName || initial.currentUserName,
+    filter: state.filter || initial.filter,
+    leaderboardFilter: state.leaderboardFilter || initial.leaderboardFilter,
+    developTimer: state.developTimer || initial.developTimer
+  };
+}
+
+export function loadSavedChallengeSystem(): { state: ChallengeState; status: Partial<StorageStatus> } {
+  const result = loadWithFallback<ChallengeState>('challenge_system', createInitialChallengeSystemState());
+  const status: Partial<StorageStatus> = {
+    challengeSystemLoaded: result.success
+  };
+
+  if (result.migrationPerformed) {
+    status.migrationPerformed = true;
+  }
+  if (result.recovered) {
+    status.recoveryPerformed = true;
+  }
+
+  let state = result.data || createInitialChallengeSystemState();
+  state = repairChallengeSystem(state);
+
+  return { state, status };
+}
+
+export function saveChallengeSystem(state: ChallengeState): boolean {
+  const limited = enforceLimits('challenge_system', state) as ChallengeState;
+  const itemCount = limited.challenges.length + limited.teams.length + limited.submissions.length + limited.registrations.length;
+  return saveWithBackup('challenge_system', limited, itemCount);
 }

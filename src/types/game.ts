@@ -280,6 +280,7 @@ export interface GameState {
   consignmentMarket: ConsignmentMarketState;
   exhibitionSystem: ExhibitionState;
   darkroomCalibration: DarkroomCalibrationState;
+  challengeSystem: ChallengeState;
 }
 
 export type TutorialUnlockCondition = 
@@ -353,6 +354,7 @@ export interface StorageStatus {
   consignmentMarketLoaded?: boolean;
   exhibitionSystemLoaded?: boolean;
   darkroomCalibrationLoaded?: boolean;
+  challengeSystemLoaded?: boolean;
   lastSaveSuccess: boolean;
   lastSaveError?: string;
   storageUsed: number;
@@ -372,6 +374,7 @@ export interface StorageStatus {
     consignmentMarket?: number;
     exhibitionSystem?: number;
     darkroomCalibration?: number;
+    challengeSystem?: number;
   };
 }
 
@@ -1011,7 +1014,7 @@ export interface ContestDefinition {
   }[];
 }
 
-export interface LeaderboardEntry {
+export interface ReviewLeaderboardEntry {
   rank: number;
   submissionId: string;
   photoDataUrl: string;
@@ -2062,6 +2065,207 @@ export interface DarkroomCalibrationState {
   selectedTempZoneId: string | null;
   selectedTimerProgramId: string | null;
   statistics: CalibrationStatistics;
+}
+
+export type ChallengeStatus = 'upcoming' | 'registration' | 'developing' | 'reviewing' | 'completed' | 'archived';
+export type ChallengeTab = 'browse' | 'registration' | 'develop' | 'review' | 'leaderboard';
+export type TeamRole = 'leader' | 'member' | 'substitute';
+export type ReviewResult = 'pending' | 'accepted' | 'rejected' | 'disputed';
+
+export interface ChallengeTheme {
+  id: string;
+  name: string;
+  description: string;
+  subjectId: string;
+  allowedFilmIds: string[];
+  requireFilmColor?: 'bw' | 'color';
+  difficulty: DifficultyLevel;
+  timeLimitMinutes: number;
+  paramRestrictions?: Partial<Record<keyof DevParams, { min: number; max: number }>>;
+}
+
+export interface ChallengeTeam {
+  id: string;
+  challengeId: string;
+  name: string;
+  slogan?: string;
+  leaderId: string;
+  leaderName: string;
+  members: {
+    userId: string;
+    userName: string;
+    role: TeamRole;
+    joinedAt: number;
+  }[];
+  maxMembers: number;
+  registeredAt: number;
+  isLocked: boolean;
+  avatarColor: string;
+}
+
+export interface ChallengeRegistration {
+  id: string;
+  challengeId: string;
+  userId: string;
+  userName: string;
+  teamId: string | null;
+  registeredAt: number;
+  status: 'registered' | 'cancelled' | 'disqualified';
+}
+
+export interface ChallengeSubmission {
+  id: string;
+  challengeId: string;
+  userId: string;
+  userName: string;
+  teamId: string | null;
+  photoId: string;
+  photoDataUrl: string;
+  subjectId: string;
+  filmId: string;
+  params: DevParams;
+  score: number;
+  details: ScoreDetail;
+  submittedAt: number;
+  developDurationMs: number;
+  reviewStatus: ReviewResult;
+  reviewScore?: number;
+  reviewComment?: string;
+  reviewedAt?: number;
+  finalScore?: number;
+  rank?: number;
+  reviews?: ChallengeReview[];
+}
+
+export interface ChallengeDefinition {
+  id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  icon: string;
+  seasonId: string;
+  themes: ChallengeTheme[];
+  currentThemeIndex: number;
+  registrationStart: number;
+  registrationEnd: number;
+  developStart: number;
+  developEnd: number;
+  reviewStart: number;
+  reviewEnd: number;
+  maxParticipants: number;
+  maxTeamSize: number;
+  allowSolo: boolean;
+  allowTeams: boolean;
+  minReviewsPerSubmission: number;
+  status: ChallengeStatus;
+  prizes: {
+    rank: number;
+    title: string;
+    description: string;
+    points: number;
+    badge?: string;
+    titleReward?: string;
+  }[];
+  participationPoints: number;
+  rules: string[];
+}
+
+export interface ChallengeSeason {
+  id: string;
+  name: string;
+  description: string;
+  startDate: number;
+  endDate: number;
+  challengeIds: string[];
+  status: 'upcoming' | 'active' | 'completed';
+  totalPoints: Record<string, number>;
+  badges: {
+    userId: string;
+    badge: string;
+    title: string;
+    earnedAt: number;
+  }[];
+}
+
+export interface ChallengeLeaderboardEntry {
+  rank: number;
+  userId: string;
+  userName: string;
+  teamId: string | null;
+  teamName: string | null;
+  totalScore: number;
+  bestScore: number;
+  avgScore: number;
+  submissionCount: number;
+  challengeCount: number;
+  badges: string[];
+}
+
+export interface ChallengeFilter {
+  statuses: ChallengeStatus[];
+  searchKeyword: string;
+  sortBy: 'start_date_desc' | 'start_date_asc' | 'participants_desc' | 'prize_desc';
+  seasonId: string | null;
+}
+
+export interface ChallengeState {
+  challenges: ChallengeDefinition[];
+  seasons: ChallengeSeason[];
+  teams: ChallengeTeam[];
+  registrations: ChallengeRegistration[];
+  submissions: ChallengeSubmission[];
+  activeTab: ChallengeTab;
+  selectedChallengeId: string | null;
+  selectedTeamId: string | null;
+  selectedSubmissionId: string | null;
+  currentUserId: string;
+  currentUserName: string;
+  filter: ChallengeFilter;
+  leaderboardFilter: {
+    seasonId: string | null;
+    sortBy: 'total_score' | 'best_score' | 'avg_score' | 'submissions';
+  };
+  developTimer: {
+    challengeId: string | null;
+    startTime: number | null;
+    timeLimitMs: number;
+    remainingMs: number;
+    isRunning: boolean;
+  };
+}
+
+export interface ChallengeParticipationResult {
+  success: boolean;
+  message: string;
+  teamId?: string;
+  registrationId?: string;
+}
+
+export interface TeamInvite {
+  id: string;
+  teamId: string;
+  challengeId: string;
+  inviterId: string;
+  inviterName: string;
+  inviteeId: string;
+  inviteeName: string;
+  sentAt: number;
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
+}
+
+export interface ChallengeReview {
+  id: string;
+  submissionId: string;
+  reviewerId: string;
+  reviewerName: string;
+  score: number;
+  comment: string;
+  reviewedAt: number;
+  dimensions: {
+    dimensionId: ReviewDimensionId;
+    score: number;
+    comment: string;
+  }[];
 }
 
 

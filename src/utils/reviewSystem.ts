@@ -5,7 +5,7 @@ import type {
   ReviewScore,
   ReviewSubmission,
   ContestDefinition,
-  LeaderboardEntry,
+  ReviewLeaderboardEntry,
   LeaderboardFilter,
   DisputeRecord,
   ReviewCommentSummary,
@@ -526,7 +526,7 @@ export function resolveDispute(
 export function generateLeaderboard(
   state: ReviewSystemState,
   filter: LeaderboardFilter
-): LeaderboardEntry[] {
+): ReviewLeaderboardEntry[] {
   let entries = state.submissions.filter(s => s.finalScore !== null);
 
   if (filter.contestId) {

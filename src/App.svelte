@@ -29,6 +29,7 @@
   import ConsignmentMarket from './components/ConsignmentMarket.svelte';
   import ExhibitionCurator from './components/ExhibitionCurator.svelte';
   import DarkroomCalibration from './components/DarkroomCalibration.svelte';
+  import PhotoChallenge from './components/PhotoChallenge.svelte';
 
   let selectedSubjectId: string | null = null;
   let selectedFilmId: string = FILM_STOCKS[0].id;
@@ -52,6 +53,7 @@
   let showConsignmentMarket = false;
   let showExhibitionCurator = false;
   let showDarkroomCalibration = false;
+  let showChallenge = false;
 
   function goToOrderScoring() {
     if (currentOrder) {
@@ -592,6 +594,16 @@
         {/if}
       </button>
       <button
+        class="header-btn challenge"
+        on:click={() => { showChallenge = true; }}
+        title="摄影社群挑战赛"
+      >
+        <span>🏆</span>
+        {#if $gameStore.challengeSystem.challenges.length > 0}
+          <span class="badge">{$gameStore.challengeSystem.challenges.length}</span>
+        {/if}
+      </button>
+      <button
         class="header-btn calibration"
         on:click={() => { showDarkroomCalibration = true; }}
         title="暗房设备校准"
@@ -805,6 +817,10 @@
 
   {#if showDarkroomCalibration}
     <DarkroomCalibration onClose={() => { showDarkroomCalibration = false; }} />
+  {/if}
+
+  {#if showChallenge}
+    <PhotoChallenge on:close={() => { showChallenge = false; }} />
   {/if}
 
   <footer class="app-footer">

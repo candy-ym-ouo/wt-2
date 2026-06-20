@@ -16,7 +16,7 @@
   import type {
     ReviewSystemTab,
     ReviewSubmission,
-    LeaderboardEntry,
+    ReviewLeaderboardEntry,
     LeaderboardFilter,
     ReviewCommentSummary,
     ContestDefinition,

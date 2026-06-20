@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus, ExhibitionState, Exhibition, ExhibitionWorkGroup, ExhibitionWall, ExhibitionWorkPlacement, ExhibitionTheme, ExhibitionRouteStop, VisitorFeedback, ExhibitionCuratorTab, ExhibitionStatus, DarkroomCalibrationState, EnlargerProfile, TempZone, TimerProgram, TimerStep, EnlargerCalibrationRecord, TempCalibrationRecord, TimerCalibrationRecord, DeviationRecord, CalibrationTab, CalibrationStatistics } from '../types/game';
+import type { GameState, ProcessedPhoto, DevParams, GamePhase, ParamPreset, PresetHistory, TutorialState, TutorialStepState, TutorialUnlockCondition, StageState, DevelopStage, StageDuration, StorageStatus, StorageWarning, FavoriteInfo, PhotoCollection, CollectionGroup, CollectionStats, AlbumViewMode, AttemptRecord, ExtendedStatistics, SubjectPreferenceItem, FilmWinRateItem, ScoreSegmentItem, QualityFluctuationItem, AchievementState, AchievementProgress, AchievementCondition, AchievementLine, DarkroomOrder, OrderFilter, OrderStatus, OrderPriority, OrderRequirements, FilmMatch, ScheduleSlot, OrderStatistics, CustomerInfo, DeveloperRecipe, ChemicalSolution, Chemical, FilmLabState, FilmLabTab, RecipeVersion, TrialResult, RecipeCompareResult, FilmProcessType, SolutionType, SolutionComponent, QuestSystemState, QuestAttemptResult, QuestReward, FilmRestrictionResult, QuestStatus, StageStatus, ReviewSystemState, ReviewSubmission, Review, LeaderboardFilter, InventorySystemState, StockInSource, StockConsumeType, StockScrapReason, InventoryFilter, PublicationState, Publication, PublicationStep, PublicationPhoto, PublicationCrop, PublicationCover, PublicationPage, PageLayoutTemplate, CoverStyle, PublicationSelectFilter, SceneTemplate, ScoreRuleSet, KeyAreaDraft, WorkshopTab, EditorMode, SceneTemplateCategory, SubjectWorkshopState, ScoreRule, CurriculumSystemState, CurriculumFeedback, QuizQuestion, ChapterProgress, ConsignmentMarketState, ConsignmentWork, TradeOrder, DigitalCertificate, ConsignmentMarketTab, ConsignmentMarketFilter, TradeOrderStatus, ExhibitionState, Exhibition, ExhibitionWorkGroup, ExhibitionWall, ExhibitionWorkPlacement, ExhibitionTheme, ExhibitionRouteStop, VisitorFeedback, ExhibitionCuratorTab, ExhibitionStatus, DarkroomCalibrationState, EnlargerProfile, TempZone, TimerProgram, TimerStep, EnlargerCalibrationRecord, TempCalibrationRecord, TimerCalibrationRecord, DeviationRecord, CalibrationTab, CalibrationStatistics, ChallengeState, ChallengeDefinition, ChallengeTab, ChallengeFilter, ChallengeTeam, ChallengeSubmission, ChallengeSeason, ChallengeParticipationResult, ChallengeReview, ReviewResult, ChallengeTheme, ChallengeStatus, ChallengeRegistration, TeamRole, ChallengeLeaderboardEntry } from '../types/game';
 import { FILM_STOCKS, DEFAULT_PARAMS, PHOTO_SUBJECTS, TUTORIAL_STEPS, DEFAULT_PRESETS, ACHIEVEMENT_DEFINITIONS, DEFAULT_CHEMICALS, DEFAULT_SOLUTIONS, DEFAULT_RECIPES, DEFAULT_WORKSHOP_STATE, createBlankTemplate } from '../data/gameData';
 import { generateId } from '../utils/math';
 import { createTrialResult, compareRecipes } from '../utils/recipeUtils';
@@ -41,7 +41,9 @@ import {
   saveExhibitionSystem,
   createInitialDarkroomCalibrationState,
   loadSavedDarkroomCalibration,
-  saveDarkroomCalibration
+  saveDarkroomCalibration,
+  loadSavedChallengeSystem,
+  saveChallengeSystem
 } from '../utils/storage';
 import {
   createInitialQuestSystemState,
@@ -160,6 +162,33 @@ import {
   toggleFavoriteWork,
   switchCurrentUser
 } from '../utils/consignmentSystem';
+import {
+  createInitialChallengeSystemState,
+  registerForChallenge,
+  createTeam,
+  joinTeam,
+  leaveTeam,
+  lockTeam,
+  getAvailableTeams,
+  getUserTeam,
+  isUserRegistered,
+  getCurrentTheme,
+  validateParamsForTheme,
+  validateFilmForTheme,
+  startChallengeDevelopment,
+  submitChallengeWork,
+  submitChallengeReview,
+  finalizeSubmissionScores,
+  calculateLeaderboard,
+  filterChallenges,
+  getChallengeStatusInfo,
+  getChallengeById,
+  getSeasonById,
+  getActiveChallenges,
+  updateChallengeStatuses,
+  formatTimeRemaining,
+  getTimeStatus
+} from '../utils/challengeSystem';
 
 function createInitialStageState(): StageState {
   return {
@@ -675,6 +704,7 @@ function createInitialGameState(): GameState {
   const consignmentMarketResult = loadSavedConsignmentMarket();
   const exhibitionSystemResult = loadSavedExhibitionSystem();
   const darkroomCalibrationResult = loadSavedDarkroomCalibration();
+  const challengeSystemResult = loadSavedChallengeSystem();
   
   const savedTutorial = tutorialResult.state;
   const phase = savedTutorial.isCompleted ? 'select' : 'tutorial';
@@ -694,6 +724,7 @@ function createInitialGameState(): GameState {
   storageStatus.consignmentMarketLoaded = consignmentMarketResult.status.consignmentMarketLoaded || false;
   storageStatus.exhibitionSystemLoaded = exhibitionSystemResult.status.exhibitionSystemLoaded || false;
   storageStatus.darkroomCalibrationLoaded = darkroomCalibrationResult.status.darkroomCalibrationLoaded || false;
+  storageStatus.challengeSystemLoaded = challengeSystemResult.status.challengeSystemLoaded || false;
   storageStatus.tutorialLoaded = tutorialResult.status.tutorialLoaded || false;
   storageStatus.migrationPerformed = !!(photosResult.status.migrationPerformed || 
     presetsResult.status.migrationPerformed || 
@@ -708,7 +739,8 @@ function createInitialGameState(): GameState {
     curriculumSystemResult.status.migrationPerformed ||
     consignmentMarketResult.status.migrationPerformed ||
     exhibitionSystemResult.status.migrationPerformed ||
-    darkroomCalibrationResult.status.migrationPerformed);
+    darkroomCalibrationResult.status.migrationPerformed ||
+    challengeSystemResult.status.migrationPerformed);
   storageStatus.recoveryPerformed = !!(photosResult.status.recoveryPerformed || 
     presetsResult.status.recoveryPerformed || 
     tutorialResult.status.recoveryPerformed ||
@@ -722,7 +754,8 @@ function createInitialGameState(): GameState {
     curriculumSystemResult.status.recoveryPerformed ||
     consignmentMarketResult.status.recoveryPerformed ||
     exhibitionSystemResult.status.recoveryPerformed ||
-    darkroomCalibrationResult.status.recoveryPerformed);
+    darkroomCalibrationResult.status.recoveryPerformed ||
+    challengeSystemResult.status.recoveryPerformed);
   
   if (photosResult.status.corruptedItems?.photos) {
     storageStatus.corruptedItems.photos = photosResult.status.corruptedItems.photos;
@@ -767,13 +800,14 @@ function createInitialGameState(): GameState {
     (storageStatus.corruptedItems.reviewSystem || 0) +
     (storageStatus.corruptedItems.inventorySystem || 0) +
     (storageStatus.corruptedItems.exhibitionSystem || 0) +
-    (storageStatus.corruptedItems.darkroomCalibration || 0);
+    (storageStatus.corruptedItems.darkroomCalibration || 0) +
+    (storageStatus.corruptedItems.challengeSystem || 0);
   if (corruptedCount > 0) {
     warnings.push({
       type: 'corrupted',
       message: `发现 ${corruptedCount} 个损坏数据项，已自动清理`,
       timestamp: now,
-      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个, 订单: ${storageStatus.corruptedItems.orders} 个, 评审: ${storageStatus.corruptedItems.reviewSystem || 0} 个, 库存: ${storageStatus.corruptedItems.inventorySystem || 0} 个, 展览: ${storageStatus.corruptedItems.exhibitionSystem || 0} 个, 校准: ${storageStatus.corruptedItems.darkroomCalibration || 0} 个`
+      details: `照片: ${storageStatus.corruptedItems.photos} 个, 预设: ${storageStatus.corruptedItems.presets} 个, 收藏: ${storageStatus.corruptedItems.favorites} 个, 精选集: ${storageStatus.corruptedItems.collections} 个, 订单: ${storageStatus.corruptedItems.orders} 个, 评审: ${storageStatus.corruptedItems.reviewSystem || 0} 个, 库存: ${storageStatus.corruptedItems.inventorySystem || 0} 个, 展览: ${storageStatus.corruptedItems.exhibitionSystem || 0} 个, 校准: ${storageStatus.corruptedItems.darkroomCalibration || 0} 个, 挑战赛: ${storageStatus.corruptedItems.challengeSystem || 0} 个`
     });
   }
   
@@ -841,7 +875,8 @@ function createInitialGameState(): GameState {
     curriculumSystem: curriculumSystemResult.state,
     consignmentMarket: consignmentMarketResult.state,
     exhibitionSystem: exhibitionSystemResult.state,
-    darkroomCalibration: darkroomCalibrationResult.state
+    darkroomCalibration: darkroomCalibrationResult.state,
+    challengeSystem: challengeSystemResult.state
   };
 }
 
@@ -4941,6 +4976,305 @@ function createGameStore() {
       };
       saveDarkroomCalibration(newCal);
       return { ...state, darkroomCalibration: newCal };
+    }),
+
+    setChallengeTab: (tab: ChallengeTab) => update(state => {
+      const newChallengeSystem = { ...state.challengeSystem, activeTab: tab };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    setSelectedChallenge: (challengeId: string | null) => update(state => {
+      const newChallengeSystem = { ...state.challengeSystem, selectedChallengeId: challengeId };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    setSelectedTeam: (teamId: string | null) => update(state => {
+      const newChallengeSystem = { ...state.challengeSystem, selectedTeamId: teamId };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    setChallengeFilter: (filter: Partial<ChallengeFilter>) => update(state => {
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        filter: { ...state.challengeSystem.filter, ...filter }
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    setChallengeLeaderboardFilter: (filter: Partial<ChallengeState['leaderboardFilter']>) => update(state => {
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        leaderboardFilter: { ...state.challengeSystem.leaderboardFilter, ...filter }
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    registerChallenge: (challengeId: string, teamId?: string) => update(state => {
+      const result = registerForChallenge(state.challengeSystem, challengeId, teamId || null);
+      if (!result.success) return state;
+
+      const registration: ChallengeRegistration = {
+        id: result.registrationId!,
+        challengeId,
+        userId: state.challengeSystem.currentUserId,
+        userName: state.challengeSystem.currentUserName,
+        teamId: teamId || null,
+        registeredAt: Date.now(),
+        status: 'registered'
+      };
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        registrations: [...state.challengeSystem.registrations, registration]
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    createChallengeTeam: (challengeId: string, teamName: string, slogan?: string) => update(state => {
+      const result = createTeam(state.challengeSystem, challengeId, teamName, slogan);
+      if (!result.success || !result.team) return state;
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        teams: [...state.challengeSystem.teams, result.team]
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    joinChallengeTeam: (teamId: string) => update(state => {
+      const result = joinTeam(state.challengeSystem, teamId);
+      if (!result.success) return state;
+
+      const team = state.challengeSystem.teams.find(t => t.id === teamId);
+      if (!team) return state;
+
+      const updatedTeam = {
+        ...team,
+        members: [
+          ...team.members,
+          {
+            userId: state.challengeSystem.currentUserId,
+            userName: state.challengeSystem.currentUserName,
+            role: 'member' as TeamRole,
+            joinedAt: Date.now()
+          }
+        ]
+      };
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        teams: state.challengeSystem.teams.map(t => t.id === teamId ? updatedTeam : t)
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    leaveChallengeTeam: (teamId: string) => update(state => {
+      const result = leaveTeam(state.challengeSystem, teamId);
+      if (!result.success) return state;
+
+      const team = state.challengeSystem.teams.find(t => t.id === teamId);
+      if (!team) return state;
+
+      const updatedTeam = {
+        ...team,
+        members: team.members.filter(m => m.userId !== state.challengeSystem.currentUserId)
+      };
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        teams: state.challengeSystem.teams.map(t => t.id === teamId ? updatedTeam : t)
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    lockChallengeTeam: (teamId: string) => update(state => {
+      const result = lockTeam(state.challengeSystem, teamId);
+      if (!result.success) return state;
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        teams: state.challengeSystem.teams.map(t =>
+          t.id === teamId ? { ...t, isLocked: true } : t
+        )
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    startChallengeDevelop: (challengeId: string) => update(state => {
+      const result = startChallengeDevelopment(state.challengeSystem, challengeId);
+      if (!result.success) return state;
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        developTimer: {
+          challengeId,
+          startTime: Date.now(),
+          timeLimitMs: result.timeLimitMs,
+          remainingMs: result.timeLimitMs,
+          isRunning: true
+        }
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    updateChallengeTimer: (remainingMs: number) => update(state => {
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        developTimer: {
+          ...state.challengeSystem.developTimer,
+          remainingMs
+        }
+      };
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    stopChallengeTimer: () => update(state => {
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        developTimer: {
+          ...state.challengeSystem.developTimer,
+          isRunning: false
+        }
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    submitChallengePhoto: (challengeId: string, photo: ProcessedPhoto, developDurationMs: number) => update(state => {
+      const result = submitChallengeWork(state.challengeSystem, challengeId, photo, developDurationMs);
+      if (!result.success || !result.submission) return state;
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        submissions: [...state.challengeSystem.submissions, result.submission],
+        developTimer: {
+          ...state.challengeSystem.developTimer,
+          isRunning: false,
+          challengeId: null
+        }
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    submitChallengeReview: (submissionId: string, scores: Record<string, number>, comment: string) => update(state => {
+      const result = submitChallengeReview(state.challengeSystem, submissionId, scores, comment);
+      if (!result.success || !result.review) return state;
+
+      const submission = state.challengeSystem.submissions.find(s => s.id === submissionId);
+      if (!submission) return state;
+
+      const updatedSubmission = {
+        ...submission,
+        reviews: [...(submission.reviews || []), result.review],
+        reviewScore: (submission.reviews || []).length > 0
+          ? ((submission.reviewScore || 0) * (submission.reviews || []).length + result.review.score) / ((submission.reviews || []).length + 1)
+          : result.review.score
+      };
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        submissions: state.challengeSystem.submissions.map(s =>
+          s.id === submissionId ? updatedSubmission : s
+        )
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    finalizeChallengeScores: (challengeId: string) => update(state => {
+      const finalized = finalizeSubmissionScores(state.challengeSystem, challengeId);
+      const submissionMap = new Map(finalized.map(s => [s.id, s]));
+
+      const newChallengeSystem = {
+        ...state.challengeSystem,
+        submissions: state.challengeSystem.submissions.map(s =>
+          submissionMap.has(s.id) ? submissionMap.get(s.id)! : s
+        )
+      };
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    refreshChallengeStatuses: () => update(state => {
+      const newChallengeSystem = updateChallengeStatuses(state.challengeSystem);
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
+    }),
+
+    getFilteredChallenges: (filter: Partial<ChallengeFilter>): ChallengeDefinition[] => {
+      let result: ChallengeDefinition[] = [];
+      const unsubscribe = subscribe(state => {
+        result = filterChallenges(state.challengeSystem, filter);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    getChallengeLeaderboard: (seasonId?: string, sortBy?: 'total_score' | 'best_score' | 'avg_score' | 'submissions'): ChallengeLeaderboardEntry[] => {
+      let result: ChallengeLeaderboardEntry[] = [];
+      const unsubscribe = subscribe(state => {
+        result = calculateLeaderboard(
+          state.challengeSystem,
+          seasonId || state.challengeSystem.leaderboardFilter.seasonId,
+          sortBy || state.challengeSystem.leaderboardFilter.sortBy
+        );
+      });
+      unsubscribe();
+      return result;
+    },
+
+    isUserRegisteredForChallenge: (challengeId: string): boolean => {
+      let result = false;
+      const unsubscribe = subscribe(state => {
+        result = isUserRegistered(state.challengeSystem, challengeId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    getUserTeamForChallenge: (challengeId: string): ChallengeTeam | null => {
+      let result: ChallengeTeam | null = null;
+      const unsubscribe = subscribe(state => {
+        result = getUserTeam(state.challengeSystem, challengeId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    getAvailableTeamsForChallenge: (challengeId: string): ChallengeTeam[] => {
+      let result: ChallengeTeam[] = [];
+      const unsubscribe = subscribe(state => {
+        result = getAvailableTeams(state.challengeSystem, challengeId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    getCurrentChallengeTheme: (challengeId: string): ChallengeTheme | null => {
+      let result: ChallengeTheme | null = null;
+      const unsubscribe = subscribe(state => {
+        result = getCurrentTheme(state.challengeSystem, challengeId);
+      });
+      unsubscribe();
+      return result;
+    },
+
+    resetChallengeSystem: () => update(state => {
+      const newChallengeSystem = createInitialChallengeSystemState();
+      saveChallengeSystem(newChallengeSystem);
+      return { ...state, challengeSystem: newChallengeSystem };
     })
   };
 }
